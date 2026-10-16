@@ -1,0 +1,46 @@
+# Zugangsdaten / Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Abhängigkeiten
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Build / Artefakte
+dist/
+build/
+out/
+.next/
+target/
+coverage/
+
+# Logs / temporäre Dateien
+*.log
+logs/
+tmp/
+.cache/
+
+# Datenbanken / Dumps (dürfen keine Echtdaten enthalten)
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+
+# Lokale Werkzeug-Einstellungen
+.claude/settings.local.json
+
+# Editor / Betriebssystem
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
