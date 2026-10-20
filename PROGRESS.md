@@ -5,6 +5,65 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Entwicklungsdatenbank eingerichtet, Schema bewiesen
+
+**Gemacht**
+
+- **PostgreSQL 18.6 über Homebrew** installiert (`postgresql@18`) und als
+  lokalen Dienst gestartet. Datenbank `vms_prototyp` angelegt, Zugriff über
+  lokale Trust-Authentifizierung ohne Passwort.
+- `DATABASE_URL` in der lokalen `.env` gesetzt — die Datei bleibt durch
+  `.gitignore` ausgeschlossen, geprüft mit `git check-ignore`.
+- **Die Lücke aus der vorigen Arbeitseinheit ist geschlossen:** Migration und
+  Seed sind erstmals gegen eine echte Datenbank gelaufen.
+  - `npx prisma migrate deploy` → `20261020120000_init` angewendet, ohne Fehler
+  - `npx prisma db seed` → 5 Mandanten, 8 Benutzer, 8 Rollenzuweisungen,
+    1 Betreuungszuordnung, 1 Vertretung
+  - `npm run build` → Exit 0
+  - `npm test` → 56 Tests grün
+- Das Schema ist damit nicht mehr nur typgeprüft, sondern tatsächlich
+  angelegt: Enum-Namen, Unique-Constraints und Fremdschlüssel halten.
+
+**Lokale Einrichtung** (für die nächste Arbeitseinheit)
+
+```bash
+brew services start postgresql@18
+export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
+createdb vms_prototyp          # nur beim ersten Mal
+npx prisma migrate deploy
+npx prisma db seed
+npm run dev                    # App auf http://localhost:3000
+npm test                       # Unit-Tests (vitest)
+```
+
+`DATABASE_URL` muss in `.env` stehen, Form siehe `.env.example`. Den Dienst
+beendet `brew services stop postgresql@18`.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Entwicklungsdatenbank | PostgreSQL über Homebrew als lokaler Dienst. Kein Docker (nicht installiert, größerer Eingriff), keine gehostete Dev-Datenbank — auch synthetische Daten sollen nicht bei einem Dritten liegen, solange das Hosting-Ziel DE/EU ist (SPEC 6.9, offene Frage 2) |
+| Autostart | `brew services` startet den Dienst auch bei der Anmeldung. Das ist eine dauerhafte Änderung an der Maschine, bewusst so gewählt, damit die nächste Arbeitseinheit nicht daran scheitert |
+
+**Offen / als Nächstes**
+
+- **Zwei Beobachtungen am Seed**, nicht stillschweigend geändert:
+  1. `ResponsibilityScope` hat **0 Zeilen** — Zuständigkeiten auf Standort- und
+     Kostenstellenebene sind nicht geseedet. Passt zu **offener Frage 14**, die
+     noch unbeantwortet ist; sobald sie entschieden ist, gehört ein Beispiel in
+     den Seed.
+  2. `AccountAssignment` hat **1 Zeile**, obwohl zwei Kunden und zwei
+     Lieferanten angelegt sind. Für eine Demo der Mandantentrennung sollte der
+     Betreiber für **beide** Kunden eine Betreuungszuordnung haben — sonst
+     lässt sich 2.3 am Seed nicht zeigen.
+- Die Einrichtungsschritte stehen bisher nur hier im Protokoll. Ein `README.md`
+  mit dem lokalen Setup wäre der bessere Ort.
+- Danach M3b: Kunden, Standorte, Lieferanten inkl. Erlaubnisnachweis und die
+  Bedarfsanfrage von Anlegen bis Ausschreiben.
+
+---
+
 ## 2026-10-20 — Projektsetup, Mandanten-, Benutzer- und Rollenmodell (M3, erste Hälfte)
 
 **Gemacht**
