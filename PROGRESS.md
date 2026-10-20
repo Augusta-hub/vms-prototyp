@@ -5,6 +5,59 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Fragen 15, 18, 19, 20 entschieden (M2-Vorbereitung)
+
+**Gemacht**
+
+- Die vier Fragen, die Kapitel 5 blockierten, sind entschieden und an allen
+  betroffenen Stellen eingearbeitet. Mit der neuen Frage 25 sind jetzt 17 von
+  25 Fragen offen.
+- **Neues Objekt `comparableWageEntry` in 3.3** (Frage 15): Vergleichsentgelt
+  je Tätigkeit und Standort, mit Gültigkeitszeitraum und Herkunftsangabe
+  (`wageSource`). Dazu eine neue Matrixzeile „Vergleichsentgelt (3.3)" und die
+  Umstellung von `comparableWage` in 3.7 auf „erbt aus dem Standorteintrag,
+  begründet übersteuerbar". Die Kapitelüberschrift 3.3 ist erweitert.
+- **3.6 Personenidentität** (Frage 18): Merkmalssatz abschließend festgelegt,
+  Verfahren in vier Punkten beschrieben (Vorschlag statt Verknüpfung, manuelle
+  Bestätigung, enge Zweckbindung, Unsichtbarkeit für Kunden und Lieferanten).
+  `workerIdentityRef` am Einsatz ist von optional auf „Pflicht ab `planned`"
+  gezogen; die Abhängigkeitsnotiz in 4.2 ist durch eine Präzisierung ersetzt.
+- **3.10 Pflichtkatalog** (Frage 20): Tabelle mit sechs Nachweisarten und
+  gestufter Wirkung; `mandatory` und `blocking` sind jetzt **abgeleitete**
+  Felder, die dem Katalog in 5.4 folgen und nicht am Dokument gesetzt werden.
+  Die acht `(offene Frage 20)`-Marken in 4.3, 4.6 und 4.7 sind entfernt, weil
+  die Ergebnisarten damit verbindlich sind.
+- **5.1, 5.2 und 5.4**: die betroffenen Gliederungspunkte tragen jetzt die
+  Festlegung und nur noch den Rest als TODO.
+- Glossar um fünf Einträge ergänzt.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Vergleichsentgelt (Frage 15) | **Je Tätigkeit am Standort**, gepflegt vom Entleiher (`KE`), mit Herkunftsangabe. Der Einsatz erbt den Wert und kann ihn begründet übersteuern. `wageSource = estimate` ist eine Warnung, kein Nachweis |
+| Sichtbarkeit des Entgeltgefüges | Der Katalog ist für **Lieferantenrollen nicht sichtbar** — der Verleiher erhält den Wert nur für den konkreten Einsatz über `comparableWage` (3.7), nicht das Entgeltgefüge des Entleihers insgesamt |
+| Personenidentität (Frage 18) | **Wird geführt.** Abgleich ausschließlich über Name, Geburtsdatum, Geburtsort — keine Sozialversicherungs-, Steuer- oder Ausweisnummern |
+| Maschineller Treffer ist keine Identität | Ein nur vorgeschlagener, nicht bestätigter Treffer löst **keine** AÜG-Prüfung aus; bis zur Bestätigung zählt der Kandidatensatz als eigene Person |
+| Gleichzeitige Einsätze (Frage 19) | **Zulässig.** Gezählt werden Kalendertage der Überlassung an denselben Entleiher über die Personenidentität; überlappende Tage zählen genau einmal. Keine Stundenzählung, keine Summierung je Einsatz |
+| Pflichtnachweise (Frage 20) | **Fester Katalog, gestufte Wirkung.** Sperre: AÜG-Erlaubnis, Arbeitserlaubnis, Unterweisung am Standort. Warnung: Qualifikationsnachweis, Unbedenklichkeitsbescheinigung. Information: sonstige. Kein kundenindividueller Katalog im Prototyp |
+| Rechtliches wird nicht mitentschieden | Die fachliche Entscheidung zu Frage 18 steht, die datenschutzrechtliche Absicherung ist als **Frage 25** ausdrücklich offen und als juristisch zu prüfen gekennzeichnet — nicht implizit mit abgehakt |
+
+**Offen / als Nächstes**
+
+- **Neue offene Frage 25:** Rechtsgrundlage der Personenidentität —
+  Verantwortlichkeit im MSP-Modell, Rechtsgrundlage nach Art. 6 DSGVO,
+  Informationspflicht gegenüber dem Leiharbeitnehmer, Löschfrist. Betrifft
+  3.6, 6.1, 6.3, 6.5 und braucht juristische Prüfung.
+- Kapitel 5 ist jetzt ausarbeitbar: 5.1, 5.2 und 5.4 haben ihre
+  Datengrundlage, 5.3 hängt an keiner offenen Frage mehr, 5.5 braucht noch
+  Frage 10 (Genehmigung von Ausnahmen).
+- Danach M2: die Gherkin-Szenarien aus der 44-zeiligen Tabelle in 4.7
+  ableiten.
+- Noch offen: 2, 4, 5, 7–14, 16, 17, 21, 22, 24, 25.
+
+---
+
 ## 2026-10-20 — Blocker entschieden, fünf Widersprüche aufgelöst (M1)
 
 **Gemacht**

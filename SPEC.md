@@ -95,6 +95,9 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Höchstüberlassungsdauer | `maxAssignmentDuration` | zulässige Dauer der Überlassung an denselben Entleiher (Kapitel 5.1) |
 | Equal-Pay-Frist | `equalPayDeadline` | Frist, ab der Equal Pay greift (Kapitel 5.2) |
 | Vergleichsentgelt | `comparableWage` | Entgelt eines vergleichbaren Stammarbeitnehmers (Kapitel 5.2) |
+| Vergleichsentgelt-Eintrag | `comparableWageEntry` | gepflegter Wert je Tätigkeit und Standort, vom Entleiher gemeldet (Kapitel 3.3) |
+| Tätigkeitsschlüssel | `activityKey` | Tätigkeit bzw. Entgeltgruppe, auf die sich ein Vergleichsentgelt bezieht |
+| Herkunft der Entgeltangabe | `wageSource` | Tarif, Betriebsvereinbarung, Einzelvertrag oder Schätzung |
 | Bedarfsanfrage | `demandRequest` | gemeldeter Personalbedarf eines Kunden (Kapitel 3.4) |
 | Tätigkeitsbeschreibung | `activityDescription` | Konkretisierung der Tätigkeit (Kapitel 5.3) |
 | Anforderung (Qualifikation) | `qualificationRequirement` | geforderte Qualifikation einer Bedarfsanfrage |
@@ -128,6 +131,8 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Beanstandung | `dispute` | Widerspruch gegen einen Abrechnungsbeleg (Kapitel 4.5) |
 | Dokument / Nachweis | `document` | hinterlegtes Schriftstück mit Nachweisfunktion (Kapitel 3.10) |
 | Nachweisart | `documentCategory` | Katalogwert der Dokumentart |
+| Pflichtnachweis | `mandatory` | Nachweis, den der Pflichtkatalog in 5.4 verlangt |
+| Sperrwirkung | `blocking` | ob ein fehlender Pflichtnachweis den Übergang sperrt oder nur warnt (5.4, 5.5) |
 | Erlaubnisurkunde | `permitCertificate` | Urkunde zur AÜG-Erlaubnis |
 | Unterweisung | `safetyBriefing` | Arbeitsschutzunterweisung am Einsatzort |
 | Qualifikationsnachweis | `qualificationCertificate` | Nachweis einer Qualifikation |
@@ -459,6 +464,7 @@ Tabelle.
 | Rahmenvertrag (3.3) | A L Ä S X | L | – | – | L[2] | L[40] | L[40] | – |
 | Preisliste, Preisposition (3.3) | A L Ä S X | L | – | L[8] | L[2] L[41] | L[9] L[42] | L[9] L[42] | – |
 | Tarifzuordnung (3.3) | A L Ä S X | L | – | – | L[2] | L[7] | L[7] | – |
+| Vergleichsentgelt (3.3) | A L Ä X | L | – | L[8] | A[2] L[2] Ä[2] X[2] | – | – | – |
 | Bedarfsanfrage (3.4) | A L Ä S X | A[10] L Ä S | A L[2] Ä[11] S[12] | L[2] S[13] | L[2] | L[14] | – | – |
 | Ausschreibung, Einladung (3.5) | A L Ä S X | A L Ä S | L[15] | – | L[15] | L[16] S[46] | – | – |
 | Lieferantenangebot, Angebotsposition (3.5) | L S X | L S[17] | L[18] | – | L[2] | A L[7] Ä[19] S[20] X[21] | L[7] | – |
@@ -521,7 +527,7 @@ Tabelle.
 | [40] | Nur der eigene Rahmenvertrag mit dem Betreiber; der Rahmenvertrag eines anderen Mandanten ist nie sichtbar. Für KG entfällt die Zeile, weil [8] ausdrücklich nur die Kostenwirkung des Einzelvorgangs meint. |
 | [41] | Nur die Kundenpreisliste des eigenen Kunden (Betreiber ↔ Kunde). Die Einkaufskonditionen des Betreibers gegenüber Lieferanten sind für Kundenrollen nicht sichtbar. |
 | [42] | Nur die eigene Einkaufspreisliste (Betreiber ↔ eigener Lieferant); die Kundenpreisliste ist nie sichtbar. |
-| [43] | Zusammenführen und Trennen von Kandidatensätzen derselben Person. Das Objekt ist ausschließlich beim Betreiber geführt; Kunden und Lieferanten sehen es und seine Existenz nicht (Kapitel 2.3, Regel 4). Ob es überhaupt geführt wird, ist **offene Frage 18**. |
+| [43] | Zusammenführen und Trennen von Kandidatensätzen derselben Person. Das Objekt ist ausschließlich beim Betreiber geführt; Kunden und Lieferanten sehen es und seine Existenz nicht (Kapitel 2.3, Regel 4). Dass es geführt wird, ist entschieden; der Merkmalssatz ist in 3.6 abschließend festgelegt. |
 | [44] | Die Zeitposition trägt keinen eigenen Status; genehmigt wird der Stundenzettel (Kapitel 4.4). `X` meint das Entfernen einer Position vor der Einreichung; Korrekturen genehmigter Zeiten laufen über eine Korrekturfassung ([28]). |
 | [45] | Nur die eigene Vertretung für eine eigene Rollenzuweisung bei geplanter Abwesenheit (Kapitel 2.4, Regel 7). Unvorhergesehene Abwesenheit richtet der Administrator der eigenen Organisation ein (LA bzw. kundenseitig derzeit der Betreiber — **offene Frage 12**). Keine Rechteerweiterung, keine Ketten; `Ä` fehlt, weil eine laufende Vertretung beendet (`X`) und neu angelegt wird. Für AN entfällt die Zeile: die Rolle ist nicht vertretbar (Kapitel 2.4, Regel 8). |
 | [46] | Nur die Absage der **eigenen** Einladung (`declined` mit `declineReason`, Kapitel 4.2.1), analog [20]. Keine weitere Statusführung: Annahme, Fristverlängerung und der Fortschritt der Ausschreibung bleiben beim Betreiber. Entscheidung zu *offener Frage 23*. |
@@ -849,7 +855,7 @@ Kennzeichnungs- und Konkretisierungspflicht des Überlassungsvertrags verlangt
 | Betriebsvereinbarung | `worksCouncilAgreement` | Verweis auf `document` (3.10) | optional | kann die Höchstüberlassungsdauer abweichend regeln (5.1) |
 | Tarifzuordnung | `collectiveAgreementRef` | Verweis (3.3) | optional | Branchenzuschlag je Einsatzbranche (5.2) |
 | Regelarbeitszeit | `standardWeeklyHours` | Dezimalzahl, Stunden | optional | Vorbelegung für Bedarfsanfrage und Einsatz |
-| Unterweisung erforderlich | `safetyBriefingRequired` | ja/nein | Pflicht | steuert den Pflichtnachweis (3.10, 5.4) *(offene Frage 20)* |
+| Unterweisung erforderlich | `safetyBriefingRequired` | ja/nein | Pflicht | steuert den Pflichtnachweis (3.10, 5.4) |
 | Ansprechpartner vor Ort | `contacts` | Liste | optional | personenbezogen |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | |
 | Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
@@ -982,7 +988,7 @@ Der Vertragsrahmen eines Lieferanten besteht aus Rahmenvertrag, Preisliste und
 Tarifzuordnung und ist in **3.3** beschrieben, weil er für Kunden und
 Lieferanten dieselbe Struktur hat.
 
-### 3.3 Rahmenvertrag, Preisliste / Konditionen, Tarifzuordnung
+### 3.3 Rahmenvertrag, Preisliste / Konditionen, Tarifzuordnung, Vergleichsentgelt
 
 #### Rahmenvertrag (`masterAgreement`)
 
@@ -1104,6 +1110,40 @@ jeweilige Zielobjekt.
 **Statusmodell.** Keines; die Gültigkeit ergibt sich aus dem Zeitraum.
 
 **Datenkategorie (→ 6.3).** Keine personenbezogenen Daten.
+
+#### Vergleichsentgelt (`comparableWageEntry`)
+
+**Zweck.** Das Entgelt, das ein vergleichbarer Stammarbeitnehmer des Entleihers
+für eine Tätigkeit an einem Standort erhält — die Datengrundlage für Equal Pay
+(5.2). **Entscheidung zu offener Frage 15:** geführt wird es **je Tätigkeit am
+Standort**, nicht je Einsatz und nicht je Kostenstelle. Gepflegt wird es vom
+Entleiher, weil nur er es kennt.
+
+| Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
+|---|---|---|---|---|
+| Standort | `siteRef` | Verweis (3.1) | Pflicht | |
+| Tätigkeit / Entgeltgruppe | `activityKey` | Katalogwert oder Text | Pflicht | dieselbe Fassung wie `activityDescription` in 3.4 und 3.7 |
+| Vergleichsentgelt | `comparableWage` | Betrag je Stunde | Pflicht | Bruttostundenentgelt des vergleichbaren Stammarbeitnehmers |
+| Laufzeit | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | Entgeltrunden erzeugen neue Einträge (Historisierung nach 3.0) |
+| Herkunft der Angabe | `wageSource` | `collectiveAgreement`, `companyAgreement`, `individualContract`, `estimate` | Pflicht | `estimate` ist für 5.2 nur eine Warnung, kein Nachweis |
+| Gemeldet am / von | `reportedAt` / `reportedBy` | Zeitpunkt / Verweis | Pflicht | Nachvollziehbarkeit der Entleiherangabe |
+
+**Mandant und Eigentümer.** **Kundenmandant** — der Entleiher pflegt die
+Einträge (`KE`, [2]); der Betreiber liest sie für die Prüfungen aus 5.2. Für
+**Lieferantenrollen ist der Katalog nicht sichtbar**: der Verleiher braucht den
+Wert für den konkreten Einsatz und erhält ihn dort über `comparableWage` in 3.7
+([7]) — nicht das Entgeltgefüge des Entleihers insgesamt.
+
+**Beziehungen.** n Vergleichsentgelte : 1 Standort (je Tätigkeit und Zeitraum
+genau einer gültig) · 1 Vergleichsentgelt : n Einsätze, über Standort und
+Tätigkeit.
+
+**Statusmodell.** Keines; die Gültigkeit ergibt sich aus dem Zeitraum.
+
+**Datenkategorie (→ 6.3).** Keine personenbezogenen Daten der
+Leiharbeitnehmer, aber **Entgeltdaten der Stammbelegschaft des Entleihers** in
+aggregierter Form. Zugriff deshalb eng: Kundenmandant und Betreiber, kein
+Lieferant, kein Export in Berichte, die Lieferanten erreichen.
 
 ### 3.4 Bedarfsanfrage (Anforderung)
 
@@ -1312,9 +1352,8 @@ Lieferanten ändern, sondern nur Pseudonymisierung und Sichtbarkeitsfreigabe
 ([23], 6.4).
 
 **Beziehungen.** n Kandidaten : 1 Lieferant · 1 Kandidat : n Profilvorschläge ·
-1 Kandidat : n Einsätze (nicht gleichzeitig beim selben Kunden, siehe *offene
-Frage 19*) · 1 Kandidat : n Dokumente (3.10) · n Kandidaten : 0..1
-Personenidentität.
+1 Kandidat : n Einsätze (auch **gleichzeitig** beim selben Kunden, 3.7) ·
+1 Kandidat : n Dokumente (3.10) · n Kandidaten : 0..1 Personenidentität.
 
 **Statusmodell.** Keines in Kapitel 4; die Vorgangsstatus stehen am
 Profilvorschlag (4.2) und am Einsatz (4.3).
@@ -1377,7 +1416,7 @@ von Doppelvorschlägen (2.3, Regel 4) **nicht möglich**.
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
 | Identitätsnummer | `identityNumber` | Text, betreiberweit eindeutig | Pflicht | nie an Kunden oder Lieferanten weitergegeben |
-| Abgleichmerkmale | `matchingAttributes` | Satz von Merkmalen | Pflicht | welche Merkmale zulässig sind, ist **offene Frage 18** |
+| Abgleichmerkmale | `matchingAttributes` | Name, Geburtsdatum, Geburtsort | Pflicht | **abschließender** Merkmalssatz (Entscheidung zu offener Frage 18); keine Sozialversicherungs-, Steuer- oder Ausweisnummern |
 | Verknüpfte Kandidaten | `linkedCandidates` | Liste von Verweisen (3.6) | mindestens einer | lieferantenübergreifend |
 | Bestätigt am / von | `confirmedAt` / `confirmedBy` | Zeitpunkt / Verweis | Pflicht bei bestätigter Verknüpfung | maschinelle Vorschläge werden manuell bestätigt |
 | Verknüpfungshistorie | `mergeHistory` | Liste (Zeitpunkt, Handlung, Begründung) | Pflicht ab erster Änderung | Zusammenführen und Trennen bleiben nachvollziehbar |
@@ -1398,14 +1437,30 @@ mandantenübergreifende Identifikationsdaten einer natürlichen Person. Die
 Rechtsgrundlage ist in 6.1 und 6.3 zu bestimmen; die Zweckbindung ist eng auf
 die AÜG-Prüfungen zu begrenzen.
 
-> *(offene Frage 18, neu)* Ob der Betreiber eine solche Personenidentität
-> führen darf, mit welchen Merkmalen und auf welcher Rechtsgrundlage, ist
-> offen. Dieses Kapitel beschreibt das Objekt, **ohne** die Merkmale
-> festzulegen. Wird die Frage mit „nein" beantwortet, entfällt das Objekt — und
-> mit ihm die lieferantenübergreifende Zählung aus 5.1. Dann ist in Kapitel 5
-> ein anderer Weg zu beschreiben (z. B. eine Erklärung des Kandidaten über
-> Vorbeschäftigungen). Das ist keine Einzelheit, sondern eine
-> Grundsatzentscheidung über die Leistungsfähigkeit des AÜG-Regelwerks.
+> **Entschieden (vormals offene Frage 18).** Der Betreiber **führt** die
+> Personenidentität. Der Merkmalssatz für den Abgleich ist **abschließend**:
+> Name, Geburtsdatum, Geburtsort. Keine Sozialversicherungsnummer, keine
+> Steuer-Identifikationsnummer, keine Ausweisnummer. Das Verfahren:
+>
+> 1. Der Abgleich **schlägt vor**, er verknüpft nicht selbst. Jede Verknüpfung
+>    wird von einer Person beim Betreiber bestätigt (`confirmedAt`,
+>    `confirmedBy`) — ein maschineller Treffer allein löst keine AÜG-Prüfung
+>    aus.
+> 2. Zusammenführen und Trennen sind in `mergeHistory` mit Begründung
+>    festzuhalten; eine falsche Verknüpfung muss rückholbar sein, ohne die
+>    Historie zu verlieren.
+> 3. Die **Zweckbindung ist eng**: ausschließlich die Prüfungen aus 5.1, 5.2
+>    und 5.3 sowie die Erkennung von Doppelvorschlägen (2.3, Regel 4). Keine
+>    Nutzung für Auswertungen, Bewertungen oder Lieferantenvergleiche.
+> 4. Kunden und Lieferanten sehen das Objekt und seine Existenz nicht ([43]);
+>    Ergebnisse erreichen sie nur als Information oder Sperre zum eigenen
+>    Vorgang.
+>
+> **Offen bleibt die Rechtsgrundlage** — Verantwortlichkeit, Rechtsgrundlage
+> nach Art. 6 DSGVO, Informationspflicht gegenüber dem Leiharbeitnehmer und
+> Löschfrist sind in 6.1, 6.3 und 6.5 zu bestimmen und **juristisch zu
+> prüfen** (neue offene Frage 25). Die fachliche Entscheidung steht, die
+> rechtliche Absicherung nicht.
 
 ### 3.7 Einsatz (Überlassung) mit Laufzeit, Verlängerung, Beendigung
 
@@ -1424,7 +1479,7 @@ Standort. Mehrere Köpfe einer Anfrage ergeben mehrere Einsätze.
 | Kostenstelle | `costCenterRef` | Verweis (3.1) | Pflicht | für Lieferanten nicht sichtbar |
 | Lieferant | `supplierRef` | Verweis (3.2) | Pflicht | Anzeige gegenüber dem Kunden nach *(offener Frage 11)* |
 | Kandidat | `candidateRef` | Verweis (3.6) | Pflicht | |
-| Personenidentität | `workerIdentityRef` | Verweis (3.6) | optional | nur Betreibersicht; Grundlage der Zählung *(offene Frage 18)* |
+| Personenidentität | `workerIdentityRef` | Verweis (3.6) | Pflicht ab Status `planned` | nur Betreibersicht; Grundlage der Zählung nach 5.1 |
 | Bedarfsanfrage | `demandRequestRef` | Verweis (3.4) | optional | leer bei Einsatz ohne vorangegangene Anfrage |
 | Profilvorschlag | `candidateSubmissionRef` | Verweis (3.6) | optional | |
 | Tätigkeitsbeschreibung | `activityDescription` | Text | Pflicht | Konkretisierungspflicht (5.3); **nicht** nur ein Verweis auf die Anfrage |
@@ -1436,7 +1491,7 @@ Standort. Mehrere Köpfe einer Anfrage ergeben mehrere Einsätze.
 | Abweichender Satz | `agreedHourlyRate` | Betrag je Stunde | optional | *(offene Frage 17)* |
 | Abweichungsgrund | `rateDeviationReason` | Text | Pflicht bei Abweichung | *(offene Frage 17)* |
 | Kundenseitige Preisposition | `customerRateCardItemRef` | Verweis (3.3) | Pflicht | Verkaufsseite; für Lieferanten nie sichtbar ([42]) |
-| Vergleichsentgelt | `comparableWage` | Betrag je Stunde | optional | Angabe des Entleihers für Equal Pay (5.2) — *(offene Frage 15)* |
+| Vergleichsentgelt | `comparableWage` | Betrag je Stunde | Pflicht ab `equalPayDueDate` | erbt beim Anlegen aus dem Vergleichsentgelt des Standorts zur Tätigkeit (3.3); eine Abweichung ist mit Begründung möglich und wird protokolliert |
 | Equal-Pay-Fälligkeit | `equalPayDueDate` | Datum | *abgeleitet* | Ergebnis aus 5.2 |
 | Fristende Höchstüberlassung | `maxDurationEndDate` | Datum | *abgeleitet* | Ergebnis aus 5.1 |
 | Angerechnete Dauer | `countedDurationDays` | Ganzzahl, Tage | *abgeleitet* | einschließlich Vorläufern derselben Person beim selben Kunden |
@@ -1532,11 +1587,14 @@ Einsatzes.
 hinauslaufen und damit auf Gesundheitsdaten — siehe die Festlegung zu 3.8 und
 *offene Frage 21*.
 
-> *(offene Frage 19, neu)* Ob dieselbe Person mehrere **gleichzeitige**
-> Einsätze beim selben Kunden haben darf (Teilzeit über zwei Kostenstellen) und
-> wie das auf die Höchstüberlassungsdauer zählt, ist offen. Das Datenmodell
-> lässt mehrere Einsätze zu; die Rechenvorschrift in 5.1 muss den Fall
-> entscheiden.
+> **Entschieden (vormals offene Frage 19).** Mehrere **gleichzeitige** Einsätze
+> derselben Person beim selben Kunden sind **zulässig** (Teilzeit über zwei
+> Kostenstellen). Für die Höchstüberlassungsdauer zählt 5.1 **Kalendertage der
+> Überlassung an denselben Entleiher**: ein Tag, an dem zwei Einsätze laufen,
+> zählt genau **einmal**. Nicht gezählt werden Stunden, und nicht summiert wird
+> je Einsatz — sonst wäre die Grenze bei Teilzeit über zwei Kostenstellen nach
+> der Hälfte der Zeit erreicht. Die Zählung läuft über die Personenidentität
+> (3.6), nicht über den Kandidatensatz eines Lieferanten.
 
 ### 3.8 Stundenzettel, Zeitposition, Zuschlagsart
 
@@ -1786,7 +1844,7 @@ das VMS nicht.
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
 | Dokumentnummer | `documentNumber` | Text | Pflicht | |
-| Nachweisart | `documentCategory` | `permitCertificate`, `safetyBriefing`, `qualificationCertificate`, `workPermit`, `clearanceCertificate`, `agreementDocument`, `other` | Pflicht | Katalog; Pflichtcharakter je Art ist **offene Frage 20** |
+| Nachweisart | `documentCategory` | `permitCertificate`, `safetyBriefing`, `qualificationCertificate`, `workPermit`, `clearanceCertificate`, `agreementDocument`, `other` | Pflicht | Katalog; welche Art Pflicht ist und ob sie sperrt, steht im Pflichtkatalog in 5.4 |
 | Bezugsobjekt (Art) | `subjectType` | `supplier`, `customer`, `candidate`, `assignment`, `site`, `masterAgreement` | Pflicht | |
 | Bezugsobjekt | `subjectRef` | Verweis | Pflicht | genau eines |
 | Ausgestellt von | `issuer` | Text | optional | |
@@ -1799,7 +1857,8 @@ das VMS nicht.
 | Anerkennungsstatus | `verificationStatus` | `submitted`, `accepted`, `rejected` | Pflicht | Anerkennung durch `MD` ([34]); Änderung durch den Einsteller nur bis zur Anerkennung ([37]) |
 | Anerkannt am / von | `verifiedAt` / `verifiedBy` | Zeitpunkt / Verweis | Pflicht bei `accepted` | |
 | Zurückweisungsgrund | `rejectionReason` | Text | Pflicht bei `rejected` | |
-| Pflichtnachweis | `mandatory` | ja/nein | Pflicht | *(offene Frage 20)* |
+| Pflichtnachweis | `mandatory` | ja/nein | Pflicht | *abgeleitet* aus dem Pflichtkatalog in 5.4; nicht frei setzbar |
+| Sperrwirkung | `blocking` | ja/nein | Pflicht | *abgeleitet* aus dem Pflichtkatalog in 5.4: `ja` sperrt den Übergang, `nein` warnt (5.5) |
 | Sichtbarkeitsklasse | `confidentiality` | `operatorOnly`, `operatorAndOwner`, `assignmentParties` | Pflicht | setzt [35] und [36] um: der Kunde sieht einsatzbezogene Nachweise, nicht die Vertragsunterlagen des Lieferanten |
 
 **Mandant und Eigentümer.** Der Mandant folgt dem Bezugsobjekt; Eigentümer ist,
@@ -1824,10 +1883,22 @@ Vorliegen und Gültigkeit** geführt — kein Befundinhalt, keine Diagnose, kein
 Eignungsbeurteilung im Volltext. Das ist die Umsetzung der Datenminimierung
 (6.4) auf der Dokumentenebene.
 
-> *(offene Frage 20, neu)* Welche Nachweisarten Pflicht sind — je Lieferant und
-> je Einsatz — und ob ein fehlender Nachweis den Einsatzstart blockiert oder nur
-> warnt, ist offen. Das Feld `mandatory` und die Sperrmechanik aus 5.5 tragen
-> beide Antworten; der Pflichtkatalog selbst gehört nach 5.4.
+> **Entschieden (vormals offene Frage 20).** Der Pflichtkatalog ist **fest**,
+> nicht je Kunde konfigurierbar, und die Sperrwirkung ist **gestuft**:
+>
+> | Nachweisart | Bezug | Wirkung bei Fehlen oder Ablauf |
+> |---|---|---|
+> | AÜG-Erlaubnis | Lieferant | **Sperre** — kein Onboarding, kein Einsatzstart (5.4) |
+> | Arbeitserlaubnis | Kandidat | **Sperre** — kein Einsatzstart |
+> | Unterweisung am Standort | Einsatz | **Sperre** — kein Einsatzstart, solange der Standort sie verlangt (`safetyBriefingRequired`, 3.1) |
+> | Qualifikationsnachweis | Kandidat | Warnung |
+> | Unbedenklichkeitsbescheinigung | Lieferant | Warnung |
+> | Sonstige (`other`) | beliebig | Information |
+>
+> `mandatory` und `blocking` sind deshalb **abgeleitete** Felder: sie folgen
+> aus dem Katalog in 5.4 und werden nicht am einzelnen Dokument gesetzt. Die
+> drei Sperren sind genau die, die 4.7 in Q21 und Q42 bereits als Sperre
+> entworfen hat; Q10 bleibt Information, Q37 bleibt Warnung.
 
 ### 3.11 Benutzer, Rolle, Mandantenzuordnung
 
@@ -2087,7 +2158,8 @@ Vertretungen tragen. Audit-Einträge hängen an einem Benutzer, einer
 Rollenzuweisung und einem beliebigen Objekt. Die Personenidentität steht
 außerhalb der Mandantenstruktur: sie verbindet Kandidatensätze verschiedener
 Lieferanten und ist nur für den Betreiber sichtbar — sie ist der einzige
-bewusst mandantenübergreifende Knoten des Modells *(offene Frage 18)*.
+bewusst mandantenübergreifende Knoten des Modells, mit abschließendem
+Merkmalssatz und enger Zweckbindung (3.6).
 
 #### Die fünf Kardinalitäten, die fachlich entscheidend sind
 
@@ -2097,7 +2169,7 @@ bewusst mandantenübergreifende Knoten des Modells *(offene Frage 18)*.
 | Kandidat : Profilvorschlag | 1 : n | Derselbe Kandidat darf auf viele Anfragen vorgeschlagen werden, mit **eigenem** Status und eigener Offenlegungsstufe je Vorschlag (6.4). |
 | Einsatz : Stundenzettel | 1 : n, je Periode 1 | Genau ein Zettel je Einsatz und Abrechnungsperiode; Korrekturen laufen über eine Korrekturfassung, nicht über einen zweiten Zettel ([28], 4.4). |
 | Belegposition : Stundenzettel | n : 1 | Jeder abgerechnete Betrag ist bis zur genehmigten Zeit zurückverfolgbar — Voraussetzung für die Beanstandung (4.5). |
-| Personenidentität : Kandidat | 1 : n | Der einzige mandantenübergreifende Knoten; ohne ihn keine Zählung über Lieferanten hinweg (5.1) *(offene Frage 18)*. |
+| Personenidentität : Kandidat | 1 : n | Der einzige mandantenübergreifende Knoten; ohne ihn keine Zählung über Lieferanten hinweg (5.1). Jede Verknüpfung wird manuell bestätigt (3.6). |
 
 #### Übersichtsdiagramm
 
@@ -2607,12 +2679,12 @@ stateDiagram-v2
 | Profilvorschlag `reviewed` → `releasedToCustomer` | Keine AÜG-Prüfung — hier greift die Datenminimierung (6.4) | 6.4 |
 | Profilvorschlag → `accepted` | P1, P6, P11 erneut, jetzt mit Sperrwirkung | 5.1, 5.3 |
 
-**Abhängigkeit von offener Frage 18.** P1 und P6 setzen voraus, dass der
-Betreiber erkennt, ob zwei Kandidatensätze dieselbe Person betreffen
-(`workerIdentity`, 3.6). Wird Frage 18 mit „nein" beantwortet, prüfen diese
-Übergänge nur innerhalb eines Lieferanten; Kapitel 5 muss dann einen anderen
-Weg beschreiben. Die Zustände und Übergänge dieses Abschnitts ändern sich
-dadurch **nicht**.
+**Grundlage von P1 und P6.** Beide Prüfungen setzen voraus, dass der Betreiber
+erkennt, ob zwei Kandidatensätze dieselbe Person betreffen (`workerIdentity`,
+3.6). Das ist entschieden und damit tragfähig. Zu beachten: ein nur
+**maschinell vorgeschlagener**, noch nicht bestätigter Treffer löst keine
+Prüfung aus — bis zur Bestätigung zählt der Kandidatensatz als eigene Person.
+Die Übergänge dieses Abschnitts bleiben davon unberührt.
 
 ### 4.3 Einsatz und Verlängerung
 
@@ -2647,7 +2719,7 @@ nichts (siehe auch den Hinweis am Ende dieses Abschnitts).
 | Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
 |---|---|---|---|---|
 | — | `planned` | `MD`, `MA` | Profilvorschlag in `accepted` (4.2.3) oder Einsatz ohne vorangegangene Anfrage; Lieferant `active` (4.6); eigene `activityDescription` (nicht nur ein Verweis, 5.3); vereinbarte Preisposition beider Seiten; AÜG-Prüfungen P1, P6, P9, P11 ohne Sperre | Benachrichtigung an `KB`, `KE` und `LD`; abgeleitete Felder `maxDurationEndDate`, `equalPayDueDate`, `countedDurationDays` werden berechnet (5.1, 5.2); Bedarfsanfrage ggf. auf `filled` (4.1) |
-| `planned` | `active` | `MD` | `actualStartDate` gesetzt; P9 Erlaubnis gültig; P10 Pflichtnachweise vorhanden *(offene Frage 20)*; P7 kein Arbeitskampf am Standort; P1 Fristende nicht überschritten | **Fristenlauf beginnt** (5.1, 5.2); Stundenzettel für die laufende Abrechnungsperiode wird erwartet (4.4); Benachrichtigung an `KB` und `LD` |
+| `planned` | `active` | `MD` | `actualStartDate` gesetzt; P9 Erlaubnis gültig; P10 Pflichtnachweise vorhanden; P7 kein Arbeitskampf am Standort; P1 Fristende nicht überschritten | **Fristenlauf beginnt** (5.1, 5.2); Stundenzettel für die laufende Abrechnungsperiode wird erwartet (4.4); Benachrichtigung an `KB` und `LD` |
 | `active` | `interrupted` | `MD`, auf Anzeige von `LD` oder `KB` ([25]) | Unterbrechung (3.7) mit `interruptionFrom` und Grund angelegt | Zeiterfassung für den Unterbrechungszeitraum gesperrt (4.4); P2 bewertet die Wirkung auf die Zählung (`countsAsReset`, 5.1); Benachrichtigung an beide Seiten |
 | `interrupted` | `active` | `MD` | `interruptionTo` gesetzt; P9 Erlaubnis weiterhin gültig; P7 kein Arbeitskampf | P1 und P2 werden neu gerechnet — eine Unterbrechung über der Schwelle aus 5.1 setzt die Zählung zurück; `maxDurationEndDate` wird neu abgeleitet; Benachrichtigung |
 | `active` | `completed` | `MD` | `plannedEndDate` erreicht; `actualEndDate` gesetzt; keine laufende Unterbrechung | Keine neuen Zeitpositionen möglich (4.4); offene Stundenzettel müssen eingereicht und genehmigt werden; Fristenlauf endet; Löschfrist für den beendeten Einsatz beginnt (6.5) |
@@ -2761,7 +2833,7 @@ stateDiagram-v2
 | Übergang | Prüfung | Kapitel |
 |---|---|---|
 | → `planned` | P1 Höchstüberlassungsdauer über alle Vorläufer derselben Person beim selben Kunden; P6 Drehtürklausel; P9 Erlaubnis; P11 Arbeitsverhältnis beim Verleiher; P4 Vergleichsentgelt vorhanden; P5 Branchenzuschlagsschema zugeordnet | 5.1–5.4 |
-| `planned` → `active` | P9 Erlaubnis am Starttag; P10 Pflichtnachweise *(offene Frage 20)*; P7 Arbeitskampf am Standort; P1 Fristende nicht erreicht | 5.4, 5.3, 5.1 |
+| `planned` → `active` | P9 Erlaubnis am Starttag; P10 Pflichtnachweise; P7 Arbeitskampf am Standort; P1 Fristende nicht erreicht | 5.4, 5.3, 5.1 |
 | `active` → `interrupted` | P2 Erfassung der Unterbrechung für die Zählung | 5.1 |
 | `interrupted` → `active` | P2 Bewertung der Unterbrechungsdauer (Zurücksetzen der Zählung); P1 Neuberechnung | 5.1 |
 | Verlängerung `requested` → `approved` | P1 und P3 als Vorschau, damit die Kundenseite die Fristwirkung kennt | 5.1, 5.2 |
@@ -3023,7 +3095,7 @@ Prüfergebnisse und erzeugen keinen Zustand (4.0, Regel 5).
 | Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
 |---|---|---|---|---|
 | — | `onboarding` | `MA` | `supplierNumber`, `legalName`, `address`, mindestens ein Ansprechpartner | Lieferantenmandant wird angelegt (3.11); `LA` kann Stammdaten und Nachweise pflegen ([7]) |
-| `onboarding` | `active` | `MA` | Rahmenvertrag `active` (3.3); `supplierCollectiveAgreement` gesetzt (3.2, Pflicht ab `active`); AÜG-Erlaubnis mit `verificationStatus = accepted` und gültigem Zeitraum (5.4); Pflichtnachweise vorhanden *(offene Frage 20)* | Benachrichtigung an `LA` und `LD`; der Lieferant erscheint im Einladungskreis (4.2); AÜG-Prüfungen P9, P10 |
+| `onboarding` | `active` | `MA` | Rahmenvertrag `active` (3.3); `supplierCollectiveAgreement` gesetzt (3.2, Pflicht ab `active`); AÜG-Erlaubnis mit `verificationStatus = accepted` und gültigem Zeitraum (5.4); Pflichtnachweise vorhanden | Benachrichtigung an `LA` und `LD`; der Lieferant erscheint im Einladungskreis (4.2); AÜG-Prüfungen P9, P10 |
 | `active` | `blocked` | `MA`, `MD` ([5]) | `blockReason` Pflicht | **Keine** neue Einladung, kein neues Angebot, kein neuer Profilvorschlag, kein neuer Einsatz; offene Einladungen bleiben stehen und laufen in `expired` (4.2); laufende Einsätze, Zeiterfassung und Abrechnung laufen weiter; Benachrichtigung an `LA`; Eskalation an `MA` |
 | `blocked` | `active` | **nur** `MA` ([5]) | Sperrgrund behoben und dokumentiert; Auslöser ist nicht die sperrende Person (Vier-Augen, 2.4 Regel 5); Erlaubnis gültig und anerkannt | Benachrichtigung an `LA` und `LD`; Protokolleintrag mit Aufhebungsgrund |
 | `onboarding`, `active`, `blocked` | `inactive` | `MA` | `validTo` gesetzt; kein Einsatz dieses Lieferanten in `planned`, `active` oder `interrupted` | Zugänge des Lieferantenmandanten werden gesperrt (3.11); offene Einladungen und Angebote enden (4.2); Historie und Belege bleiben lesbar; Löschfristen nach 6.5 |
@@ -3076,7 +3148,7 @@ stateDiagram-v2
 
 | Übergang | Prüfung | Kapitel |
 |---|---|---|
-| `onboarding` → `active` | P9 Erlaubnis anerkannt und gültig; P10 Pflichtnachweise vollständig *(offene Frage 20)* | 5.4 |
+| `onboarding` → `active` | P9 Erlaubnis anerkannt und gültig; P10 Pflichtnachweise vollständig | 5.4 |
 | `active` → `blocked` | Die Sperre ist in der Regel das **Ergebnis** einer Prüfung (P9, P10), nicht ihr Anlass | 5.4, 5.5 |
 | `blocked` → `active` | P9 und P10 erneut, mit Sperrwirkung | 5.4 |
 | `inactive` → `active` | P9 und P10 wie beim erstmaligen Freischalten | 5.4 |
@@ -3132,7 +3204,7 @@ Ergebnis.
 | Q07 | Profilvorschlag | `submitted` → `reviewed` | P1 | bisher angerechnete Dauer dieser Person bei diesem Kunden; Warnschwelle aus 5.1 | Warnung |
 | Q08 | Profilvorschlag | `submitted` → `reviewed` | P6 | Vorbeschäftigung beim Entleiher oder im Konzern innerhalb der Frist aus 5.3 | Warnung |
 | Q09 | Profilvorschlag | `submitted` → `reviewed` | P11 | `employmentStatusWithSupplier = employed` oder Zusage dazu | Warnung |
-| Q10 | Profilvorschlag | `submitted` → `reviewed` | P10 | Pflichtnachweise des Kandidaten (Arbeitserlaubnis, Qualifikation) | Information *(offene Frage 20)* |
+| Q10 | Profilvorschlag | `submitted` → `reviewed` | P10 | Pflichtnachweise des Kandidaten (Arbeitserlaubnis, Qualifikation) | Information |
 | Q11 | Profilvorschlag | → `accepted` | P1 | Höchstüberlassungsdauer würde im angefragten Zeitraum überschritten | **Sperre** |
 | Q12 | Profilvorschlag | → `accepted` | P6 | Drehtürklausel greift | **Sperre** |
 | Q13 | Profilvorschlag | → `accepted` | P11 | kein Arbeitsverhältnis beim Verleiher | **Sperre** |
@@ -3140,10 +3212,10 @@ Ergebnis.
 | Q15 | Einsatz | → `planned` | P6 | Drehtürklausel greift | **Sperre** |
 | Q16 | Einsatz | → `planned` | P9 | Erlaubnis für den geplanten Zeitraum gültig | **Sperre** |
 | Q17 | Einsatz | → `planned` | P11 | Arbeitsverhältnis beim Verleiher besteht | **Sperre** |
-| Q18 | Einsatz | → `planned` | P4 | Vergleichsentgelt hinterlegt | Warnung *(offene Frage 15)* |
+| Q18 | Einsatz | → `planned` | P4 | Vergleichsentgelt hinterlegt | Warnung |
 | Q19 | Einsatz | → `planned` | P5 | Branchenzuschlagsschema am Standort zugeordnet | Information |
 | Q20 | Einsatz | `planned` → `active` | P9 | Erlaubnis am Starttag gültig und anerkannt | **Sperre** |
-| Q21 | Einsatz | `planned` → `active` | P10 | Pflichtnachweise zum Einsatz, insbesondere Unterweisung am Standort | **Sperre** *(offene Frage 20)* |
+| Q21 | Einsatz | `planned` → `active` | P10 | Pflichtnachweise zum Einsatz, insbesondere Unterweisung am Standort | **Sperre** |
 | Q22 | Einsatz | `planned` → `active` | P7 | Arbeitskampf am Einsatzort | **Sperre** |
 | Q23 | Einsatz | `planned` → `active` | P1 | Fristende bereits erreicht | **Sperre** |
 | Q24 | Einsatz | `active` → `interrupted` | P2 | Unterbrechung wird mit Beginn und Grund erfasst | Information |
@@ -3154,17 +3226,17 @@ Ergebnis.
 | Q29 | Verlängerung | `requested` → `approved` | P3 | Equal-Pay-Fälligkeit fällt in den verlängerten Zeitraum | Warnung |
 | Q30 | Verlängerung | `approved` → `effective` | P1 | `newEndDate` nach `maxDurationEndDate` | **Sperre** |
 | Q31 | Verlängerung | `approved` → `effective` | P9 | Erlaubnis für den verlängerten Zeitraum gültig | **Sperre** |
-| Q32 | Verlängerung | `approved` → `effective` | P4 | Vergleichsentgelt für den Zeitraum ab Equal-Pay-Fälligkeit | Warnung *(offene Frage 15)* |
+| Q32 | Verlängerung | `approved` → `effective` | P4 | Vergleichsentgelt für den Zeitraum ab Equal-Pay-Fälligkeit | Warnung |
 | Q33 | Stundenzettel | `recorded` → `submitted` | P1 | Zeitpositionen nach `maxDurationEndDate` enthalten | Warnung |
 | Q34 | Stundenzettel | `submitted` → `inApproval` | P3 | Equal-Pay-Fälligkeit im Zettelzeitraum erreicht | Warnung |
 | Q35 | Stundenzettel | `inApproval` → `approved` | P1 | Zeiten nach Fristende sollen genehmigt werden | **Sperre** |
-| Q36 | Stundenzettel | `inApproval` → `approved` | P4 | Fälligkeit erreicht, Vergleichsentgelt fehlt | **Sperre** *(offene Frage 15)* |
-| Q37 | Stundenzettel | `inApproval` → `approved` | P10 | Unterweisungsnachweis für den Standort gültig | Warnung *(offene Frage 20)* |
+| Q36 | Stundenzettel | `inApproval` → `approved` | P4 | Fälligkeit erreicht, Vergleichsentgelt fehlt | **Sperre** |
+| Q37 | Stundenzettel | `inApproval` → `approved` | P10 | Unterweisungsnachweis für den Standort gültig | Warnung |
 | Q38 | Abrechnungsbeleg | → `created` (Einkauf) | P9 | Erlaubnis im gesamten Leistungszeitraum gültig | Warnung |
 | Q39 | Abrechnungsbeleg | → `created` | P4 | Vergleichsentgelt für Zeiträume nach Fälligkeit hinterlegt | Warnung |
 | Q40 | Abrechnungsbeleg | → `created` | P5 | Branchenzuschlagsstufe der abgerechneten Zuschläge plausibel | Information |
 | Q41 | Lieferant | `onboarding` → `active` | P9 | Erlaubnis anerkannt und gültig | **Sperre** |
-| Q42 | Lieferant | `onboarding` → `active` | P10 | Pflichtnachweise vollständig | **Sperre** *(offene Frage 20)* |
+| Q42 | Lieferant | `onboarding` → `active` | P10 | Pflichtnachweise vollständig | **Sperre** |
 | Q43 | Lieferant | `blocked` → `active` | P9, P10 | Sperrgrund behoben, Nachweise gültig | **Sperre** |
 | Q44 | Lieferant | `inactive` → `active` | P9, P10 | wie beim erstmaligen Freischalten | **Sperre** |
 
@@ -3223,7 +3295,11 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
   (§ 1 Abs. 1b AÜG) — Berechnungsvorschrift TODO
 - Unterbrechung von mehr als 3 Monaten setzt die Zählung zurück — TODO
 - Tarifliche Abweichung (Öffnungsklausel, Betriebsvereinbarung) — TODO
-- Zählung über mehrere Einsätze, Lieferanten und Standorte hinweg — TODO
+- Zählung über mehrere Einsätze, Lieferanten und Standorte hinweg —
+  **festgelegt** (Frage 19): gezählt werden **Kalendertage der Überlassung an
+  denselben Entleiher** über die Personenidentität (3.6); gleichzeitige
+  Einsätze sind zulässig, überlappende Tage zählen genau einmal. Keine
+  Stundenzählung, keine Summierung je Einsatz. Rechenvorschrift im Detail TODO
 - Warn- und Sperrschwellen im System (Vorlauf, Eskalation) — TODO
 - Rechtsfolge bei Überschreitung und Systemverhalten — TODO
 
@@ -3233,7 +3309,11 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 - Abweichung durch Tarifvertrag der Zeitarbeitsbranche — TODO
 - Equal Pay spätestens nach 9 Monaten (§ 8 Abs. 4 AÜG) — TODO
 - Branchenzuschlagstarifverträge als abweichendes Modell — TODO
-- Vergleichsentgelt: welche Daten der Entleiher liefern muss — TODO
+- Vergleichsentgelt: welche Daten der Entleiher liefern muss —
+  **festgelegt** (Frage 15): gepflegt **je Tätigkeit am Standort** als
+  `comparableWageEntry` (3.3), mit Herkunftsangabe; der Einsatz erbt den Wert
+  und kann ihn begründet übersteuern. Eine Angabe mit `wageSource = estimate`
+  gilt als Warnung, nicht als Nachweis. Prüfzeitpunkte und Wirkung TODO
 - Fristenberechnung und Unterbrechungswirkung — TODO
 - Systemverhalten: Warnung, Pflichtfeld, Freigabesperre — TODO
 
@@ -3254,7 +3334,13 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 - Sperre von Lieferanten ohne gültigen Nachweis — TODO
 - Erinnerungs- und Eskalationsfristen vor Ablauf — TODO
 - Weitere Nachweise (Unbedenklichkeitsbescheinigungen, Qualifikationen,
-  Unterweisungen) — TODO
+  Unterweisungen) — **Pflichtkatalog festgelegt** (Frage 20): fester Katalog,
+  gestufte Wirkung. **Sperre** bei AÜG-Erlaubnis (Lieferant), Arbeitserlaubnis
+  (Kandidat) und Unterweisung am Standort (Einsatz, soweit der Standort sie
+  verlangt); **Warnung** bei Qualifikationsnachweis und
+  Unbedenklichkeitsbescheinigung; **Information** bei sonstigen Nachweisen.
+  `mandatory` und `blocking` in 3.10 sind daraus abgeleitet. Fristen und
+  Ablaufbehandlung je Art TODO
 - Aufzeichnungs- und Dokumentationspflichten — TODO
 
 ### 5.5 Regelwerk-Mechanik
@@ -3302,15 +3388,17 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 | 12 | Wer verwaltet kundenseitige Benutzer und Vertretungen — der Betreiber oder eine zusätzliche kundenseitige Administratorrolle? | Kapitel 2.1, 2.2, 2.4 | offen |
 | 13 | Wie wird eine Organisation behandelt, die gleichzeitig Kunde und Lieferant ist (Mandantenzuordnung, Sichtbarkeit)? | Kapitel 2.3 | offen |
 | 14 | Dürfen Kundenrollen (Bedarfsträger, Genehmiger) für mehrere Standorte und Kostenstellen eingeschränkt werden, und wer pflegt diese Zuständigkeit? | Kapitel 2.2, 3.1, 3.11 | offen |
-| 15 | Wie wird das Vergleichsentgelt für Equal Pay geführt — je Einsatz, je Tätigkeit am Standort oder je Kostenstelle — und in welcher Form liefert der Entleiher es? | Kapitel 3.3, 3.7, 5.2 | offen |
+| 15 | Wie wird das Vergleichsentgelt für Equal Pay geführt, und in welcher Form liefert der Entleiher es? | Kapitel 3.3, 3.7, 5.2 | **entschieden:** je Tätigkeit am Standort als `comparableWageEntry` (3.3), mit Herkunftsangabe; der Einsatz erbt den Wert |
 | 16 | Granularität der Zeiterfassung: Zeitposition je Tag mit Stundensumme oder je Abschnitt mit Beginn, Ende und Pause? | Kapitel 3.8, 4.4 | offen |
 | 17 | Darf je Einsatz ein von der Preisliste abweichender Satz vereinbart werden, und wer genehmigt die Abweichung? | Kapitel 3.3, 3.5, 3.7 | offen |
-| 18 | Führt der Betreiber eine Personenidentität über Lieferanten hinweg, mit welchen Merkmalen und auf welcher Rechtsgrundlage? Ohne sie ist die Zählung aus 5.1 über Lieferanten hinweg nicht möglich. | Kapitel 3.6, 5.1, 5.3, 6.3 | offen |
-| 19 | Sind mehrere gleichzeitige Einsätze derselben Person beim selben Kunden zulässig (Teilzeit, mehrere Kostenstellen), und wie zählen sie auf die Höchstüberlassungsdauer? | Kapitel 3.7, 5.1 | offen |
-| 20 | Welche Nachweisarten sind Pflicht — je Lieferant und je Einsatz — und blockiert ein fehlender Nachweis den Einsatzstart oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | offen |
+| 18 | Führt der Betreiber eine Personenidentität über Lieferanten hinweg, und mit welchen Merkmalen? | Kapitel 3.6, 5.1, 5.3 | **entschieden:** ja; abschließender Merkmalssatz Name, Geburtsdatum, Geburtsort, manuelle Bestätigung, enge Zweckbindung (3.6). Rechtsgrundlage → Frage 25 |
+| 19 | Sind mehrere gleichzeitige Einsätze derselben Person beim selben Kunden zulässig, und wie zählen sie auf die Höchstüberlassungsdauer? | Kapitel 3.7, 5.1 | **entschieden:** zulässig; gezählt werden Kalendertage der Überlassung an denselben Entleiher, überlappende Tage genau einmal |
+| 20 | Welche Nachweisarten sind Pflicht, und blockiert ein fehlender Nachweis oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | **entschieden:** fester Katalog mit gestufter Wirkung — Sperre bei AÜG-Erlaubnis, Arbeitserlaubnis und Unterweisung am Standort, sonst Warnung oder Information (5.4) |
 | 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | offen |
 | 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | offen |
 | 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? | Kapitel 2.2, 3.5, 4.2 | **entschieden:** ja, eng begrenzt auf die eigene Einladung; Matrix 2.2 trägt dafür `S[46]` |
 | 24 | Darf eine Abrechnungsperiode geschlossen werden, solange einzelne Stundenzettel nicht entschieden sind — und wer entscheidet das? Heute verhindert ein hängender Zettel das Schließen der ganzen Periode. | Kapitel 3.9, 4.4, 4.5 | offen |
+
+| 25 | **Juristisch zu prüfen:** Rechtsgrundlage der Personenidentität (3.6) — Verantwortlichkeit im MSP-Modell, Rechtsgrundlage nach Art. 6 DSGVO, Informationspflicht gegenüber dem Leiharbeitnehmer, Löschfrist. Die fachliche Entscheidung zu Frage 18 steht; die rechtliche Absicherung fehlt und ist keine Aufgabe dieses Projekts allein. | Kapitel 3.6, 6.1, 6.3, 6.5 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.
