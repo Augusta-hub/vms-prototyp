@@ -90,7 +90,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Einkaufspreisliste | `supplierRateCard` | Konditionen Betreiber ↔ Lieferant |
 | Kundenpreisliste | `customerRateCard` | Konditionen Betreiber ↔ Kunde |
 | Tarifzuordnung | `collectiveAgreementAssignment` | anzuwendender Tarifvertrag für Lieferant, Kunde oder Standort (Kapitel 3.3) |
-| Tarifvertrag | `collectiveAgreement` | Katalogwert (iGZ, BAP, Branchenzuschlagstarif …), offene Frage 3 |
+| Tarifvertrag | `collectiveAgreement` | Katalogwert (iGZ, BAP, Branchenzuschlagstarif …); der Katalog ist Konfiguration (3.3) |
 | Branchenzuschlag | `industryPremium` | tariflicher Zuschlag nach Einsatzbranche (Kapitel 5.2) |
 | Höchstüberlassungsdauer | `maxAssignmentDuration` | zulässige Dauer der Überlassung an denselben Entleiher (Kapitel 5.1) |
 | Equal-Pay-Frist | `equalPayDeadline` | Frist, ab der Equal Pay greift (Kapitel 5.2) |
@@ -123,8 +123,8 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Abrechnungsperiode | `billingPeriod` | Zeitraum, für den abgerechnet wird (Kapitel 3.9) |
 | Abrechnungsbeleg | `billingDocument` | kaufmännischer Beleg über Überlassungsleistung (Kapitel 3.9) |
 | Belegposition | `billingDocumentItem` | eine Position eines Abrechnungsbelegs |
-| Gutschrift | `creditNote` | Belegart im Gutschriftverfahren (offene Frage 6) |
-| Rechnung | `invoice` | Belegart im Rechnungseingangsverfahren (offene Frage 6) |
+| Gutschrift | `creditNote` | Belegart im Gutschriftverfahren — im Prototyp das Verfahren der Lieferantenseite (3.9) |
+| Rechnung | `invoice` | Belegart im Rechnungseingangsverfahren — dokumentiert, im Prototyp nicht umgesetzt (3.9) |
 | Beanstandung | `dispute` | Widerspruch gegen einen Abrechnungsbeleg (Kapitel 4.5) |
 | Dokument / Nachweis | `document` | hinterlegtes Schriftstück mit Nachweisfunktion (Kapitel 3.10) |
 | Nachweisart | `documentCategory` | Katalogwert der Dokumentart |
@@ -164,7 +164,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Eingeladen | `invited` | Einladung zugestellt (4.2) |
 | Zur Kenntnis genommen | `viewed` | Einladung geöffnet (4.2) |
 | Angebot abgegeben | `offerSubmitted` | Einladung ist mit einem Angebot beantwortet (4.2) |
-| Abgesagt | `declined` | Lieferant bietet nicht an (4.2) *(offene Frage 23)* |
+| Abgesagt | `declined` | Lieferant bietet nicht an; vom Lieferantendisponenten selbst gesetzt (4.2.1, [46]) |
 | Gesichtet | `reviewed` | Betreiber hat Angebot bzw. Profilvorschlag bewertet (4.2) |
 | Dem Kunden vorgelegt | `releasedToCustomer` | Profilvorschlag ist pseudonymisiert beim Kunden (4.2, 6.4) |
 | Interview vereinbart | `interviewScheduled` | Kunde will die Person kennenlernen (4.2) |
@@ -188,7 +188,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | In Prüfung (Beleg) | `inReview` | Abrechnungsbeleg wird vor der Freigabe geprüft (4.5) |
 | Freigegeben (Beleg) | `released` | Vier-Augen-Freigabe erfolgt, Beleg abgegeben (4.5) |
 | Beanstandet | `disputed` | Gegenseite widerspricht dem Beleg (4.5) |
-| Bestätigt | `confirmed` | Gegenseite bestätigt den Beleg; nur Einkaufsseite (4.5) *(offene Frage 6)* |
+| Bestätigt | `confirmed` | Gegenseite bestätigt den Beleg; nur Einkaufsseite (4.5) |
 | Onboarding | `onboarding` | Lieferant angelegt, Voraussetzungen unvollständig (4.6) |
 | Gesperrt | `blocked` | Teilnahme des Lieferanten ausgesetzt (4.6) |
 | Inaktiv | `inactive` | Beauftragung des Lieferanten beendet (4.6); auch Kandidat (3.6) |
@@ -363,7 +363,7 @@ ist, und stellt Personal.
 - Eigene Einsätze verfolgen, Beendigung durch den Lieferanten anzeigen
 - Stundenzettel erfassen oder im Namen des Leiharbeitnehmers einreichen,
   solange dieser keinen eigenen Zugang hat *(offene Frage 4)*
-- Eigene Abrechnungsbelege prüfen und beanstanden *(offene Frage 6)*
+- Eigene Gutschriften prüfen, bestätigen oder beanstanden (3.9, 4.5)
 - Nachweise zu Kandidaten und Einsätzen hochladen
 
 **Abgrenzung.** Gegenüber dem Lieferantenadministrator: keine Benutzer- und
@@ -460,7 +460,7 @@ Tabelle.
 | Preisliste, Preisposition (3.3) | A L Ä S X | L | – | L[8] | L[2] L[41] | L[9] L[42] | L[9] L[42] | – |
 | Tarifzuordnung (3.3) | A L Ä S X | L | – | – | L[2] | L[7] | L[7] | – |
 | Bedarfsanfrage (3.4) | A L Ä S X | A[10] L Ä S | A L[2] Ä[11] S[12] | L[2] S[13] | L[2] | L[14] | – | – |
-| Ausschreibung, Einladung (3.5) | A L Ä S X | A L Ä S | L[15] | – | L[15] | L[16] | – | – |
+| Ausschreibung, Einladung (3.5) | A L Ä S X | A L Ä S | L[15] | – | L[15] | L[16] S[46] | – | – |
 | Lieferantenangebot, Angebotsposition (3.5) | L S X | L S[17] | L[18] | – | L[2] | A L[7] Ä[19] S[20] X[21] | L[7] | – |
 | Kandidat / Profilvorschlag (3.6) | L S X | L Ä[22] S[17] | L[23] S[24] | – | – | A L[7] Ä[7] S[20] X[21] | L[7] | L[4] |
 | Personenidentität (3.6) | A L Ä X | A L Ä[43] | – | – | – | – | – | – |
@@ -510,7 +510,7 @@ Tabelle.
 | [29] | Genehmigen oder ablehnen; Anzahl der Stufen und die jeweils zuständige Rolle sind **offene Frage 5**. |
 | [30] | Freigabe nicht durch dieselbe Person, die den Beleg erstellt hat (Vier-Augen-Prinzip, Kapitel 2.4). |
 | [31] | Beanstandung; die Statusführung des Belegs bleibt beim Betreiber. |
-| [32] | Bestätigen oder beanstanden; die Rolle des Lieferanten im Belegfluss hängt an **offener Frage 6**. |
+| [32] | Bestätigen oder beanstanden. Im Gutschriftverfahren (Entscheidung zu offener Frage 6) legt der Lieferant keinen Beleg an — deshalb trägt die Zeile kein `A`. |
 | [33] | Öffnen und Schließen einer Abrechnungsperiode. |
 | [34] | Nachweis anerkennen oder zurückweisen (Kapitel 5.4). |
 | [35] | Nur einsatzbezogene Nachweise zum eigenen Kunden (z. B. Unterweisung, Qualifikation), keine Vertragsunterlagen des Lieferanten. |
@@ -524,6 +524,7 @@ Tabelle.
 | [43] | Zusammenführen und Trennen von Kandidatensätzen derselben Person. Das Objekt ist ausschließlich beim Betreiber geführt; Kunden und Lieferanten sehen es und seine Existenz nicht (Kapitel 2.3, Regel 4). Ob es überhaupt geführt wird, ist **offene Frage 18**. |
 | [44] | Die Zeitposition trägt keinen eigenen Status; genehmigt wird der Stundenzettel (Kapitel 4.4). `X` meint das Entfernen einer Position vor der Einreichung; Korrekturen genehmigter Zeiten laufen über eine Korrekturfassung ([28]). |
 | [45] | Nur die eigene Vertretung für eine eigene Rollenzuweisung bei geplanter Abwesenheit (Kapitel 2.4, Regel 7). Unvorhergesehene Abwesenheit richtet der Administrator der eigenen Organisation ein (LA bzw. kundenseitig derzeit der Betreiber — **offene Frage 12**). Keine Rechteerweiterung, keine Ketten; `Ä` fehlt, weil eine laufende Vertretung beendet (`X`) und neu angelegt wird. Für AN entfällt die Zeile: die Rolle ist nicht vertretbar (Kapitel 2.4, Regel 8). |
+| [46] | Nur die Absage der **eigenen** Einladung (`declined` mit `declineReason`, Kapitel 4.2.1), analog [20]. Keine weitere Statusführung: Annahme, Fristverlängerung und der Fortschritt der Ausschreibung bleiben beim Betreiber. Entscheidung zu *offener Frage 23*. |
 
 ### 2.3 Sichtbarkeitsregeln
 
@@ -716,8 +717,9 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
 
 Dieses Kapitel beschreibt **fachliche Objekte, keine Tabellen**. Es nennt keine
 Datentypen einer konkreten Datenbank, keine Schlüsselstrategie, keine Indizes
-und keine Migrationen — der Tech-Stack ist **offene Frage 1**. Die Angaben
-unter „Typ / Wertebereich" sind fachliche Wertebereiche.
+und keine Migrationen; das Schema entsteht erst mit der Umsetzung (Prisma auf
+PostgreSQL, siehe CLAUDE.md). Die Angaben unter „Typ / Wertebereich" sind
+fachliche Wertebereiche.
 
 Die englischen Bezeichner sind im Glossar 1.5 gemappt. Die Objektgranularität
 entspricht den Zeilen der Berechtigungsmatrix in Kapitel 2.2; wo dieses Kapitel
@@ -730,7 +732,7 @@ Attributtabellen nicht wiederholt.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
-| Technische Identität | `id` | undurchsichtiger Schlüssel | Pflicht | Form folgt **offener Frage 1**; nie fachlich interpretiert |
+| Technische Identität | `id` | undurchsichtiger Schlüssel | Pflicht | Form folgt der Umsetzung; nie fachlich interpretiert |
 | Fachliche Kennung | `…Number` | Text, eindeutig je Mandant | Pflicht, wo in der Tabelle genannt | lesbare Nummer für Kommunikation und Belege |
 | Mandant | `tenantId` | Verweis auf `tenant` (3.11) | Pflicht bei mandantengebundenen Objekten | trägt die Mandantengrenze aus Kapitel 2.3 |
 | Angelegt am / von | `createdAt` / `createdBy` | Zeitpunkt / Verweis auf `user` | Pflicht | erzeugt zusätzlich einen Audit-Eintrag (3.12) |
@@ -753,8 +755,8 @@ Attributtabellen nicht wiederholt.
    bleiben, und sind in den Tabellen als *abgeleitet* gekennzeichnet.
 4. **Anmeldedaten** (Passwörter, Hashes, Token, Zwei-Faktor-Geheimnisse) sind
    **nicht** Teil dieses Datenmodells und gehören auch nicht in Beispiel- oder
-   Testdaten (CLAUDE.md, Regel 2). Das Authentifizierungsverfahren folgt
-   offener Frage 1.
+   Testdaten (CLAUDE.md, Regel 2). Das Authentifizierungsverfahren wird mit der
+   Umsetzung festgelegt und ist nicht Teil dieses Kapitels.
 5. **Zahlungsdaten** (Bankverbindungen, Mandate) sind im Prototyp nicht
    vorgesehen; Zahlungsabwicklung und Mahnwesen sind nach 1.4 nicht im Umfang.
 6. **Keine Echtdaten.** Alle Beispiel- und Entwicklungsdaten sind synthetisch
@@ -799,7 +801,7 @@ je Kostenstelle.
 | Rechtsform | `legalForm` | Katalogwert | optional | |
 | Anschrift | `address` | strukturierte Anschrift | Pflicht | Sitz der Gesellschaft |
 | Handelsregisternummer | `commercialRegisterNumber` | Text | optional | |
-| Branche | `industrySector` | Katalogwert | optional | wirkt auf Branchenzuschläge (5.2), offene Frage 3 |
+| Branche | `industrySector` | Katalogwert | optional | wirkt auf Branchenzuschläge (5.2) über das Zuschlagsschema der Tarifzuordnung (3.3) |
 | Tarifbindung des Entleihers | `customerCollectiveAgreement` | Verweis auf `collectiveAgreementAssignment` (3.3) | optional | Grundlage für Equal Pay (5.2) |
 | Konzernzugehörigkeit | `corporateGroup` | Text oder Verweis | optional | relevant für die Drehtürklausel (5.3) |
 | Ansprechpartner | `contacts` | Liste (Name, Funktion, E-Mail, Telefon) | mindestens einer | personenbezogen |
@@ -912,7 +914,7 @@ Erlaubnis ist ein eigenes Objekt (unten), seine Konditionen stehen in 3.3.
 | Rechtsform | `legalForm` | Katalogwert | optional | |
 | Anschrift | `address` | strukturierte Anschrift | Pflicht | |
 | Handelsregisternummer | `commercialRegisterNumber` | Text | optional | |
-| Tarifbindung des Verleihers | `supplierCollectiveAgreement` | Verweis (3.3) | Pflicht ab Status `active` | iGZ/BAP o. a. — **offene Frage 3**; Grundlage für die Abweichung vom Gleichstellungsgrundsatz (5.2) |
+| Tarifbindung des Verleihers | `supplierCollectiveAgreement` | Verweis (3.3) | Pflicht ab Status `active` | Grundlage für die Abweichung vom Gleichstellungsgrundsatz (5.2); welches Tarifwerk gilt, ist Konfiguration am Zuordnungsobjekt (3.3) |
 | Ansprechpartner | `contacts` | Liste | mindestens einer | personenbezogen |
 | Lieferantenstatus | `status` | siehe 4.6 | Pflicht | `onboarding`, `active`, `blocked`, `inactive` |
 | Sperrgrund | `blockReason` | Text | Pflicht bei `blocked` | |
@@ -1083,7 +1085,7 @@ Rechenregeln stehen in 5.1 und 5.2, nicht hier.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
-| Tarifvertrag | `collectiveAgreement` | Katalogwert | Pflicht | iGZ, BAP, Branchenzuschlagstarif … — **offene Frage 3** |
+| Tarifvertrag | `collectiveAgreement` | Katalogwert | Pflicht | Der Katalog ist **Konfiguration**, kein festverdrahteter Wertebereich (Entscheidung zu offener Frage 3); die Fristen und Stufen des jeweiligen Tarifwerks stehen in den folgenden Feldern |
 | Gilt für | `appliesToType` | `supplier`, `customer`, `site` | Pflicht | |
 | Zielobjekt | `appliesToRef` | Verweis | Pflicht | |
 | Laufzeit | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | Tarifrunden erzeugen neue Zuordnungen |
@@ -1134,6 +1136,7 @@ mehrere Köpfe (`headcount > 1`) kann zu mehreren Einsätzen führen.
 | Interner Vermerk | `internalNote` | Text | optional | für Lieferanten **nicht** sichtbar ([14]) |
 | Freigegeben am / von | `approvedAt` / `approvedBy` | Zeitpunkt / Verweis | Pflicht ab Status „freigegeben" | Vier-Augen-Prinzip (2.4, Regel 5) |
 | Stornogrund | `cancellationReason` | Text | Pflicht bei Storno | |
+| Rückweisungsgrund | `rejectionReason` | Text | Pflicht bei Rückweisung | Begründung der Rückweisung `submitted` → `draft` durch `KG` (4.1); für den Bedarfsträger sichtbar, damit er weiß, was zu ändern ist |
 | Status | `status` | siehe 4.1 | Pflicht | |
 | Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
 
@@ -1337,7 +1340,7 @@ Status und seine eigene Offenlegungsstufe.
 | Kandidat | `candidateRef` | Verweis | Pflicht | |
 | Angebot | `supplierOfferRef` | Verweis (3.5) | Pflicht | bestimmt Einladung, Ausschreibung und Anfrage |
 | Bedarfsanfrage | `demandRequestRef` | Verweis (3.4) | Pflicht | *abgeleitet*, zur Prüfung der Sichtbarkeit mitgeführt |
-| Vorgelegt am | `submittedAt` | Zeitpunkt | Pflicht | |
+| Vorgelegt am | `submittedAt` | Zeitpunkt | Pflicht ab Status „eingereicht" | im Entwurf leer; die Matrix setzt mit `X[21]` einen Zustand `draft` voraus |
 | Verfügbar ab | `availableFrom` | Datum | Pflicht | |
 | Abweichender Satz | `offeredHourlyRate` | Betrag je Stunde | optional | wenn er von der Angebotsposition abweicht *(offene Frage 17)* |
 | Offenlegungsstufe | `disclosureLevel` | `pseudonymized`, `identified` | Pflicht | Klardaten erst nach Zusage ([23], 6.4) |
@@ -1459,6 +1462,18 @@ beendet → vorzeitig beendet).
 **Datenkategorie (→ 6.3).** Beschäftigtendaten mit Arbeitsort und Arbeitszeit,
 verknüpft mit Entgeltbezug über `comparableWage`. Löschfrist für beendete
 Einsätze: 6.5.
+
+> **Zur Asymmetrie zwischen Verlängerung und Beendigung.** Die Verlängerung ist
+> ein eigener Vorgang (`assignmentExtension`, unten), die vorzeitige Beendigung
+> dagegen nur ein Feldersatz am Einsatz (`terminationReason`,
+> `terminationRequestedBy`). Ein beantragter, noch nicht entschiedener
+> Beendigungsvorgang hat deshalb keinen eigenen Zustand — der Einsatz bleibt
+> `active`, bis die Beendigung wirksam wird (4.3.1). Das ist bewusst so: die
+> Verlängerung ändert die Laufzeit und damit Kosten und Fristen und wird
+> **immer** genehmigt ([26]), die Beendigung wird je nach antragstellender
+> Seite genehmigt oder nur unterrichtet. Soll die Beendigung später mehrstufig
+> genehmigt werden, ist hier ein Vorgang analog `assignmentExtension`
+> nachzutragen.
 
 #### Verlängerung (`assignmentExtension`)
 
@@ -1691,15 +1706,16 @@ nach 1.4 nicht im Umfang).
 
 Es gibt zwei Belegseiten, die den Preislisten entsprechen (3.3): die
 **Kundenseite** (Betreiber stellt dem Kunden) und die **Lieferantenseite**
-(Betreiber und Lieferant rechnen ab). Die Belegart der Lieferantenseite hängt
-an **offener Frage 6**.
+(Betreiber und Lieferant rechnen ab). Auf der Lieferantenseite gilt das
+**Gutschriftverfahren** (Entscheidung zu offener Frage 6): der Betreiber
+erstellt die Gutschrift, der Lieferant bestätigt oder beanstandet sie.
 
 **Beleg**
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
 | Belegnummer | `documentNumber` | Text, lückenlos je Nummernkreis | Pflicht | Nummernkreise je Belegart |
-| Belegart | `documentType` | `customerInvoice`, `supplierCreditNote`, `supplierInvoice` | Pflicht | die beiden Lieferantenarten schließen sich aus — **offene Frage 6** |
+| Belegart | `documentType` | `customerInvoice`, `supplierCreditNote`, `supplierInvoice` | Pflicht | die beiden Lieferantenarten schließen sich aus; im Prototyp wird nur `supplierCreditNote` verwendet (Gutschriftverfahren) |
 | Seite | `direction` | `sales`, `purchase` | Pflicht | folgt der Belegart |
 | Kunde | `customerRef` | Verweis (3.1) | Pflicht bei `sales` | |
 | Lieferant | `supplierRef` | Verweis (3.2) | Pflicht bei `purchase` | |
@@ -1732,9 +1748,8 @@ an **offener Frage 6**.
 
 **Mandant und Eigentümer.** Betreibermandant; der Betreiber erstellt beide
 Seiten. `KE` prüft und beanstandet die Kundenseite ([31]), `LD` bestätigt oder
-beanstandet die Lieferantenseite ([32]) — wobei die Rolle des Lieferanten im
-Belegfluss an **offener Frage 6** hängt. Die Statusführung bleibt in jedem Fall
-beim Betreiber.
+beanstandet die Lieferantenseite ([32]). Die Statusführung bleibt in jedem Fall
+beim Betreiber — im Gutschriftverfahren legt der Lieferant keinen Beleg an.
 
 **Beziehungen.** n Belege : 1 Abrechnungsperiode · 1 Beleg :
 n Belegpositionen · n Belegpositionen : 1 Stundenzettel · n Belegpositionen :
@@ -1749,12 +1764,14 @@ Belege unterliegen handels- und steuerrechtlichen Aufbewahrungspflichten; sie
 sind von der Löschung personenbezogener Daten gesondert zu behandeln
 (Löschkonzept 6.6).
 
-> *(offene Frage 6)* Gutschriftverfahren oder Rechnungseingang: Dieses Kapitel
-> trägt beides über die Belegart. Im Gutschriftverfahren erstellt der Betreiber
-> `supplierCreditNote` und der Lieferant bestätigt oder beanstandet; im
-> Rechnungseingang reicht der Lieferant `supplierInvoice` ein, und der Betreiber
-> prüft. Die Belegpositionen und ihre Herleitung aus den Stundenzetteln sind in
-> beiden Fällen gleich; nur die Rolle im Statusmodell 4.5 unterscheidet sich.
+> **Entschieden (vormals offene Frage 6).** Für den Prototyp gilt das
+> **Gutschriftverfahren**: der Betreiber erstellt `supplierCreditNote`, der
+> Lieferant bestätigt oder beanstandet. Der Rechnungseingang
+> (`supplierInvoice`, vom Lieferanten eingereicht) bleibt als Belegart im
+> Katalog und im Statusmodell 4.5 beschrieben, wird im Prototyp aber **nicht**
+> umgesetzt — damit entfällt auch die Matrixänderung, die er verlangt hätte
+> (ein `A[7]` für `LD`). Die Belegpositionen und ihre Herleitung aus den
+> Stundenzetteln sind in beiden Verfahren gleich.
 
 ### 3.10 Dokument / Nachweis (Erlaubnisurkunde, Unterweisung, Qualifikation)
 
@@ -2337,13 +2354,11 @@ Ausdrücklich **nicht** vorhanden:
   `startDate` oder `endDate` im Zustand `draft` ist eine Änderung, kein
   Statuswechsel.
 
-> **Hinweis auf eine Lücke in 3.4.** Die Rückweisung `submitted` → `draft`
+> **Entschieden (vormals Lücke in 3.4).** Die Rückweisung `submitted` → `draft`
 > verlangt eine Begründung, damit der Bedarfsträger weiß, was zu ändern ist.
-> 3.4 führt nur `cancellationReason` (Storno), kein Feld für den
-> Rückweisungsgrund. Bis das entschieden ist, steht die Begründung im
-> Audit-Eintrag (`reason`, 3.12). Entweder erhält 3.4 ein eigenes Feld oder die
-> Protokolllösung wird ausdrücklich festgeschrieben — stillschweigend bleibt es
-> nicht.
+> 3.4 führt dafür jetzt das Feld `rejectionReason`; es ist bei Rückweisung
+> Pflicht und für den Bedarfsträger sichtbar. Der Audit-Eintrag (`reason`,
+> 3.12) entsteht zusätzlich, ersetzt das Feld aber nicht.
 
 #### Diagramm
 
@@ -2411,7 +2426,7 @@ Die Matrix 2.2 führt sie in drei Zeilen: „Ausschreibung, Einladung (3.5)",
 | — | `invited` | `MD`, `MA` | Ausschreibung veröffentlicht (4.1); Lieferant `active` (4.6) mit anerkannter, gültiger Erlaubnis (5.4) | Einzeln adressierte Benachrichtigung an `LD` (2.3, Regel 2); `invitationViewDeadlineDays` beginnt; AÜG-Prüfung P9 (Sperre) |
 | `invited` | `viewed` | System | Erster lesender Zugriff eines Benutzers des Lieferanten auf die Einladung | `viewedAt` wird gesetzt; Erinnerungsfrist endet. **Kein** Rechtsgeschäft und keine Zusage |
 | `invited`, `viewed` | `offerSubmitted` | System, als Folge des Übergangs `draft` → `submitted` am Angebot (4.2.2) | Angebot zu dieser Einladung in `submitted` | `respondedAt` wird gesetzt; Benachrichtigung an `MD` |
-| `invited`, `viewed` | `declined` | `LD` — *Statusrecht fehlt in 2.2, siehe **offene Frage 23*** | `declineReason` Pflicht | `respondedAt` wird gesetzt; Benachrichtigung an `MD`; die Absage enthält keinen Bezug auf andere Lieferanten |
+| `invited`, `viewed` | `declined` | `LD` ([46]) | `declineReason` Pflicht | `respondedAt` wird gesetzt; Benachrichtigung an `MD`; die Absage enthält keinen Bezug auf andere Lieferanten |
 | `invited`, `viewed` | `expired` | System | `offerDeadline` der Ausschreibung verstrichen **oder** Ausschreibung geschlossen (`closedAt`), und kein Angebot vorhanden | Benachrichtigung an `MD`; Eskalationsanlass „Ausschreibung ohne Angebot" (2.4). Entzieht nur |
 
 **Endzustände:** `declined`, `expired`. `offerSubmitted` ist das Ende des
@@ -2435,8 +2450,8 @@ stateDiagram-v2
     invited --> viewed : erster Zugriff (System)
     invited --> offerSubmitted : Angebot eingereicht (System)
     viewed --> offerSubmitted : Angebot eingereicht (System)
-    invited --> declined : absagen (LD, offene Frage 23)
-    viewed --> declined : absagen (LD, offene Frage 23)
+    invited --> declined : absagen (LD)
+    viewed --> declined : absagen (LD)
     invited --> expired : Angebotsfrist verstrichen (System)
     viewed --> expired : Angebotsfrist verstrichen (System)
     offerSubmitted --> [*]
@@ -2444,14 +2459,13 @@ stateDiagram-v2
     expired --> [*]
 ```
 
-> *(offene Frage 23, neu)* Die Einladung trägt in 3.5 `declineReason`,
-> `respondedAt` und den Wert `declined` — die Absage ist also fachlich
-> vorgesehen. Die Matrix 2.2 gibt dem Lieferantendisponenten in der Zeile
-> „Ausschreibung, Einladung (3.5)" aber nur `L[16]`, kein `S` und kein `Ä`. Der
-> Widerspruch wird hier **nicht** stillschweigend aufgelöst: entweder erhält
-> `LD` ein eng begrenztes `S` auf die eigene Einladung (analog [20]: nur den
-> eigenen Vorgang), oder die Absage wird vom `MD` auf Meldung des Lieferanten
-> erfasst. Das ist eine Entscheidung über Kapitel 2, nicht über Kapitel 4.
+> **Entschieden (vormals offene Frage 23).** Die Einladung trägt in 3.5
+> `declineReason`, `respondedAt` und den Wert `declined`; der
+> Lieferantendisponent sagt seine Einladung deshalb **selbst** ab. Die Matrix
+> 2.2 führt dafür in der Zeile „Ausschreibung, Einladung (3.5)" jetzt
+> `L[16] S[46]` — ein eng begrenztes Statusrecht auf den eigenen Vorgang,
+> analog [20]. Annahme, Fristverlängerung und der Fortschritt der
+> Ausschreibung bleiben beim Betreiber.
 
 #### 4.2.2 Lieferantenangebot
 
@@ -2864,14 +2878,14 @@ Zwei Modelle: die Abrechnungsperiode (`billingPeriod`, 3.9) und der
 Abrechnungsbeleg (`billingDocument`, 3.9). Die Belegposition teilt die
 Matrixzeile des Belegs.
 
-> **Abhängigkeit von offener Frage 6.** Ob die Lieferantenseite im
-> **Gutschriftverfahren** (der Betreiber erstellt `supplierCreditNote`, der
-> Lieferant bestätigt oder beanstandet) oder im **Rechnungseingang** (der
-> Lieferant reicht `supplierInvoice` ein, der Betreiber prüft) läuft, ist offen.
-> Dieses Modell trägt beide Antworten: die **Zustände sind identisch**, nur die
-> auslösende Rolle einzelner Übergänge unterscheidet sich. Die Übergangstabelle
-> führt dafür die Spalte „Seite / Variante" mit den Werten **Verkauf** (immer),
-> **Einkauf A** (Gutschriftverfahren) und **Einkauf B** (Rechnungseingang).
+> **Entschieden (vormals offene Frage 6).** Die Lieferantenseite läuft im
+> **Gutschriftverfahren**: der Betreiber erstellt `supplierCreditNote`, der
+> Lieferant bestätigt oder beanstandet. Für den Prototyp sind damit nur die
+> Varianten **Verkauf** und **Einkauf A** umzusetzen. Die Spalte
+> „Seite / Variante" der Übergangstabelle führt **Einkauf B**
+> (Rechnungseingang) weiter mit, weil die Zustände identisch sind und sich nur
+> die auslösende Rolle unterscheidet — als dokumentierte, nicht umgesetzte
+> Variante.
 
 #### 4.5.1 Abrechnungsperiode
 
@@ -2924,7 +2938,7 @@ stateDiagram-v2
 | Von | Nach | Seite / Variante | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
 |---|---|---|---|---|---|
 | — | `created` | Verkauf, Einkauf A | `MD`, `MA` | Alle zugrunde liegenden Stundenzettel in `approved` (3.9, 4.4); Abrechnungsperiode `open`; Preisposition der jeweiligen Seite vorhanden (3.3) | Belegpositionen werden aus den Zetteln abgeleitet; `createdBy` gesetzt; AÜG-Prüfungen P9 und P4 als Warnung |
-| — | `created` | **Einkauf B** | `LD` — *Recht `A` fehlt in 2.2, siehe Hinweis* | Wie oben; der Lieferant reicht die Rechnung zu genehmigten Zetteln ein | Benachrichtigung an `MD` |
+| — | `created` | **Einkauf B** *(nicht umgesetzt)* | `LD` — Recht `A` in 2.2 erst nachzutragen, siehe Hinweis | Wie oben; der Lieferant reicht die Rechnung zu genehmigten Zetteln ein | Benachrichtigung an `MD` |
 | `created` | `inReview` | alle | `MD`, `MA`; in Variante B prüft `MD` die Lieferantenrechnung | Summen abgeleitet und mit den Zetteln abgeglichen | Keine inhaltliche Änderung mehr ohne Protokolleintrag |
 | `inReview` | `released` | alle | `MD`, `MA` | Auslöser ist **nicht** `createdBy` ([30], 2.4 Regel 5) | `releasedAt` / `releasedBy` gesetzt; Beleg wird für die Gegenseite sichtbar; `billingReviewDeadlineDays` beginnt; Benachrichtigung an `KE` bzw. `LD` |
 | `released` | `disputed` | Verkauf | `KE` ([31]) | `disputeReason` Pflicht; innerhalb der Prüffrist | Benachrichtigung an `MD`; Eskalationsanlass „Beleg beanstandet und nicht geklärt" (2.4) |
@@ -2978,13 +2992,12 @@ stateDiagram-v2
 | → `created` (beide Seiten) | P4 war für Zeiträume nach `equalPayDueDate` ein Vergleichsentgelt hinterlegt? | 5.2 |
 | `inReview` → `released` | Keine eigene AÜG-Prüfung; die Prüfungen liegen am Stundenzettel (4.4) | — |
 
-> **Hinweis auf eine Lücke in 2.2.** Wird offene Frage 6 mit **Rechnungseingang**
-> beantwortet, muss der Lieferant einen Beleg **anlegen** können. Die Matrix 2.2
-> gibt `LD` in der Zeile „Abrechnungsbeleg, Belegposition (3.9)" aber nur
-> `L[7] S[32]` — kein `A`. Die Variante B ist mit der heutigen Matrix nicht
-> durchführbar; mit der Antwort auf Frage 6 ist in 2.2 ein `A[7]` nachzutragen
-> (und Fußnote [32] um das Einreichen zu erweitern). Dieses Kapitel löst das
-> nicht stillschweigend auf.
+> **Erledigt (vormals Lücke in 2.2).** Variante B hätte verlangt, dass der
+> Lieferant einen Beleg **anlegen** kann; die Matrix 2.2 gibt `LD` in der Zeile
+> „Abrechnungsbeleg, Belegposition (3.9)" nur `L[7] S[32]`, kein `A`. Mit der
+> Entscheidung für das Gutschriftverfahren bleibt die Matrix wie sie ist. Wird
+> Variante B später doch umgesetzt, ist in 2.2 ein `A[7]` nachzutragen und
+> Fußnote [32] um das Einreichen zu erweitern.
 
 ### 4.6 Lieferantenstatus
 
@@ -3194,6 +3207,16 @@ Kapitel liefert die Übergänge und die erwartete Wirkung, nicht die Zahlen.
 Verbindlich für den Prototyp. Jede Regel wird in `tests/aueg/` als
 Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 
+> **Tarifwerk ist Konfiguration, keine verdrahtete Regel** (Entscheidung zu
+> offener Frage 3). Fristen, Abweichungen und Zuschlagsstufen stehen als Daten
+> an der Tarifzuordnung (3.3: `maxAssignmentDurationMonths`,
+> `equalPayDeadlineMonths`, `industryPremiumScheme`). Dieses Kapitel
+> spezifiziert nur die **Mechanik**: wie gerechnet, gezählt und geprüft wird,
+> wenn ein Tarifwerk zugeordnet ist, und was ohne Zuordnung gilt (gesetzliche
+> Regelgrenzen). Ein konkretes Tarifwerk wird als erste Belegung angelegt; die
+> Szenarien in `tests/aueg/` prüfen die Mechanik gegen eine synthetische
+> Beispielbelegung, nicht gegen einen echten Tariftext.
+
 ### 5.1 Höchstüberlassungsdauer
 
 - Regelgrenze 18 Monate je Leiharbeitnehmer bei demselben Entleiher
@@ -3265,12 +3288,12 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 
 | # | Frage | Betrifft | Status |
 |---|-------|----------|--------|
-| 1 | Tech-Stack (Sprache, Framework, Datenbank, ORM) | gesamtes Projekt | offen |
+| 1 | Tech-Stack (Sprache, Framework, Datenbank, ORM) | gesamtes Projekt | **entschieden:** Next.js (App Router) mit TypeScript, PostgreSQL über Prisma — siehe CLAUDE.md |
 | 2 | Konkreter Hoster und Betriebsmodell (Hetzner / IONOS / anderer DE-EU-Anbieter) | Kapitel 6.9 | offen |
-| 3 | Welcher Tarifvertrag ist zugrunde zu legen (iGZ/BAP, Branchenzuschläge)? | Kapitel 5.1, 5.2 | offen |
+| 3 | Welcher Tarifvertrag ist zugrunde zu legen (iGZ/BAP, Branchenzuschläge)? | Kapitel 5.1, 5.2 | **entschieden:** Tarifwerk ist Konfiguration an der Tarifzuordnung (3.3), nicht verdrahtet; Kapitel 5 spezifiziert nur die Mechanik |
 | 4 | Bekommen Leiharbeitnehmer einen eigenen Zugang (z. B. Zeiterfassung)? | Kapitel 2 | offen |
 | 5 | Mehrstufige Genehmigung der Stundenzettel: wie viele Stufen, welche Rollen? | Kapitel 4.4 | offen |
-| 6 | Gutschriftverfahren oder Rechnungseingang des Lieferanten? | Kapitel 3.9 | offen |
+| 6 | Gutschriftverfahren oder Rechnungseingang des Lieferanten? | Kapitel 3.9 | **entschieden:** Gutschriftverfahren; der Rechnungseingang bleibt als Variante dokumentiert, im Prototyp nicht umgesetzt |
 | 7 | Schnittstellen zu Fremdsystemen (ERP, Zeitwirtschaft, HR4YOU) im Prototyp? | Kapitel 1.4 | offen |
 | 8 | Werden mehrere Kunden eines MSP in einer Instanz oder getrennt betrieben? | Kapitel 1.3 | offen |
 | 9 | Welche Kennzahlen muss das Reporting zwingend liefern? | Kapitel 3 | offen |
@@ -3287,7 +3310,7 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 | 20 | Welche Nachweisarten sind Pflicht — je Lieferant und je Einsatz — und blockiert ein fehlender Nachweis den Einsatzstart oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | offen |
 | 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | offen |
 | 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | offen |
-| 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? 3.5 sieht die Absage vor (`declined`, `declineReason`), die Matrix 2.2 gibt ihm auf dieser Zeile aber nur `L[16]` — kein `S`. Entweder erhält `LD` ein eng begrenztes Statusrecht auf die eigene Einladung oder der `MD` erfasst die Absage. | Kapitel 2.2, 3.5, 4.2 | offen |
+| 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? | Kapitel 2.2, 3.5, 4.2 | **entschieden:** ja, eng begrenzt auf die eigene Einladung; Matrix 2.2 trägt dafür `S[46]` |
 | 24 | Darf eine Abrechnungsperiode geschlossen werden, solange einzelne Stundenzettel nicht entschieden sind — und wer entscheidet das? Heute verhindert ein hängender Zettel das Schließen der ganzen Periode. | Kapitel 3.9, 4.4, 4.5 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

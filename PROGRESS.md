@@ -5,6 +5,63 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Blocker entschieden, fünf Widersprüche aufgelöst (M1)
+
+**Gemacht**
+
+- **Vier offene Fragen entschieden** (1, 3, 6, 23) und die Entscheidungen an
+  allen betroffenen Stellen eingearbeitet, nicht nur in Kapitel 7. Damit sind
+  20 der 24 Fragen noch offen.
+- **Die fünf Widersprüche aus der Kapitel-4-Übergabe sind erledigt:**
+  1. *2.2 ↔ 3.5 (Absage einer Einladung)* — `LD` erhält in der Matrix
+     `S[46]`: ein eng begrenztes Statusrecht auf die **eigene** Einladung.
+     Neue Fußnote [46]; der Hinweis in 4.2.1 und die Übergangszeile
+     `invited`/`viewed` → `declined` sind nachgezogen.
+  2. *3.4 ohne Feld für den Rückweisungsgrund* — neues Feld
+     `rejectionReason` in 3.4, Pflicht bei Rückweisung und für den
+     Bedarfsträger sichtbar. Der Audit-Eintrag entsteht zusätzlich, ersetzt
+     das Feld nicht.
+  3. *3.6 `submittedAt` als unbedingte Pflicht* — korrigiert auf „Pflicht ab
+     Status eingereicht", mit Verweis auf `X[21]`.
+  4. *2.2 ↔ Rechnungseingang* — entfällt mit der Entscheidung für das
+     Gutschriftverfahren; die Matrix bleibt unverändert, Fußnote [32]
+     begründet jetzt, **warum** die Zeile kein `A` trägt.
+  5. *3.7 ohne eigenen Beendigungsvorgang* — bleibt bewusst asymmetrisch zur
+     Verlängerung; die Begründung steht jetzt als Hinweis in 3.7 statt nur im
+     Protokoll.
+- `CLAUDE.md`: Abschnitt Tech-Stack von „noch nicht entschieden" auf die
+  getroffene Wahl umgestellt, mit zwei Leitsätzen für die Umsetzung
+  (Statusübergänge typisiert, Tarifwerte als Konfiguration).
+- `MILESTONES.md`: die beiden Blocker unter M1 auf ✅.
+- Kein Anwendungscode.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Tech-Stack (Frage 1) | Next.js (App Router) mit TypeScript, PostgreSQL über Prisma. Kürzester Weg zu M3/M4; die Statusmodelle aus Kapitel 4 werden als typisierte Übergänge abgebildet |
+| Tarifwerk (Frage 3) | **Konfiguration, nicht verdrahtet.** Fristen, Abweichungen und Zuschlagsstufen sind Daten an der Tarifzuordnung (3.3); Kapitel 5 spezifiziert nur die Mechanik. Ein konkretes Tarifwerk wird als erste Belegung angelegt, die Szenarien in `tests/aueg/` prüfen gegen eine synthetische Beispielbelegung |
+| Abrechnung (Frage 6) | **Gutschriftverfahren.** Der Betreiber erstellt `supplierCreditNote`, der Lieferant bestätigt oder beanstandet. Der Rechnungseingang bleibt als Variante „Einkauf B" in 4.5 dokumentiert, wird im Prototyp aber nicht umgesetzt |
+| Absage einer Einladung (Frage 23) | `LD` sagt selbst ab, analog [20] auf den eigenen Vorgang begrenzt. Annahme, Fristverlängerung und Ausschreibungsfortschritt bleiben beim Betreiber |
+| Dokumentierte, nicht umgesetzte Varianten | Werden **nicht** aus der SPEC entfernt, sondern als solche gekennzeichnet — so bleibt nachvollziehbar, was bewusst weggelassen wurde und was es kosten würde, es nachzuziehen |
+
+**Offen / als Nächstes**
+
+- Noch offen: Fragen 2, 4, 5, 7–22, 24 (20 Stück). Für M2 blockierend sind vor
+  allem **18** (Personenidentität über Lieferanten hinweg — ohne sie keine
+  Zählung nach 5.1), **15** (Vergleichsentgelt für Equal Pay) und **20**
+  (Pflichtnachweise und ihre Sperrwirkung).
+- Kapitel 5 (AÜG-Regeln) ist jetzt nicht mehr durch die Tarifvertragsfrage
+  blockiert und kann ausgearbeitet werden — 5.1 und 5.2 brauchen aber die
+  Antworten auf 15, 18 und 19.
+- Mit der Stack-Entscheidung ist M3 entsperrt: Projektsetup, Mandanten- und
+  Rollenmodell, danach die klickbare Demo.
+- Statusmodelle, die weiter fehlen (aus der Kapitel-4-Übergabe): Rahmenvertrag
+  und Preisliste (3.3), Dokument/Nachweis (3.10, gehört nach 5.4), Kunde /
+  Standort / Kostenstelle (3.1, nur aktiv/inaktiv).
+
+---
+
 ## 2026-10-20 — SPEC Kapitel 4: Statusmodelle (M1)
 
 **Gemacht**

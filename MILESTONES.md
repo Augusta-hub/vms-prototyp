@@ -18,8 +18,8 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 
 ## M1 — Entscheidungen und Spezifikation des Kernprozesses ⬜
 
-- ⬜ Tech-Stack entschieden (offene Frage 1 in SPEC.md)
-- ⬜ Tarifvertrag geklärt (offene Frage 3)
+- ✅ Tech-Stack entschieden: Next.js + TypeScript + PostgreSQL/Prisma
+- ✅ Tarifvertrag geklärt: Tarifwerk als Konfiguration, nicht verdrahtet
 - ✅ SPEC Kapitel 2 (Rollen) ausgearbeitet
 - ✅ SPEC Kapitel 3.1–3.7 (Stammdaten bis Einsatz) ausgearbeitet
 - ✅ SPEC Kapitel 4.1–4.3 (Statusmodelle des Kernprozesses) ausgearbeitet

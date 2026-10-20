@@ -53,9 +53,15 @@ Kompromiss. Änderungen an der Fachlogik beginnen in SPEC.md.
 
 ## Tech-Stack
 
-**Noch nicht entschieden** — siehe „Offene Fragen" in SPEC.md. Bis zur
-Entscheidung entsteht kein Anwendungscode, der einen Stack voraussetzt.
-Hosting-Ziel ist ein Hoster mit Serverstandort Deutschland/EU (AVV-fähig).
+- **Next.js** (App Router) mit **TypeScript**, Frontend und API in einem Repo
+- **PostgreSQL** über **Prisma**
+- Hosting-Ziel: Hoster mit Serverstandort Deutschland/EU (AVV-fähig); der
+  konkrete Anbieter ist offene Frage 2 in SPEC.md
+
+Die Statusmodelle aus Kapitel 4 der SPEC werden als typisierte Übergänge
+abgebildet — ein Statuswechsel, den Kapitel 4 nicht nennt, darf im Typsystem
+nicht ausdrückbar sein. Tarifwerte sind Konfiguration (SPEC 3.3), keine
+Konstanten im Code.
 
 ## Commits
 
