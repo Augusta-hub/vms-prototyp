@@ -5,6 +5,187 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Stammdaten, Bedarfsanfrage und Ausschreibung (M3, zweite Hälfte)
+
+**Gemacht**
+
+- **Datenmodell zu SPEC 3.1 bis 3.5**, 17 neue Objekte im Prisma-Schema, dazu
+  15 Enums für die Wertebereiche aus Kapitel 3 und 4:
+
+  | Kapitel | Objekte |
+  |---|---|
+  | 3.1 | `Customer`, `Site`, `CostCenter`, `ContactPerson` |
+  | 3.2 | `Supplier`, `SupplierPermit` |
+  | 3.3 | `MasterAgreement`, `RateCard`, `RateCardItem`, `CollectiveAgreementAssignment`, `ComparableWageEntry` |
+  | 3.4 | `DemandRequest`, `DemandRequestQualification` |
+  | 3.5 | `Tender`, `TenderInvitation`, `SupplierOffer`, `SupplierOfferItem` |
+
+  Jedes mandantengebundene Objekt trägt die Standardfelder aus 3.0 und
+  `tenantId`; Historisierung über `validFrom`/`validTo`, halb offen. Migration
+  `20261020135457_stammdaten_bedarf_ausschreibung` ist gegen die lokale
+  Datenbank **gelaufen** (`prisma migrate status`: „Database schema is up to
+  date!", 24 Tabellen).
+- **Berechtigungsmatrix um zwölf Objektzeilen ergänzt** (`lib/authz/matrix.ts`):
+  Kunde, Standort, Kostenstelle, Lieferant, AÜG-Erlaubnis, Rahmenvertrag,
+  Preisliste, Tarifzuordnung, Vergleichsentgelt, Bedarfsanfrage, Ausschreibung
+  und Lieferantenangebot — Zelle für Zelle aus 2.2, mit dem Wortlaut der Zeile
+  als Kommentar darüber. Dazu **26 neue Fußnoten** mit Wortlaut **und**
+  Prädikat ([1], [3]–[6], [8]–[21], [34], [36], [37], [40]–[42], [46]). Das
+  Rechtemodell wurde **benutzt, nicht neu gebaut**: jeder Zugriff läuft über
+  `checkPermission`.
+- **Zwei Erweiterungen am `ResourceRef`**, beide in 2.2 und 3.5 begründet:
+  - `disclosedToTenantIds` — die Fälle, in denen Kapitel 2 und 3 einem
+    **anderen** Mandanten ausdrücklich Zugang gewähren: die Einladung gehört
+    dem Betreiber, „ist aber dem Lieferanten zugänglich" (3.5, `L[16] S[46]`),
+    der Kunde sieht den Fortschritt zur eigenen Anfrage (`L[15]`), das Angebot
+    gehört dem Lieferanten und ist dem Kunden im Umfang von [18] zugänglich.
+    Ohne diesen benannten Ausnahmeweg hätte die Mandantengrenze Rechte
+    verweigert, die 2.2 ausdrücklich vergibt. Die Fußnote prüft danach
+    **erneut**, ob es der eigene Vorgang ist, und der Zugriff bleibt
+    `crossTenant`.
+  - `status`, `targetStatus`, `customerTenantId`, `supplierTenantId`,
+    `engagementTenantIds`, `requestedById`, `rateCardScope`,
+    `inApprovalContext` — die Angaben, die die neuen Fußnoten brauchen.
+- **Feldbezogene Sichtbarkeit** (`lib/visibility/projections.ts`): Fußnoten,
+  die nicht den Zugriff, sondern die **Felder** einschränken, tragen ihre
+  Feldliste ([14], [15], [18], [36]). Aus der Entscheidung der Prüffunktion
+  wird damit die sichtbare Fassung eines Vorgangs. Die Oberfläche schreibt
+  „nicht sichtbar" und nennt die Felder — eine Fußnote ist eine Aussage, keine
+  Lücke.
+- **Statusmodelle 4.1 und 4.2.1 als geschlossene Übergangsmenge**
+  (`lib/status/`), dazu 4.2.2, weil 4.2.1 es braucht: die Einladung wechselt
+  nach `offerSubmitted` ausschließlich als Folge von `draft` → `submitted` am
+  Angebot.
+  - Ein Übergang wird über seinen **Namen** angefordert; die Namen sind die
+    Schlüssel der Übergangstabelle. Ein Übergang, den Kapitel 4 nicht nennt,
+    hat keinen Namen und ist im Typsystem nicht ausdrückbar (CLAUDE.md).
+  - Geprüft wird in der Reihenfolge aus 4.0: genannter Übergang aus diesem
+    Zustand → auslösende Rolle → `checkPermission` (bei der Anlage mit `A`,
+    sonst mit `S`) → Vorbedingungen. Für die Rollenprüfung wird das Subjekt auf
+    die in Kapitel 4 genannten Rollen eingeschränkt, damit keine zweite Rolle
+    derselben Person einen Übergang trägt (2.1: Rollen erben nicht).
+  - Fußnote [46] ist umgesetzt: der Lieferantendisponent sagt die **eigene**
+    Einladung selbst ab, mit Pflichtbegründung; der MSP-Disponent kann das
+    nicht.
+  - Die Systemübergänge (`viewed`, `offerSubmitted`, `expired`) werden **ohne
+    Subjekt** angefordert und von einer Benutzerhandlung abgewiesen (4.0,
+    Regel 10). Der Fristenlauf ist als Schaltfläche vorführbar; gestartet wird
+    der Lauf, nicht der einzelne Übergang.
+- **Fachdienste** (`lib/services/`): Stammdaten lesen und anlegen, Bedarfsanfrage
+  anlegen und wechseln, Ausschreibung veröffentlichen, Einladung absagen,
+  Angebot einreichen und führen. Jede Liste läuft durch die Prüffunktion und
+  die Projektion — ein verweigerter Vorgang erscheint **nicht** als leere
+  Zeile, sondern nicht (2.3).
+- **Oberfläche, durchklickbar** (`app/stammdaten`, `app/bedarf`,
+  `app/einladungen`, Navigation im Rahmen). Angezeigt werden nur die Übergänge,
+  die diese Rolle an diesem Vorgang auslösen darf; eine unerfüllte Vorbedingung
+  bleibt sichtbar und wird beim Versuch mit SPEC-Verweis benannt.
+- **Seed erweitert:** 5 Mandanten, 14 Benutzer, 2 Kunden mit 3 Standorten und
+  3 Kostenstellen, 2 Lieferanten mit anerkannter gültiger Erlaubnis, 4
+  Rahmenverträge, 4 Preislisten **beider** Seiten mit 7 Positionen, 4
+  Tarifzuordnungen, 3 Vergleichsentgelte, **8 Bedarfsanfragen — eine je Zustand
+  aus 4.1**, dazu eine Ausschreibung mit zwei Einladungen (eine mit Angebot,
+  eine abgesagt). Seed ist gegen die lokale Datenbank gelaufen.
+- **Die beiden offenen Punkte aus der vorigen Arbeitseinheit sind behoben:**
+  - `AccountAssignment` führt den ersten MSP-Disponenten jetzt für **beide**
+    Kunden; ein zweiter Disponent ist bewusst auf einen Kunden eingeschränkt,
+    damit die Betreuungszuordnung am Seed als Einschränkung sichtbar bleibt.
+  - `ResponsibilityScope` bleibt **leer**, solange offene Frage 14 offen ist —
+    im Seed als Kommentar festgehalten, mit dem Hinweis, wohin das Beispiel
+    gehört, sobald die Frage entschieden ist.
+  - Zusätzlich geschlossen: `Tenant.organizationId` wird jetzt gesetzt, und
+    `assertOrganizationRefPresent` läuft im Seed mit `enforce: true`.
+- **Durchgeklickt** (lokaler Entwicklungsserver, alle Rollen über die
+  Testidentität): Bedarf anlegen → einreichen (KB) → freigeben (KG) →
+  ausschreiben mit zwei Einladungen (MD) → Einladung als Lieferant öffnen
+  (Übergang nach `viewed`) → Angebot einreichen (LD 1) → Einladung absagen
+  (LD 2). Dabei geprüft: Lieferant 2 sieht das Angebot von Lieferant 1 nicht,
+  der Lieferant sieht keine Kostenstelle, keinen internen Vermerk und keinen
+  Kostenrahmen, der Kunde sieht keinen Einkaufssatz, Einkauf/Controlling sieht
+  an der Erlaubnis nur Anerkennung und Ablaufdatum, und der eingeschränkte
+  MSP-Disponent sieht nur seinen betreuten Kunden.
+- **`tests/aueg/` unberührt** (`git status tests/` ist leer). Diese
+  Arbeitseinheit implementiert **keine** AÜG-Prüfung; die 254 Szenarien bleiben
+  rot. Die Stellen, an denen Kapitel 5 greift, sind im Code benannt.
+
+**Prüfergebnisse** (tatsächlich gelaufen, nicht beabsichtigt)
+
+| Befehl | Ergebnis |
+|---|---|
+| `npx prisma migrate dev` | Migration `20261020135457_stammdaten_bedarf_ausschreibung` angelegt und angewendet |
+| `npx prisma migrate status` | „Database schema is up to date!", 2 Migrationen, 24 Tabellen |
+| `npx prisma db seed` | durchgelaufen; Zählung siehe oben |
+| `npm test` | **143 Tests grün** (vorher 56), 6 Dateien |
+| `npm run typecheck` | Exit 0, keine Meldung |
+| `npm run build` | Exit 0, fünf Routen |
+
+Die 87 neuen Tests: 27 zu 4.1, 19 zu 4.2.1, 20 zu 4.2.2 und 21 zur
+Sichtbarkeit. Je Statusmodell mindestens ein erlaubter Übergang, einer, der an
+der Vorbedingung scheitert, einer, der an der Rolle scheitert, einer, den
+Kapitel 4 nicht nennt, und die Mandantengrenze.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Geschlossene Übergangsmenge | Ein Übergang wird über seinen **Namen** aus der Übergangstabelle angefordert. Ein in Kapitel 4 nicht genannter Übergang ist damit nicht ausdrückbar, statt zur Laufzeit abgewiesen zu werden |
+| Anlage ist `A`, nicht `S` | „— → draft" in Kapitel 4 ist die Anlage des Vorgangs; die Prüffunktion wird dafür mit `create` aufgerufen, für jeden anderen Übergang mit `transition` (2.2, Lesart) |
+| 4.2.2 mit umgesetzt | Ohne das Angebot wäre 4.2.1 nur halb umgesetzt: die Einladung wechselt nach `offerSubmitted` nur als Folge des Übergangs am Angebot. `reviewed` → `accepted` ist genannt und scheitert an seiner Vorbedingung, weil der Profilvorschlag (3.6) fehlt |
+| Zustände `inSelection` und `filled` im Seed | Beide setzen 3.6 bzw. 3.7 voraus und sind über die Oberfläche nicht erreichbar. Der Seed legt sie als **Daten** an, damit 4.1 vollständig vorführbar ist — kein Weg um Kapitel 4 herum, denn gewechselt wird ausschließlich über die Statusmodelle |
+| Unterobjekte ohne eigenen `tenantId` | Preisposition, Anforderung, Angebotsposition und Ansprechpartner gehören zum Mandanten ihres Hauptobjekts und teilen nach 2.2 auch dessen Matrixzeile; der Mandant wird über das Hauptobjekt gelesen, nicht doppelt geführt |
+| Beauftragung aus Einladungen abgeleitet | Fußnoten [3], [6] und [36] setzen eine Beauftragung voraus, für die Kapitel 3 kein Objekt führt. Abgeleitet wird sie aus den Einladungen, je Kunde **und je Standort** ([3] nennt „Kunden und Standorte"), gekapselt in einer Funktion → **neue offene Frage 36** |
+| Fußnote [8] verweigert ohne Entscheidungszusammenhang | `KG` sieht die Preisliste nur „für die Kostenwirkung des zu genehmigenden Vorgangs". Ohne benannte Verbindung ist das nicht prüfbar; die Umsetzung verlangt ein ausdrückliches Kennzeichen und verweigert sonst → **neue offene Frage 37** |
+| `createdOnBehalfOf` ist der Auftraggeber | Der Handelnde steht schon in `createdBy` (3.0); das Feld trägt deshalb den Bedarfsträger des Kunden und wird nur bei Anlage durch den Betreiber gesetzt → **neue offene Frage 38** |
+| Rechteprüfung beim Anlegen eines Mandanten | Kunde und Lieferant entstehen **mit** ihrem Mandanten (3.1, 3.2). Die Prüfung läuft in der Transaktion, nachdem der Mandant existiert — nur dann prüft sie auf dem wirklichen Mandanten; ein verweigerter Zugriff rollt zurück |
+| Fristenlauf als Schaltfläche | Die zeitgesteuerten Übergänge brauchen einen Auslöser, um vorführbar zu sein. Gestartet wird der **Lauf** (5.5.1, nächtlicher Lauf), die Übergänge selbst werden ohne Subjekt angefordert und tragen keinen Benutzer |
+
+**Offen / als Nächstes**
+
+- **Drei neue offene Fragen in SPEC Kapitel 7:** 36 (woran bemisst sich die
+  Beauftragung?), 37 (wie erreicht die Kostenwirkung den Genehmiger?), 38 (wen
+  benennt `createdOnBehalfOf`?). Nicht im Code entschieden, die vorläufige
+  Auslegung steht jeweils an der Fundstelle **und** in der Fragentabelle.
+- **Abweichungen von der SPEC, benannt statt stillschweigend:**
+  1. `SupplierPermit.certificateDocumentRef` ist nach 3.2 **Pflicht**
+     („Urkunde: Verweis auf `document`"), bleibt aber optional, solange 3.10
+     nicht modelliert ist. Dasselbe gilt für `Site.worksCouncilAgreementRef`,
+     `CollectiveAgreementAssignment.documentRef` und
+     `RateCardItem.premiumTypeRef` (Zuschlagsart, 3.8) — alle vier sind
+     benannte Skalare mit Kommentar, kein Fremdschlüssel.
+  2. `SupplierOfferItem` führt die Liste `premiumRates` aus 3.5 **nicht**: sie
+     verweist auf die Zuschlagsart aus 3.8.
+  3. Die Nebenwirkungen aus Kapitel 4 — Benachrichtigungen, Fristenlauf,
+     Audit-Eintrag (4.0, Regel 3) — sind **nicht** umgesetzt und im Code an
+     ihrer Stelle als Kommentar benannt. Sie hängen an 3.12.
+  4. Fußnote [1] (nur Felder ohne kaufmännische Wirkung) trägt ihre Feldliste
+     als `writable`-Angabe, wirkt aber noch nicht: die Oberfläche dieser
+     Arbeitseinheit legt an und liest, sie ändert nicht. Sobald ein
+     Änderungspfad entsteht, ist `writableFields` dort anzuwenden.
+  5. 4.6 (Lieferantenstatus) ist **nicht** als Übergangsmenge umgesetzt. Der
+     Lieferant trägt seinen Status als Feld, und die Einladung prüft ihn als
+     Vorbedingung; Freischalten, Sperren und Entsperren gehören zur
+     Arbeitseinheit, die 4.6 umsetzt. Fußnote [5] ist vorbereitet.
+- **Widerspruch, aufgefallen in 2.2:** die Zeile „Vergleichsentgelt (3.3)"
+  trägt für `MA` `A L Ä X`, aber das Objekt gehört nach 3.3 dem
+  **Kundenmandanten** und wird vom Entleiher gepflegt. Der Betreiber darf nach
+  2.2 also anlegen und ändern, was 3.3 ausdrücklich dem Kunden zuweist („nur er
+  kennt es"). Die Umsetzung folgt der Matrix; fachlich wäre zu klären, ob `MA`
+  dort nur lesen soll.
+- Die Betreuungszuordnung wirkt jetzt auch auf Vorgänge des Betreibers, die
+  einen Kunden **betreffen** (Ausschreibung, Einladung) — sonst ließe sich die
+  Einschränkung über ein Betreiberobjekt umgehen. Das ist eine Auslegung von
+  2.3, Bedingung 2 und mit offener Frage 34 verwandt.
+- Danach M4: Kandidat und Profilvorschlag (3.6) mit 4.2.3 und der
+  Datenminimierung aus 6.4, dann der Einsatz (3.7) mit 4.3 — und erst damit
+  werden `inSelection` und `filled` über die Oberfläche erreichbar. Die
+  AÜG-Prüfungen aus Kapitel 5 kommen in einer eigenen Arbeitseinheit; erst sie
+  machen die 254 Szenarien in `tests/aueg/` grün.
+- `.claude/launch.json` ist neu und nicht in `.gitignore`: eine
+  Startkonfiguration für den Entwicklungsserver. Falls sie nicht ins
+  Repository gehört, gehört sie in `.gitignore`.
+
+---
+
 ## 2026-10-20 — Entwicklungsdatenbank eingerichtet, Schema bewiesen
 
 **Gemacht**

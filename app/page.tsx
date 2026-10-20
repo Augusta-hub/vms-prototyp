@@ -54,10 +54,13 @@ export default async function Home() {
 
   return (
     <>
-      <h1>Mandanten, Benutzer und Rollen</h1>
+      <h1>Identität und Rechte</h1>
       <p>
-        Erster Anwendungscode zu <code>SPEC.md</code> Kapitel 2 und 3.11. Die Fachmodule (Kunden,
-        Standorte, Lieferanten, Bedarfsanfrage) sind noch nicht umgesetzt.
+        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.5 und 3.11. Umgesetzt sind
+        Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung und Lieferantenangebot mit den
+        Statusmodellen 4.1, 4.2.1 und 4.2.2. Noch nicht umgesetzt: Kandidat und Profilvorschlag
+        (3.6), Einsatz (3.7), Zeiten (3.8), Abrechnung (3.9), Nachweise (3.10) und das Protokoll
+        (3.12) — und damit auch keine AÜG-Prüfung aus Kapitel 5.
       </p>
 
       <h2>Testidentität</h2>
@@ -131,9 +134,9 @@ export default async function Home() {
 
       <h2>Berechtigungsmatrix (SPEC 2.2)</h2>
       <p>
-        Gelesen aus <code>lib/authz/matrix.ts</code>. Belegt sind die Zeilen zu 3.11; jede andere
-        Zeile verweigert jeden Zugriff, bis ihr Fachmodul kommt. Zahlen in Klammern sind die
-        Fußnoten aus 2.2.
+        Gelesen aus <code>lib/authz/matrix.ts</code>. Belegt sind die Zeilen zu 3.1 bis 3.5 und
+        3.11; jede andere Zeile verweigert jeden Zugriff, bis ihr Fachmodul kommt. Zahlen in
+        Klammern sind die Fußnoten aus 2.2.
       </p>
       <table>
         <thead>

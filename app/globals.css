@@ -53,3 +53,103 @@ code {
   border-left: 3px solid var(--border);
   padding-left: 0.8rem;
 }
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+header nav {
+  display: flex;
+  gap: 0.9rem;
+}
+
+header .identity {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+h3 {
+  font-size: 1rem;
+  margin-top: 1.5rem;
+}
+
+table {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+form.inline {
+  display: inline;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  margin: 0.8rem 0;
+  padding: 0.6rem 0.9rem;
+}
+
+legend {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.5rem 1rem;
+}
+
+label.field {
+  display: block;
+  font-size: 0.85rem;
+}
+
+label.field input,
+label.field select,
+label.field textarea {
+  width: 100%;
+}
+
+.meldung {
+  border-left: 3px solid #2e7d32;
+  padding: 0.4rem 0.8rem;
+  margin: 0.8rem 0;
+  background: rgba(46, 125, 50, 0.07);
+}
+
+.fehler {
+  border-left: 3px solid #b71c1c;
+  padding: 0.4rem 0.8rem;
+  margin: 0.8rem 0;
+  background: rgba(183, 28, 28, 0.07);
+}
+
+.verdeckt {
+  color: #999;
+  font-style: italic;
+}
+
+.status {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+details {
+  margin: 0.4rem 0;
+}
+
+summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+}

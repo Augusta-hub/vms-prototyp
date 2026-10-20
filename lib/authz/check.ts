@@ -80,6 +80,39 @@ export interface ResourceRef {
   readonly subjectUserId?: string
   /** Vertretene Rollenzuweisung, für die Zeile Vertretung und Fußnote [45]. */
   readonly delegatedRoleAssignmentId?: string
+  /** Aktueller Status (Kapitel 4), für [11], [19], [21], [37]. */
+  readonly status?: string
+  /** Zielstatus eines Übergangs, für [5], [12], [13], [17], [20], [34], [46]. */
+  readonly targetStatus?: string
+  /** Kunde, den der Vorgang betrifft — das „bzw. der eigene Kunde" aus [2]. */
+  readonly customerTenantId?: string
+  /** Lieferant, den der Vorgang betrifft — „die eigene Einladung" aus [16]. */
+  readonly supplierTenantId?: string
+  /** Mandanten mit Beauftragung zu diesem Objekt — [3], [6], [14], [36]. */
+  readonly engagementTenantIds?: readonly string[]
+  /** Bedarfsträger einer Bedarfsanfrage — [11] und Vier-Augen in 4.1. */
+  readonly requestedById?: string
+  /** Seite einer Preisliste (3.3) — [41] und [42]. */
+  readonly rateCardScope?: 'supplierRateCard' | 'customerRateCard'
+  /** Zugriff aus der Entscheidung über einen konkreten Vorgang heraus — [8]. */
+  readonly inApprovalContext?: boolean
+  /**
+   * Mandanten, denen Kapitel 2 und 3 **ausdrücklich** Zugang zu diesem Objekt
+   * eines anderen Mandanten gewähren.
+   *
+   * Die Mandantengrenze aus 2.3 lässt für Nicht-Betreiber nur dort eine Kante
+   * zu, „wo Kapitel 2.3 sie ausdrücklich erlaubt" (3.13). Genau diese Fälle
+   * stehen in der Matrix: die Einladung gehört dem Betreiber, „ist aber dem
+   * Lieferanten zugänglich" (3.5, `L[16] S[46]`); den Fortschritt der
+   * Ausschreibung sieht der Kunde zur eigenen Anfrage (`L[15]`); das Angebot
+   * gehört dem Lieferanten und ist dem Kunden im Umfang von [18] zugänglich.
+   *
+   * Dieses Feld benennt die Ausnahme, statt sie in der Grenzprüfung zu
+   * verstecken. Die Fußnote der Zelle prüft danach **erneut**, ob es der
+   * eigene Vorgang ist; der Zugriff bleibt `crossTenant` und damit
+   * protokollpflichtig (2.3, Bedingung 3).
+   */
+  readonly disclosedToTenantIds?: readonly string[]
 }
 
 export type DenialKind =
@@ -140,21 +173,37 @@ export function checkPermission(
   const crossTenant = resource.tenantId !== subject.tenantId
   if (crossTenant) {
     if (subject.tenantType !== 'operator') {
-      return deny({
-        kind: 'tenantBoundary',
-        reason:
-          'Der Vorgang gehört zu einem anderen Mandanten. Ein Recht aus 2.2 wirkt nur auf ' +
-          'Objekte der eigenen Organisation; nur der Betreiber sieht über die Grenze.',
-        specReference: 'SPEC 2.3, Grundsatz',
-      })
+      // Ausdrücklich zugänglich gemachte Vorgänge eines anderen Mandanten
+      // (Einladung, Ausschreibungsfortschritt, Angebot gegenüber dem Kunden).
+      // Siehe `disclosedToTenantIds`: die Fußnote der Zelle prüft danach noch
+      // einmal, ob es der eigene Vorgang ist.
+      if (resource.disclosedToTenantIds?.includes(subject.tenantId) !== true) {
+        return deny({
+          kind: 'tenantBoundary',
+          reason:
+            'Der Vorgang gehört zu einem anderen Mandanten. Ein Recht aus 2.2 wirkt nur auf ' +
+            'Objekte der eigenen Organisation; nur der Betreiber sieht über die Grenze.',
+          specReference: 'SPEC 2.3, Grundsatz',
+        })
+      }
     }
-    // Querschnittssicht des Betreibers, eingeschränkt durch die
-    // Betreuungszuordnung (2.3, Bedingung 2). Sie ist in 3.11 für Kunden
-    // geführt; Lieferantenmandanten schränkt sie nicht ein — offene Frage 34.
+  }
+
+  // Querschnittssicht des Betreibers, eingeschränkt durch die
+  // Betreuungszuordnung (2.3, Bedingung 2). Sie ist in 3.11 für Kunden
+  // geführt; Lieferantenmandanten schränkt sie nicht ein — offene Frage 34.
+  //
+  // Maßgeblich ist der Kunde, den der Vorgang **betrifft**: beim Objekt des
+  // Kundenmandanten sein eigener Mandant, bei einem Vorgang des Betreibers
+  // (Ausschreibung, Einladung) der Kunde der zugrunde liegenden Anfrage. Sonst
+  // ließe sich die Einschränkung durch den Umweg über ein Betreiberobjekt
+  // umgehen.
+  if (subject.tenantType === 'operator' && subject.accountAssignmentCustomerTenantIds.length > 0) {
+    const concernedCustomerTenantId =
+      resource.tenantType === 'customer' ? resource.tenantId : resource.customerTenantId
     if (
-      resource.tenantType === 'customer' &&
-      subject.accountAssignmentCustomerTenantIds.length > 0 &&
-      !subject.accountAssignmentCustomerTenantIds.includes(resource.tenantId)
+      concernedCustomerTenantId !== undefined &&
+      !subject.accountAssignmentCustomerTenantIds.includes(concernedCustomerTenantId)
     ) {
       return deny({
         kind: 'accountAssignment',
@@ -246,6 +295,22 @@ export function checkPermission(
         ...(resource.subjectUserId !== undefined ? { subjectUserId: resource.subjectUserId } : {}),
         ...(resource.delegatedRoleAssignmentId !== undefined
           ? { delegatedRoleAssignmentId: resource.delegatedRoleAssignmentId }
+          : {}),
+        ...(resource.status !== undefined ? { status: resource.status } : {}),
+        ...(resource.targetStatus !== undefined ? { targetStatus: resource.targetStatus } : {}),
+        ...(resource.customerTenantId !== undefined
+          ? { customerTenantId: resource.customerTenantId }
+          : {}),
+        ...(resource.supplierTenantId !== undefined
+          ? { supplierTenantId: resource.supplierTenantId }
+          : {}),
+        ...(resource.engagementTenantIds !== undefined
+          ? { engagementTenantIds: resource.engagementTenantIds }
+          : {}),
+        ...(resource.requestedById !== undefined ? { requestedById: resource.requestedById } : {}),
+        ...(resource.rateCardScope !== undefined ? { rateCardScope: resource.rateCardScope } : {}),
+        ...(resource.inApprovalContext !== undefined
+          ? { inApprovalContext: resource.inApprovalContext }
           : {}),
       },
     }

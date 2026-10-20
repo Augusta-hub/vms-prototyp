@@ -7,9 +7,9 @@
  * Angebotsposition und `assignment` auch Verlängerung und Unterbrechung.
  *
  * Alle 24 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
- * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind in dieser
- * Arbeitseinheit nur die beiden Zeilen zu 3.11; jede unbelegte Zeile
- * verweigert jeden Zugriff, weil Sichtbarkeit positiv festgelegt ist (2.3).
+ * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind die Zeilen zu
+ * 3.1 bis 3.5 und die beiden Zeilen zu 3.11; jede unbelegte Zeile verweigert
+ * jeden Zugriff, weil Sichtbarkeit positiv festgelegt ist (2.3).
  */
 export type ResourceType =
   // 3.1 Kunde, Standort, Kostenstelle
@@ -93,6 +93,16 @@ export const RESOURCE_LABELS: { readonly [T in ResourceType]: string } = {
  * Der **Mandant** (`tenant`) fehlt hier bewusst: 3.11 sagt ausdrücklich, dass
  * die Matrix für ihn keine eigene Zeile trägt — er wird mit dem Kunden (3.1)
  * bzw. dem Lieferanten (3.2) gepflegt und folgt deren Zeile.
+ *
+ * **Unterobjekte** stehen auf der Zeile ihres Hauptobjekts, wo Kapitel 3 das
+ * ausdrücklich sagt (2.2, Lesart): Preisposition → Preisliste,
+ * Angebotsposition → Lieferantenangebot, Anforderung → Bedarfsanfrage,
+ * Einladung → Ausschreibung.
+ *
+ * Der **Ansprechpartner** (3.1, 3.2) ist hier nicht genannt: 2.2 führt ihn
+ * nicht als Objekt, sondern als **Feld** seines Eigentümers — Fußnote [1]
+ * nennt ihn ausdrücklich unter den Feldern ohne kaufmännische Wirkung. Er
+ * folgt deshalb der Zeile von Kunde, Standort bzw. Lieferant.
  */
 export const MATRIX_ROW_BY_OBJECT = {
   user: 'userAndRoleAssignment',
@@ -101,6 +111,22 @@ export const MATRIX_ROW_BY_OBJECT = {
   responsibilityScope: 'userAndRoleAssignment',
   accountAssignment: 'userAndRoleAssignment',
   delegation: 'delegation',
+  customer: 'customer',
+  site: 'site',
+  costCenter: 'costCenter',
+  supplier: 'supplier',
+  supplierPermit: 'supplierPermit',
+  masterAgreement: 'masterAgreement',
+  rateCard: 'rateCard',
+  rateCardItem: 'rateCard',
+  collectiveAgreementAssignment: 'collectiveAgreementAssignment',
+  comparableWageEntry: 'comparableWageEntry',
+  demandRequest: 'demandRequest',
+  demandRequestQualification: 'demandRequest',
+  tender: 'tender',
+  tenderInvitation: 'tender',
+  supplierOffer: 'supplierOffer',
+  supplierOfferItem: 'supplierOffer',
 } as const satisfies Record<string, ResourceType>
 
 export type ModelName = keyof typeof MATRIX_ROW_BY_OBJECT

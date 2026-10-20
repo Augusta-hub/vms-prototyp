@@ -38,16 +38,26 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 - ✅ Entscheidung, welche Prüfung sperrt und welche nur warnt — 4.7 bestätigt
   bzw. geändert in 5.5.5 (38 bestätigt, 6 geändert, 4 neu)
 
-## M3 — Klickbare Demo: Stammdaten und Bedarfsanfrage 🟨
+## M3 — Klickbare Demo: Stammdaten und Bedarfsanfrage ✅
 
 - ✅ Projektsetup im gewählten Stack, lokal lauffähig — Next.js (App Router)
   mit TypeScript, Prisma auf PostgreSQL, Vitest für die Unit-Tests
 - ✅ Mandanten-, Benutzer- und Rollenmodell — Objekte aus SPEC 3.11, die
   Berechtigungsmatrix 2.2 als typisierter Code mit Prüffunktion
-- ⬜ Kunden, Standorte, Lieferanten inkl. Erlaubnisnachweis
-- ⬜ Bedarfsanfrage anlegen, freigeben, an Lieferanten ausschreiben
-- 🟨 Synthetische Demo-Daten (Seed) — Mandanten, Benutzer, Rollenzuweisungen,
-  Betreuungszuordnung und Vertretung stehen; die Fachmodule fehlen noch
+- ✅ Kunden, Standorte, Kostenstellen, Lieferanten inkl. Erlaubnisnachweis,
+  dazu Rahmenvertrag, Preislisten beider Seiten, Tarifzuordnung und
+  Vergleichsentgelt (SPEC 3.1 bis 3.3)
+- ✅ Bedarfsanfrage anlegen, einreichen, freigeben, an Lieferanten
+  ausschreiben; Einladung absagen oder anbieten — Statusmodelle 4.1, 4.2.1 und
+  4.2.2 als geschlossene Übergangsmenge
+- ✅ Synthetische Demo-Daten (Seed) — Mandanten, Benutzer, Rollen,
+  Betreuungszuordnungen, Vertretung, Stammdaten beider Seiten und je eine
+  Bedarfsanfrage pro Zustand aus 4.1; Migration und Seed gegen die lokale
+  Datenbank gelaufen
+
+Noch **nicht** Teil von M3 und bewusst offen: der Lieferantenstatus als
+Übergangsmenge (4.6), die Nebenwirkungen aus Kapitel 4 (Benachrichtigung,
+Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 
 ## M4 — Klickbare Demo: Besetzung ⬜
 

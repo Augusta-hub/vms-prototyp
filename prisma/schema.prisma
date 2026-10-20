@@ -1,8 +1,15 @@
-// Datenmodell zu SPEC Kapitel 3.11 (Benutzer, Rolle, Mandantenzuordnung).
+// Datenmodell zu SPEC Kapitel 3.1 bis 3.5 und 3.11.
 //
-// Umfang dieser Arbeitseinheit: Mandant, Benutzer, Rollenzuweisung,
-// Zuständigkeit, Betreuungszuordnung und Vertretung. Die Fachmodule aus
-// 3.1 bis 3.10 und 3.12 sind noch nicht modelliert.
+// Umfang: Mandant, Benutzer, Rollenzuweisung, Zuständigkeit,
+// Betreuungszuordnung und Vertretung (3.11) sowie Kunde, Standort,
+// Kostenstelle (3.1), Lieferant und AÜG-Erlaubnis (3.2), Rahmenvertrag,
+// Preisliste, Tarifzuordnung, Vergleichsentgelt (3.3), Bedarfsanfrage (3.4)
+// und Ausschreibung, Einladung, Lieferantenangebot (3.5).
+//
+// Noch nicht modelliert: Kandidat und Profilvorschlag (3.6), Einsatz (3.7),
+// Zeiten (3.8), Abrechnung (3.9), Dokument / Nachweis (3.10) und der
+// Audit-Eintrag (3.12). Verweise dorthin sind als benannte Skalare geführt
+// und im jeweiligen Modell kommentiert — nicht stillschweigend weggelassen.
 //
 // Jedes Modell trägt die Standardfelder aus SPEC 3.0:
 //   id, tenantId (bei mandantengebundenen Objekten), createdAt/createdById,
@@ -58,37 +65,54 @@ enum ScopeType {
 /// Mandant (`tenant`, SPEC 3.11) — der Datenraum einer Organisation.
 ///
 /// `organizationId` verweist fachlich auf `customer` (3.1) bzw. `supplier`
-/// (3.2); welche der beiden gemeint ist, sagt `tenantType`. Beide Objekte
-/// gehören zu Fachmodulen, die hier noch nicht modelliert sind — das Feld
-/// bleibt deshalb vorerst ein Skalar ohne Fremdschlüssel und ist leer.
+/// (3.2); welche der beiden gemeint ist, sagt `tenantType`. Der Verweis ist
+/// polymorph und bleibt deshalb ein Skalar ohne Fremdschlüssel; die
+/// Gegenrichtung ist typisiert (`Customer.tenantId` / `Supplier.tenantId`,
+/// beide eindeutig) und trägt die Kardinalität 1 : 0..1 aus 3.11.
 ///
 /// Invariante aus 3.11: höchstens ein Mandant mit `tenantType = operator`.
 /// PostgreSQL kennt dafür nur einen partiellen Index, den Prisma im Schema
 /// nicht ausdrücken kann; die Invariante wird in lib/tenants/invariants.ts
 /// geprüft und vom Seed eingehalten.
 model Tenant {
-  id                String      @id @default(cuid())
-  tenantNumber      String      @unique
+  id                String     @id @default(cuid())
+  tenantNumber      String     @unique
   tenantType        TenantType
   organizationId    String?
   displayName       String
   externalReference String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("TenantCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("TenantUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("TenantDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("TenantCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("TenantUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("TenantDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  users                 User[]              @relation("TenantUsers")
-  roleAssignments       RoleAssignment[]
-  responsibilityScopes  ResponsibilityScope[]
-  delegations           Delegation[]
-  accountAssignments    AccountAssignment[] @relation("AccountAssignmentCustomerTenant")
+  users                User[]                @relation("TenantUsers")
+  roleAssignments      RoleAssignment[]
+  responsibilityScopes ResponsibilityScope[]
+  delegations          Delegation[]
+  accountAssignments   AccountAssignment[]   @relation("AccountAssignmentCustomerTenant")
+
+  // Fachmodule 3.1 bis 3.5. Der Mandant trägt die Mandantengrenze aus 2.3;
+  // jedes mandantengebundene Objekt hängt deshalb an genau einem Mandanten.
+  customer                       Customer?                       @relation("CustomerTenant")
+  supplier                       Supplier?                       @relation("SupplierTenant")
+  sites                          Site[]
+  costCenters                    CostCenter[]
+  supplierPermits                SupplierPermit[]
+  masterAgreements               MasterAgreement[]
+  rateCards                      RateCard[]
+  collectiveAgreementAssignments CollectiveAgreementAssignment[]
+  comparableWageEntries          ComparableWageEntry[]
+  demandRequests                 DemandRequest[]
+  tenders                        Tender[]
+  tenderInvitations              TenderInvitation[]
+  supplierOffers                 SupplierOffer[]
 
   @@index([tenantType])
 }
@@ -109,43 +133,104 @@ model User {
   language          String?
   externalReference String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("UserUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("UserDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("UserDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  roleAssignments     RoleAssignment[] @relation("RoleAssignmentUser")
-  grantedAssignments  RoleAssignment[] @relation("RoleAssignmentGrantedBy")
-  accountAssignments  AccountAssignment[] @relation("AccountAssignmentUser")
-  delegationsAsDelegate Delegation[]   @relation("DelegationDelegateUser")
+  roleAssignments       RoleAssignment[]    @relation("RoleAssignmentUser")
+  grantedAssignments    RoleAssignment[]    @relation("RoleAssignmentGrantedBy")
+  accountAssignments    AccountAssignment[] @relation("AccountAssignmentUser")
+  delegationsAsDelegate Delegation[]        @relation("DelegationDelegateUser")
 
   // Rückbeziehungen der Protokollfelder aus 3.0. Prisma verlangt sie für jede
   // Relation; fachlich werden sie nicht gelesen — das fachliche Protokoll ist
   // der Audit-Eintrag aus 3.12.
-  createdTenants             Tenant[]              @relation("TenantCreatedBy")
-  updatedTenants             Tenant[]              @relation("TenantUpdatedBy")
-  deactivatedTenants         Tenant[]              @relation("TenantDeactivatedBy")
-  createdUsers               User[]                @relation("UserCreatedBy")
-  updatedUsers               User[]                @relation("UserUpdatedBy")
-  deactivatedUsers           User[]                @relation("UserDeactivatedBy")
-  createdRoleAssignments     RoleAssignment[]      @relation("RoleAssignmentCreatedBy")
-  updatedRoleAssignments     RoleAssignment[]      @relation("RoleAssignmentUpdatedBy")
-  deactivatedRoleAssignments RoleAssignment[]      @relation("RoleAssignmentDeactivatedBy")
-  createdScopes              ResponsibilityScope[] @relation("ScopeCreatedBy")
-  updatedScopes              ResponsibilityScope[] @relation("ScopeUpdatedBy")
-  deactivatedScopes          ResponsibilityScope[] @relation("ScopeDeactivatedBy")
-  createdAccountAssignments     AccountAssignment[] @relation("AccountAssignmentCreatedBy")
-  updatedAccountAssignments     AccountAssignment[] @relation("AccountAssignmentUpdatedBy")
-  deactivatedAccountAssignments AccountAssignment[] @relation("AccountAssignmentDeactivatedBy")
-  createdDelegations         Delegation[]          @relation("DelegationCreatedBy")
-  updatedDelegations         Delegation[]          @relation("DelegationUpdatedBy")
-  deactivatedDelegations     Delegation[]          @relation("DelegationDeactivatedBy")
-  revokedDelegations         Delegation[]          @relation("DelegationRevokedBy")
+  createdTenants                Tenant[]              @relation("TenantCreatedBy")
+  updatedTenants                Tenant[]              @relation("TenantUpdatedBy")
+  deactivatedTenants            Tenant[]              @relation("TenantDeactivatedBy")
+  createdUsers                  User[]                @relation("UserCreatedBy")
+  updatedUsers                  User[]                @relation("UserUpdatedBy")
+  deactivatedUsers              User[]                @relation("UserDeactivatedBy")
+  createdRoleAssignments        RoleAssignment[]      @relation("RoleAssignmentCreatedBy")
+  updatedRoleAssignments        RoleAssignment[]      @relation("RoleAssignmentUpdatedBy")
+  deactivatedRoleAssignments    RoleAssignment[]      @relation("RoleAssignmentDeactivatedBy")
+  createdScopes                 ResponsibilityScope[] @relation("ScopeCreatedBy")
+  updatedScopes                 ResponsibilityScope[] @relation("ScopeUpdatedBy")
+  deactivatedScopes             ResponsibilityScope[] @relation("ScopeDeactivatedBy")
+  createdAccountAssignments     AccountAssignment[]   @relation("AccountAssignmentCreatedBy")
+  updatedAccountAssignments     AccountAssignment[]   @relation("AccountAssignmentUpdatedBy")
+  deactivatedAccountAssignments AccountAssignment[]   @relation("AccountAssignmentDeactivatedBy")
+  createdDelegations            Delegation[]          @relation("DelegationCreatedBy")
+  updatedDelegations            Delegation[]          @relation("DelegationUpdatedBy")
+  deactivatedDelegations        Delegation[]          @relation("DelegationDeactivatedBy")
+  revokedDelegations            Delegation[]          @relation("DelegationRevokedBy")
+
+  // Protokollfelder der Fachmodule 3.1 bis 3.5, derselbe Pflichtumfang.
+  createdCustomers                Customer[]                      @relation("CustomerCreatedBy")
+  updatedCustomers                Customer[]                      @relation("CustomerUpdatedBy")
+  deactivatedCustomers            Customer[]                      @relation("CustomerDeactivatedBy")
+  createdContacts                 ContactPerson[]                 @relation("ContactCreatedBy")
+  updatedContacts                 ContactPerson[]                 @relation("ContactUpdatedBy")
+  deactivatedContacts             ContactPerson[]                 @relation("ContactDeactivatedBy")
+  createdSites                    Site[]                          @relation("SiteCreatedBy")
+  updatedSites                    Site[]                          @relation("SiteUpdatedBy")
+  deactivatedSites                Site[]                          @relation("SiteDeactivatedBy")
+  createdCostCenters              CostCenter[]                    @relation("CostCenterCreatedBy")
+  updatedCostCenters              CostCenter[]                    @relation("CostCenterUpdatedBy")
+  deactivatedCostCenters          CostCenter[]                    @relation("CostCenterDeactivatedBy")
+  responsibleForCostCenters       CostCenter[]                    @relation("CostCenterResponsibleUser")
+  createdSuppliers                Supplier[]                      @relation("SupplierCreatedBy")
+  updatedSuppliers                Supplier[]                      @relation("SupplierUpdatedBy")
+  deactivatedSuppliers            Supplier[]                      @relation("SupplierDeactivatedBy")
+  blockedSuppliers                Supplier[]                      @relation("SupplierBlockedBy")
+  createdPermits                  SupplierPermit[]                @relation("PermitCreatedBy")
+  updatedPermits                  SupplierPermit[]                @relation("PermitUpdatedBy")
+  deactivatedPermits              SupplierPermit[]                @relation("PermitDeactivatedBy")
+  verifiedPermits                 SupplierPermit[]                @relation("PermitVerifiedBy")
+  createdAgreements               MasterAgreement[]               @relation("AgreementCreatedBy")
+  updatedAgreements               MasterAgreement[]               @relation("AgreementUpdatedBy")
+  deactivatedAgreements           MasterAgreement[]               @relation("AgreementDeactivatedBy")
+  createdRateCards                RateCard[]                      @relation("RateCardCreatedBy")
+  updatedRateCards                RateCard[]                      @relation("RateCardUpdatedBy")
+  deactivatedRateCards            RateCard[]                      @relation("RateCardDeactivatedBy")
+  createdRateCardItems            RateCardItem[]                  @relation("RateCardItemCreatedBy")
+  updatedRateCardItems            RateCardItem[]                  @relation("RateCardItemUpdatedBy")
+  deactivatedRateCardItems        RateCardItem[]                  @relation("RateCardItemDeactivatedBy")
+  createdCollectiveAgreements     CollectiveAgreementAssignment[] @relation("CaaCreatedBy")
+  updatedCollectiveAgreements     CollectiveAgreementAssignment[] @relation("CaaUpdatedBy")
+  deactivatedCollectiveAgreements CollectiveAgreementAssignment[] @relation("CaaDeactivatedBy")
+  createdWageEntries              ComparableWageEntry[]           @relation("WageCreatedBy")
+  updatedWageEntries              ComparableWageEntry[]           @relation("WageUpdatedBy")
+  deactivatedWageEntries          ComparableWageEntry[]           @relation("WageDeactivatedBy")
+  reportedWageEntries             ComparableWageEntry[]           @relation("WageReportedBy")
+  createdDemandRequests           DemandRequest[]                 @relation("DemandCreatedBy")
+  updatedDemandRequests           DemandRequest[]                 @relation("DemandUpdatedBy")
+  deactivatedDemandRequests       DemandRequest[]                 @relation("DemandDeactivatedBy")
+  requestedDemandRequests         DemandRequest[]                 @relation("DemandRequestedBy")
+  onBehalfDemandRequests          DemandRequest[]                 @relation("DemandOnBehalfOf")
+  approvedDemandRequests          DemandRequest[]                 @relation("DemandApprovedBy")
+  createdQualifications           DemandRequestQualification[]    @relation("QualificationCreatedBy")
+  updatedQualifications           DemandRequestQualification[]    @relation("QualificationUpdatedBy")
+  deactivatedQualifications       DemandRequestQualification[]    @relation("QualificationDeactivatedBy")
+  createdTenders                  Tender[]                        @relation("TenderCreatedBy")
+  updatedTenders                  Tender[]                        @relation("TenderUpdatedBy")
+  deactivatedTenders              Tender[]                        @relation("TenderDeactivatedBy")
+  publishedTenders                Tender[]                        @relation("TenderPublishedBy")
+  createdInvitations              TenderInvitation[]              @relation("InvitationCreatedBy")
+  updatedInvitations              TenderInvitation[]              @relation("InvitationUpdatedBy")
+  deactivatedInvitations          TenderInvitation[]              @relation("InvitationDeactivatedBy")
+  createdOffers                   SupplierOffer[]                 @relation("OfferCreatedBy")
+  updatedOffers                   SupplierOffer[]                 @relation("OfferUpdatedBy")
+  deactivatedOffers               SupplierOffer[]                 @relation("OfferDeactivatedBy")
+  createdOfferItems               SupplierOfferItem[]             @relation("OfferItemCreatedBy")
+  updatedOfferItems               SupplierOfferItem[]             @relation("OfferItemUpdatedBy")
+  deactivatedOfferItems           SupplierOfferItem[]             @relation("OfferItemDeactivatedBy")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -159,27 +244,27 @@ model User {
 /// lib/authz/grants.ts, weil Prisma die Gleichheit zweier Fremdschlüssel nicht
 /// erzwingen kann.
 model RoleAssignment {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
-  user              User     @relation("RoleAssignmentUser", fields: [userId], references: [id])
+  user              User      @relation("RoleAssignmentUser", fields: [userId], references: [id])
   roleCode          RoleCode
   tenantId          String
-  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
   validFrom         DateTime
   validTo           DateTime?
   grantedById       String
-  grantedBy         User     @relation("RoleAssignmentGrantedBy", fields: [grantedById], references: [id])
+  grantedBy         User      @relation("RoleAssignmentGrantedBy", fields: [grantedById], references: [id])
   externalReference String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("RoleAssignmentCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("RoleAssignmentUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("RoleAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("RoleAssignmentCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("RoleAssignmentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("RoleAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
 
   responsibilityScopes ResponsibilityScope[]
   delegations          Delegation[]
@@ -208,15 +293,15 @@ model ResponsibilityScope {
   scopeRef          String
   externalReference String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("ScopeCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("ScopeUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("ScopeDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("ScopeCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("ScopeUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("ScopeDeactivatedBy", fields: [deactivatedById], references: [id])
 
   @@index([roleAssignmentId])
   @@index([tenantId])
@@ -231,24 +316,24 @@ model ResponsibilityScope {
 /// einen Verweis auf `customer` (3.1); solange dieses Objekt nicht modelliert
 /// ist, trägt der Kundenmandant die Zuordnung — er steht 1:1 zum Kunden.
 model AccountAssignment {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
-  user              User     @relation("AccountAssignmentUser", fields: [userId], references: [id])
+  user              User      @relation("AccountAssignmentUser", fields: [userId], references: [id])
   customerTenantId  String
-  customerTenant    Tenant   @relation("AccountAssignmentCustomerTenant", fields: [customerTenantId], references: [id])
+  customerTenant    Tenant    @relation("AccountAssignmentCustomerTenant", fields: [customerTenantId], references: [id])
   validFrom         DateTime
   validTo           DateTime?
   externalReference String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("AccountAssignmentCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("AccountAssignmentUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("AccountAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("AccountAssignmentCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("AccountAssignmentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("AccountAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
 
   @@unique([userId, customerTenantId, validFrom])
   @@index([userId])
@@ -263,32 +348,958 @@ model AccountAssignment {
 /// Übergang über Organisationsgrenzen — geprüft in lib/authz/grants.ts, weil
 /// es Bedingungen über mehrere Sätze hinweg sind.
 model Delegation {
-  id                          String         @id @default(cuid())
-  delegatedRoleAssignmentId   String
-  delegatedRoleAssignment     RoleAssignment @relation(fields: [delegatedRoleAssignmentId], references: [id])
-  delegateUserId              String
-  delegateUser                User           @relation("DelegationDelegateUser", fields: [delegateUserId], references: [id])
-  tenantId                    String
-  tenant                      Tenant         @relation(fields: [tenantId], references: [id])
-  periodFrom                  DateTime
-  periodTo                    DateTime
-  reason                      String?
-  revokedAt                   DateTime?
-  revokedById                 String?
-  revokedBy                   User?          @relation("DelegationRevokedBy", fields: [revokedById], references: [id])
-  externalReference           String?
+  id                        String         @id @default(cuid())
+  delegatedRoleAssignmentId String
+  delegatedRoleAssignment   RoleAssignment @relation(fields: [delegatedRoleAssignmentId], references: [id])
+  delegateUserId            String
+  delegateUser              User           @relation("DelegationDelegateUser", fields: [delegateUserId], references: [id])
+  tenantId                  String
+  tenant                    Tenant         @relation(fields: [tenantId], references: [id])
+  periodFrom                DateTime
+  periodTo                  DateTime
+  reason                    String?
+  revokedAt                 DateTime?
+  revokedById               String?
+  revokedBy                 User?          @relation("DelegationRevokedBy", fields: [revokedById], references: [id])
+  externalReference         String?
 
-  createdAt         DateTime  @default(now())
-  createdById       String?
-  createdBy         User?     @relation("DelegationCreatedBy", fields: [createdById], references: [id])
-  updatedAt         DateTime? @updatedAt
-  updatedById       String?
-  updatedBy         User?     @relation("DelegationUpdatedBy", fields: [updatedById], references: [id])
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("DelegationDeactivatedBy", fields: [deactivatedById], references: [id])
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("DelegationCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("DelegationUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("DelegationDeactivatedBy", fields: [deactivatedById], references: [id])
 
   @@index([delegatedRoleAssignmentId])
   @@index([delegateUserId])
   @@index([tenantId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Fachmodule 3.1 bis 3.5
+//
+// Konventionen aus 3.0, die in jedem Modell dieses Abschnitts wiederkehren:
+//
+//  - Standardfelder `id`, `createdAt`/`createdById`, `updatedAt`/`updatedById`,
+//    `deactivatedAt`/`deactivatedById` und `externalReference` (Frage 7).
+//  - `tenantId` bei jedem **mandantengebundenen** Objekt. Unterobjekte
+//    (Preisposition, Anforderung, Angebotsposition, Ansprechpartner) tragen
+//    **keinen** eigenen Mandanten: sie gehören zum Mandanten ihres
+//    Hauptobjekts und teilen nach 2.2 (Lesart) auch dessen Matrixzeile. Der
+//    Mandant wird deshalb über das Hauptobjekt gelesen, nicht doppelt geführt.
+//  - Gültigkeitszeiträume halb offen: `validTo` leer heißt unbefristet (3.0,
+//    Festlegung 2). Stammdaten werden nicht überschrieben, wenn sich ein Wert
+//    mit Wirkung für die Zukunft ändert — dann entsteht ein neuer Zeitraum.
+//  - Geldbeträge als Dezimalwert mit Währung (3.0, Festlegung 1).
+//  - `status` nur dort, wo ein Statusmodell existiert. Die Übergänge stehen
+//    als geschlossene Menge in lib/status/, nicht im Schema: die Datenbank
+//    kennt die Zustände, die zulässigen Wechsel kennt Kapitel 4.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Lieferantenstatus (3.2, Statusmodell 4.6).
+enum SupplierStatus {
+  onboarding
+  active
+  blocked
+  inactive
+}
+
+/// Erlaubnisart (3.2): befristet oder unbefristet erteilt.
+enum PermitType {
+  fixedTerm
+  unlimited
+}
+
+/// Anerkennungsstatus eines Nachweises (3.2, 3.10, Nachweisfluss 5.4.3).
+enum VerificationStatus {
+  submitted
+  accepted
+  rejected
+}
+
+/// Vertragsart (3.3): der Prototyp kennt nur zwei Vertragsstrecken —
+/// Betreiber ↔ Kunde und Betreiber ↔ Lieferant.
+enum AgreementType {
+  customerAgreement
+  supplierAgreement
+}
+
+/// Vertragsstatus (3.3). Kapitel 4 führt dafür heute kein Modell; die vier
+/// Werte sind der fachlich benötigte Mindestumfang.
+enum AgreementStatus {
+  draft
+  active
+  expired
+  terminated
+}
+
+/// Seite einer Preisliste (3.3). Die Trennung ist wesentlich: Kundenrollen
+/// sehen nie die Einkaufsseite, Lieferantenrollen nie die Kundenseite
+/// (Fußnoten [41] und [42] in 2.2).
+enum RateCardScope {
+  supplierRateCard
+  customerRateCard
+}
+
+/// Preislistenstatus (3.3); kein Modell in Kapitel 4.
+enum RateCardStatus {
+  draft
+  active
+  expired
+}
+
+/// Positionsart einer Preisposition (3.3): Grundsatz oder Zuschlagssatz.
+enum RateCardItemType {
+  baseRate
+  premiumRate
+}
+
+/// Zielobjekt einer Tarifzuordnung (3.3).
+enum CollectiveAgreementTarget {
+  supplier
+  customer
+  site
+}
+
+/// Herkunft der Entgeltangabe (3.3). `estimate` ist für 5.2 nur eine
+/// Warnung, kein Nachweis.
+enum WageSource {
+  collectiveAgreement
+  companyAgreement
+  individualContract
+  estimate
+}
+
+/// Zustände der Bedarfsanfrage (3.4, Statusmodell 4.1).
+enum DemandRequestStatus {
+  draft
+  submitted
+  approved
+  tendered
+  inSelection
+  filled
+  cancelled
+  expired
+}
+
+/// Anforderung einer Bedarfsanfrage: Pflicht oder Wunsch (3.4).
+enum RequirementKind {
+  mandatory
+  desired
+}
+
+/// Verteilungsart einer Ausschreibung (3.5).
+enum DistributionMode {
+  simultaneous
+  staged
+}
+
+/// Zustände der Einladung (3.5, Statusmodell 4.2.1).
+enum InvitationStatus {
+  invited
+  viewed
+  offerSubmitted
+  declined
+  expired
+}
+
+/// Zustände des Lieferantenangebots (3.5, Statusmodell 4.2.2).
+enum SupplierOfferStatus {
+  draft
+  submitted
+  reviewed
+  accepted
+  rejected
+  withdrawn
+  expired
+}
+
+/// Kunde (`customer`, SPEC 3.1) — die Entleiher-Organisation.
+///
+/// Der Kunde **ist** ein Mandant: zu jedem Kunden gehört genau ein `tenant`
+/// mit `tenantType = customer` (3.1). Die Beziehung ist deshalb 1 : 1 und
+/// `tenantId` eindeutig.
+///
+/// Rechtliche Fristen des AÜG, insbesondere die Höchstüberlassungsdauer
+/// (5.1), zählen **je Kunde** — nicht je Standort und nicht je Kostenstelle.
+model Customer {
+  id                            String                         @id @default(cuid())
+  tenantId                      String                         @unique
+  tenant                        Tenant                         @relation("CustomerTenant", fields: [tenantId], references: [id])
+  customerNumber                String                         @unique
+  legalName                     String
+  legalForm                     String?
+  addressStreet                 String
+  addressPostalCode             String
+  addressCity                   String
+  addressCountry                String
+  commercialRegisterNumber      String?
+  industrySector                String?
+  corporateGroup                String?
+  /// Tarifbindung des Entleihers (3.1) — Grundlage für Equal Pay (5.2).
+  customerCollectiveAgreementId String?
+  customerCollectiveAgreement   CollectiveAgreementAssignment? @relation("CustomerCollectiveAgreement", fields: [customerCollectiveAgreementId], references: [id])
+  /// Eskalationsfristen je Kunde (2.4, Regel 5; Schlüssel und Vorbelegungen
+  /// in 4.0). Satz von Fristwerten in Tagen, deshalb ein Schlüssel-Wert-Satz
+  /// und keine Spalte je Frist.
+  processDeadlineConfig         Json?
+  validFrom                     DateTime
+  validTo                       DateTime?
+  externalReference             String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("CustomerDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  contacts                       ContactPerson[]                 @relation("CustomerContacts")
+  sites                          Site[]
+  costCenters                    CostCenter[]
+  masterAgreements               MasterAgreement[]               @relation("CustomerMasterAgreements")
+  demandRequests                 DemandRequest[]
+  collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("CustomerCollectiveAgreementTarget")
+}
+
+/// Ansprechpartner (3.1, 3.2) — personenbezogene Kontaktangabe zu einem
+/// Kunden, einem Standort oder einem Lieferanten.
+///
+/// Unterobjekt ohne eigenen Mandanten: es gehört dem Mandanten seines
+/// Eigentümers. Genau einer der drei Verweise ist gesetzt; die Bedingung
+/// steht in lib/masterdata/invariants.ts, weil Prisma „genau einer von
+/// dreien" nicht ausdrücken kann.
+model ContactPerson {
+  id                String    @id @default(cuid())
+  customerId        String?
+  customer          Customer? @relation("CustomerContacts", fields: [customerId], references: [id])
+  siteId            String?
+  site              Site?     @relation("SiteContacts", fields: [siteId], references: [id])
+  supplierId        String?
+  supplier          Supplier? @relation("SupplierContacts", fields: [supplierId], references: [id])
+  name              String
+  function          String?
+  email             String?
+  phone             String?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("ContactCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("ContactUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("ContactDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([customerId])
+  @@index([siteId])
+  @@index([supplierId])
+}
+
+/// Standort (`site`, SPEC 3.1) — der konkrete Einsatzort beim Kunden.
+///
+/// Er trägt die Angaben, die die Kennzeichnungs- und Konkretisierungspflicht
+/// des Überlassungsvertrags verlangt (§ 1 Abs. 1 AÜG, 5.3), und die Grundlage
+/// der Unterweisungspflicht (`safetyBriefingRequired`, 3.10 und 5.4).
+model Site {
+  id                              String                         @id @default(cuid())
+  tenantId                        String
+  tenant                          Tenant                         @relation(fields: [tenantId], references: [id])
+  customerId                      String
+  customer                        Customer                       @relation(fields: [customerId], references: [id])
+  siteNumber                      String
+  name                            String
+  addressStreet                   String
+  addressPostalCode               String
+  addressCity                     String
+  addressCountry                  String
+  /// Betriebsvereinbarung (3.1) — Verweis auf `document` (3.10). Das Objekt
+  /// ist noch nicht modelliert; bis dahin ein benannter Skalar.
+  worksCouncilAgreementRef        String?
+  /// Branchenzuschlag je Einsatzbranche (5.2).
+  collectiveAgreementAssignmentId String?
+  collectiveAgreementAssignment   CollectiveAgreementAssignment? @relation("SiteCollectiveAgreement", fields: [collectiveAgreementAssignmentId], references: [id])
+  /// Regelarbeitszeit in Stunden je Woche; Vorbelegung für Bedarfsanfrage
+  /// und Einsatz.
+  standardWeeklyHours             Decimal?                       @db.Decimal(5, 2)
+  safetyBriefingRequired          Boolean
+  validFrom                       DateTime
+  validTo                         DateTime?
+  externalReference               String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("SiteCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("SiteUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("SiteDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  contacts                       ContactPerson[]                 @relation("SiteContacts")
+  costCenters                    CostCenter[]
+  demandRequests                 DemandRequest[]
+  rateCardItems                  RateCardItem[]
+  comparableWageEntries          ComparableWageEntry[]
+  collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("SiteCollectiveAgreementTarget")
+
+  // Fachliche Kennung, eindeutig je Kunde (3.1).
+  @@unique([customerId, siteNumber])
+  @@index([tenantId])
+}
+
+/// Kostenstelle (`costCenter`, SPEC 3.1) — die kaufmännische Zuordnung eines
+/// Bedarfs oder Einsatzes innerhalb der Kundenorganisation.
+///
+/// Sie ist eine interne Zuordnung des Kunden und für Lieferanten **nie**
+/// sichtbar (Fußnote [14] in 2.2). Die Zeile in 2.2 trägt für `LD` und `LA`
+/// deshalb kein Recht.
+model CostCenter {
+  id                String    @id @default(cuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  customerId        String
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  costCenterNumber  String
+  name              String
+  siteId            String?
+  site              Site?     @relation(fields: [siteId], references: [id])
+  /// Verantwortlich (3.1) — wer die Zuständigkeit pflegt, ist offene Frage 14.
+  responsibleUserId String?
+  responsibleUser   User?     @relation("CostCenterResponsibleUser", fields: [responsibleUserId], references: [id])
+  budgetAmount      Decimal?  @db.Decimal(14, 2)
+  budgetCurrency    String?
+  validFrom         DateTime
+  validTo           DateTime?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("CostCenterCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("CostCenterUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("CostCenterDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  demandRequests DemandRequest[]
+
+  @@unique([customerId, costCenterNumber])
+  @@index([tenantId])
+}
+
+/// Lieferant (`supplier`, SPEC 3.2) — ein Sub-Verleiher, der dem Betreiber
+/// Personal zur Überlassung stellt.
+///
+/// Der Lieferant **ist** ein Mandant (`tenantType = supplier`), die Beziehung
+/// deshalb 1 : 1. Stammdatenhoheit: Betreiber (`MA`) für Nummer, Status und
+/// Freischaltung; der Lieferantenadministrator (`LA`) pflegt die eigenen
+/// Angaben ([7]).
+///
+/// `supplierCollectiveAgreementId` ist nach 3.2 **Pflicht ab Status
+/// `active`** — eine Bedingung über zwei Felder, die das Schema nicht
+/// erzwingen kann; sie steht in lib/masterdata/invariants.ts.
+model Supplier {
+  id                            String                         @id @default(cuid())
+  tenantId                      String                         @unique
+  tenant                        Tenant                         @relation("SupplierTenant", fields: [tenantId], references: [id])
+  supplierNumber                String                         @unique
+  legalName                     String
+  legalForm                     String?
+  addressStreet                 String
+  addressPostalCode             String
+  addressCity                   String
+  addressCountry                String
+  commercialRegisterNumber      String?
+  supplierCollectiveAgreementId String?
+  supplierCollectiveAgreement   CollectiveAgreementAssignment? @relation("SupplierCollectiveAgreement", fields: [supplierCollectiveAgreementId], references: [id])
+  status                        SupplierStatus
+  blockReason                   String?
+  blockedAt                     DateTime?
+  blockedById                   String?
+  blockedBy                     User?                          @relation("SupplierBlockedBy", fields: [blockedById], references: [id])
+  validFrom                     DateTime
+  validTo                       DateTime?
+  externalReference             String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("SupplierCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("SupplierUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("SupplierDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  contacts                       ContactPerson[]                 @relation("SupplierContacts")
+  permits                        SupplierPermit[]
+  masterAgreements               MasterAgreement[]               @relation("SupplierMasterAgreements")
+  invitations                    TenderInvitation[]
+  offers                         SupplierOffer[]
+  collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("SupplierCollectiveAgreementTarget")
+}
+
+/// AÜG-Erlaubnis (`supplierPermit`, SPEC 3.2) — der Nachweis, dass ein
+/// Lieferant Arbeitnehmerüberlassung betreiben darf (§ 1 AÜG).
+///
+/// Das Objekt trägt die **Daten** der Erlaubnis; die **Urkunde** ist ein
+/// Dokument nach 3.10 (`certificateDocumentRef`, dort noch nicht modelliert).
+/// Eine Verlängerung erzeugt einen **neuen** Satz (`supersedesId`), der alte
+/// bleibt erhalten — Historisierung nach 3.0.
+///
+/// Die Fristenüberwachung und die Sperrwirkung regelt 5.4 und ist nicht Teil
+/// dieser Arbeitseinheit; geführt werden Gültigkeit und Anerkennung.
+model SupplierPermit {
+  id                     String             @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id])
+  supplierId             String
+  supplier               Supplier           @relation(fields: [supplierId], references: [id])
+  permitNumber           String
+  issuingAuthority       String
+  permitType             PermitType
+  issuedOn               DateTime
+  validFrom              DateTime
+  /// Pflicht bei `fixedTerm`, leer bei `unlimited` (3.2) — Bedingung über
+  /// zwei Felder, geprüft in lib/masterdata/invariants.ts.
+  validTo                DateTime?
+  restrictions           String?
+  /// Urkunde (3.2, Nachweisart `permitCertificate`) — Verweis auf `document`
+  /// (3.10). Nach 3.2 Pflicht; solange 3.10 nicht modelliert ist, bleibt der
+  /// Verweis optional. Die Abweichung ist in PROGRESS.md benannt.
+  certificateDocumentRef String?
+  verificationStatus     VerificationStatus
+  verifiedAt             DateTime?
+  verifiedById           String?
+  verifiedBy             User?              @relation("PermitVerifiedBy", fields: [verifiedById], references: [id])
+  rejectionReason        String?
+  supersedesId           String?            @unique
+  supersedes             SupplierPermit?    @relation("PermitSupersedes", fields: [supersedesId], references: [id])
+  supersededBy           SupplierPermit?    @relation("PermitSupersedes")
+  externalReference      String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("PermitCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("PermitUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("PermitDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([tenantId])
+  @@index([supplierId])
+}
+
+/// Rahmenvertrag (`masterAgreement`, SPEC 3.3) — die vertragliche Grundlage
+/// zwischen dem Betreiber und **einem** anderen Mandanten.
+///
+/// Er gehört dem **Betreiber** (`tenantType = operator`) und ist der
+/// Gegenpartei zugeordnet. Genau einer der beiden Verweise `customerId` und
+/// `supplierId` ist gesetzt, passend zu `agreementType` — geprüft in
+/// lib/masterdata/invariants.ts.
+model MasterAgreement {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  agreementNumber   String          @unique
+  agreementType     AgreementType
+  customerId        String?
+  customer          Customer?       @relation("CustomerMasterAgreements", fields: [customerId], references: [id])
+  supplierId        String?
+  supplier          Supplier?       @relation("SupplierMasterAgreements", fields: [supplierId], references: [id])
+  validFrom         DateTime
+  validTo           DateTime?
+  noticePeriodDays  Int?
+  /// Kaufmännische Angabe, keine Zahlungsabwicklung (1.4).
+  paymentTermsDays  Int?
+  status            AgreementStatus
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("AgreementCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("AgreementUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("AgreementDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  rateCards RateCard[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+/// Preisliste (`rateCard`, SPEC 3.3) — die Konditionen zu einem
+/// Rahmenvertrag.
+///
+/// `rateCardScope` muss zur Vertragsart passen (3.3): die Einkaufsseite
+/// gehört zu einem Lieferantenvertrag, die Kundenseite zu einem
+/// Kundenvertrag. Die Differenz der beiden Seiten ist die Marge des
+/// Betreibers und für beide Gegenseiten unsichtbar ([41], [42] in 2.2).
+///
+/// Preisrunden erzeugen **neue** Listen, keine Änderung der alten (3.3).
+model RateCard {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  rateCardNumber    String          @unique
+  masterAgreementId String
+  masterAgreement   MasterAgreement @relation(fields: [masterAgreementId], references: [id])
+  rateCardScope     RateCardScope
+  validFrom         DateTime
+  validTo           DateTime?
+  currency          String
+  status            RateCardStatus
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("RateCardCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("RateCardUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("RateCardDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  items RateCardItem[]
+
+  @@index([tenantId])
+  @@index([masterAgreementId])
+}
+
+/// Preisposition (`rateCardItem`, SPEC 3.3) — eine Kondition der Preisliste.
+///
+/// Unterobjekt der Preisliste: es teilt deren Matrixzeile (2.2, Lesart) und
+/// deren Mandanten. `itemType` trennt Grundsatz von Zuschlagssatz; die
+/// Pflichtfelder hängen daran (3.3) und werden in
+/// lib/masterdata/invariants.ts geprüft.
+model RateCardItem {
+  id                  String           @id @default(cuid())
+  rateCardId          String
+  rateCard            RateCard         @relation(fields: [rateCardId], references: [id])
+  itemType            RateCardItemType
+  qualificationLevel  String?
+  /// Engere Fassung als die Qualifikationsstufe (3.3).
+  activityDescription String?
+  siteId              String?
+  site                Site?            @relation(fields: [siteId], references: [id])
+  /// Zuschlagsart (3.8) — Katalog noch nicht modelliert, bis dahin ein
+  /// benannter Skalar. Pflicht bei `premiumRate`.
+  premiumTypeRef      String?
+  hourlyRate          Decimal?         @db.Decimal(12, 4)
+  /// Prozentsatz oder Betrag; die Berechnungsart kommt aus der Zuschlagsart
+  /// (3.3, 3.8).
+  premiumValue        Decimal?         @db.Decimal(12, 4)
+  minimumHours        Decimal?         @db.Decimal(6, 2)
+  validFrom           DateTime?
+  validTo             DateTime?
+  externalReference   String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("RateCardItemCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("RateCardItemUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("RateCardItemDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  offerItems SupplierOfferItem[]
+
+  @@index([rateCardId])
+}
+
+/// Tarifzuordnung (`collectiveAgreementAssignment`, SPEC 3.3) — ordnet einem
+/// Lieferanten, einem Kunden oder einem Standort den anzuwendenden
+/// Tarifvertrag zu.
+///
+/// Der Tarifkatalog ist **Konfiguration**, kein festverdrahteter Wertebereich
+/// (Entscheidung zu offener Frage 3) — deshalb ein Textfeld und kein Enum.
+/// Das Objekt hält die Zuordnung und ihre Parameter; die Rechenregeln stehen
+/// in 5.1 und 5.2.
+model CollectiveAgreementAssignment {
+  id                          String                    @id @default(cuid())
+  tenantId                    String
+  tenant                      Tenant                    @relation(fields: [tenantId], references: [id])
+  collectiveAgreement         String
+  appliesToType               CollectiveAgreementTarget
+  supplierId                  String?
+  supplierTarget              Supplier?                 @relation("SupplierCollectiveAgreementTarget", fields: [supplierId], references: [id])
+  customerId                  String?
+  customerTarget              Customer?                 @relation("CustomerCollectiveAgreementTarget", fields: [customerId], references: [id])
+  siteId                      String?
+  siteTarget                  Site?                     @relation("SiteCollectiveAgreementTarget", fields: [siteId], references: [id])
+  validFrom                   DateTime
+  validTo                     DateTime?
+  /// Tarifliche oder betriebliche Abweichung von 18 Monaten (5.1);
+  /// leer = Regelgrenze.
+  maxAssignmentDurationMonths Int?
+  /// Abweichung von 9 Monaten (5.2); leer = Regelfrist.
+  equalPayDeadlineMonths      Int?
+  /// Stufenfolge der Branchenzuschläge (5.2).
+  industryPremiumScheme       String?
+  /// Rechtsgrundlage (Betriebsvereinbarung, Tarifauszug) — Verweis auf
+  /// `document` (3.10), dort noch nicht modelliert.
+  documentRef                 String?
+  externalReference           String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("CaaCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("CaaUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("CaaDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  // Gegenrichtung der Tarifbindung aus 3.1 und 3.2.
+  customersBoundTo Customer[] @relation("CustomerCollectiveAgreement")
+  suppliersBoundTo Supplier[] @relation("SupplierCollectiveAgreement")
+  sitesBoundTo     Site[]     @relation("SiteCollectiveAgreement")
+
+  @@index([tenantId])
+  @@index([supplierId])
+  @@index([customerId])
+  @@index([siteId])
+}
+
+/// Vergleichsentgelt (`comparableWageEntry`, SPEC 3.3) — das Entgelt eines
+/// vergleichbaren Stammarbeitnehmers des Entleihers, Datengrundlage für
+/// Equal Pay (5.2).
+///
+/// Geführt **je Tätigkeit am Standort** (Entscheidung zu offener Frage 15),
+/// nicht je Einsatz und nicht je Kostenstelle. Mandant ist der **Kunde**: nur
+/// der Entleiher kennt den Wert und pflegt ihn (`KE`, [2]). Für
+/// Lieferantenrollen ist der Katalog nicht sichtbar — die Zeile in 2.2 trägt
+/// für `LD` und `LA` kein Recht.
+model ComparableWageEntry {
+  id                String     @id @default(cuid())
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  siteId            String
+  site              Site       @relation(fields: [siteId], references: [id])
+  /// Dieselbe Fassung wie `activityDescription` in 3.4 und 3.7.
+  activityKey       String
+  comparableWage    Decimal    @db.Decimal(12, 4)
+  currency          String
+  validFrom         DateTime
+  validTo           DateTime?
+  wageSource        WageSource
+  reportedAt        DateTime
+  reportedById      String
+  reportedBy        User       @relation("WageReportedBy", fields: [reportedById], references: [id])
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("WageCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("WageUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("WageDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([tenantId])
+  @@index([siteId])
+}
+
+/// Bedarfsanfrage (`demandRequest`, SPEC 3.4) — der vom Kunden gemeldete
+/// Personalbedarf.
+///
+/// Mandant ist der Kunde. Eigentümer ist der Bedarfsträger (`KB`); er darf
+/// nur im Status `draft` ändern ([11]) und zur Freigabe einreichen ([12]).
+/// Der `MD` darf im Auftrag des Kunden anlegen ([10], dann ist
+/// `createdOnBehalfOfId` Pflicht), der `KG` freigeben oder zurückweisen
+/// ([13]).
+///
+/// Statusmodell 4.1, umgesetzt als geschlossene Übergangsmenge in
+/// lib/status/demandRequest.ts.
+model DemandRequest {
+  id                  String              @id @default(cuid())
+  tenantId            String
+  tenant              Tenant              @relation(fields: [tenantId], references: [id])
+  requestNumber       String
+  customerId          String
+  customer            Customer            @relation(fields: [customerId], references: [id])
+  siteId              String
+  site                Site                @relation(fields: [siteId], references: [id])
+  /// Für Lieferanten **nicht** sichtbar (Fußnote [14] in 2.2).
+  costCenterId        String
+  costCenter          CostCenter          @relation(fields: [costCenterId], references: [id])
+  requestedById       String
+  requestedBy         User                @relation("DemandRequestedBy", fields: [requestedById], references: [id])
+  /// Kennzeichnung des Auftraggebers bei Anlage durch `MD` ([10]).
+  createdOnBehalfOfId String?
+  createdOnBehalfOf   User?               @relation("DemandOnBehalfOf", fields: [createdOnBehalfOfId], references: [id])
+  title               String
+  /// Konkretisierung der Tätigkeit (5.3, Prüfung P8).
+  activityDescription String
+  headcount           Int
+  startDate           DateTime
+  /// Leer = unbefristeter Bedarf; die Höchstüberlassungsdauer begrenzt ihn
+  /// trotzdem (5.1).
+  endDate             DateTime?
+  weeklyHours         Decimal             @db.Decimal(5, 2)
+  shiftPattern        String?
+  /// Pflicht ab Status `tendered` (3.4); Eskalationsanlass (2.4, 4.2).
+  offerDeadline       DateTime?
+  /// Kostenrahmen, sichtbar nur für `KG` ([8]) und `KE` ([2]).
+  maxHourlyRate       Decimal?            @db.Decimal(12, 4)
+  currency            String?
+  /// Für Lieferanten **nicht** sichtbar ([14]).
+  internalNote        String?
+  approvedAt          DateTime?
+  approvedById        String?
+  approvedBy          User?               @relation("DemandApprovedBy", fields: [approvedById], references: [id])
+  cancellationReason  String?
+  /// Begründung der Rückweisung `submitted` → `draft` durch `KG` (4.1); für
+  /// den Bedarfsträger sichtbar, damit er weiß, was zu ändern ist.
+  rejectionReason     String?
+  status              DemandRequestStatus
+  externalReference   String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("DemandCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("DemandUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("DemandDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  qualificationRequirements DemandRequestQualification[]
+  tenders                   Tender[]
+
+  // Fachliche Kennung, eindeutig je Kunde (3.4).
+  @@unique([customerId, requestNumber])
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([costCenterId])
+  @@index([status])
+}
+
+/// Anforderung einer Bedarfsanfrage (3.4) — eine geforderte Qualifikation,
+/// Pflicht oder Wunsch. Mindestens eine ist Pflicht; die Bedingung ist eine
+/// Vorbedingung des Übergangs `draft` → `submitted` (4.1).
+///
+/// Unterobjekt der Bedarfsanfrage: teilt deren Mandanten und Matrixzeile.
+model DemandRequestQualification {
+  id                String          @id @default(cuid())
+  demandRequestId   String
+  demandRequest     DemandRequest   @relation(fields: [demandRequestId], references: [id])
+  qualification     String
+  requirementKind   RequirementKind
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("QualificationCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("QualificationUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("QualificationDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([demandRequestId])
+}
+
+/// Ausschreibung (`tender`, SPEC 3.5) — die vom Betreiber gesteuerte
+/// Verteilung einer freigegebenen Bedarfsanfrage an ausgewählte Lieferanten.
+///
+/// Mandant ist der **Betreiber**: die Ausschreibung ist die Steuerungshandlung
+/// des MSP. Der Kunde sieht nur Stand und Fortschritt zur eigenen Anfrage
+/// ([15]), der Lieferant nur die eigene Einladung ([16]).
+///
+/// Eine Wiederholung ist eine **neue** Ausschreibung mit erhöhter
+/// Rundennummer, keine Änderung der alten (3.5, 4.1).
+///
+/// Statusmodell: keines in Kapitel 4 — eine Ausschreibung ist offen bis
+/// `closedAt`, der Fortschritt ergibt sich aus 4.1 und den Einladungen.
+model Tender {
+  id                String           @id @default(cuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  tenderNumber      String           @unique
+  demandRequestId   String
+  demandRequest     DemandRequest    @relation(fields: [demandRequestId], references: [id])
+  tenderRound       Int
+  distributionMode  DistributionMode
+  publishedAt       DateTime
+  publishedById     String
+  publishedBy       User             @relation("TenderPublishedBy", fields: [publishedById], references: [id])
+  /// Kann die Frist der Anfrage je Runde verkürzen (3.5).
+  offerDeadline     DateTime
+  closedAt          DateTime?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("TenderCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("TenderUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("TenderDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  invitations TenderInvitation[]
+
+  @@unique([demandRequestId, tenderRound])
+  @@index([tenantId])
+}
+
+/// Einladung (`tenderInvitation`, SPEC 3.5) — die Teilnahme genau **eines**
+/// Lieferanten an einer Ausschreibung.
+///
+/// Sie ist das Objekt, an dem die Mandantengrenze zum Lieferanten hängt: die
+/// Einladung gehört dem Betreiber, ist aber dem Lieferanten zugänglich. **Nie
+/// sichtbar** sind die Teilnehmerliste der Ausschreibung, die Zahl der
+/// Eingeladenen und die Zahl der eingegangenen Angebote (2.3).
+///
+/// Statusmodell 4.2.1, umgesetzt in lib/status/tenderInvitation.ts. Die
+/// Absage der eigenen Einladung setzt der Lieferantendisponent selbst
+/// (Fußnote [46], Entscheidung zu offener Frage 23).
+model TenderInvitation {
+  id                String           @id @default(cuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  tenderId          String
+  tender            Tender           @relation(fields: [tenderId], references: [id])
+  supplierId        String
+  supplier          Supplier         @relation(fields: [supplierId], references: [id])
+  invitedAt         DateTime
+  /// Grundlage für die Eskalation nach 4.2 (`invitationViewDeadlineDays`).
+  viewedAt          DateTime?
+  respondedAt       DateTime?
+  declineReason     String?
+  invitationStatus  InvitationStatus
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("InvitationCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("InvitationUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("InvitationDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  offer SupplierOffer?
+
+  // Je Ausschreibung genau eine Einladung je Lieferant (3.13).
+  @@unique([tenderId, supplierId])
+  @@index([tenantId])
+  @@index([supplierId])
+}
+
+/// Lieferantenangebot (`supplierOffer`, SPEC 3.5) — die Antwort eines
+/// Lieferanten auf eine Einladung: Verfügbarkeit, Menge, Preis.
+///
+/// Mandant ist der **Lieferant**. Je Einladung höchstens **ein** Angebot
+/// (3.13) — deshalb ist `tenderInvitationId` eindeutig. Ein Angebot darf auch
+/// ohne Kandidaten abgegeben werden; Profilvorschläge sind eigene Objekte
+/// (3.6) und noch nicht modelliert.
+///
+/// Statusmodell 4.2.2, umgesetzt in lib/status/supplierOffer.ts.
+model SupplierOffer {
+  id                 String              @id @default(cuid())
+  tenantId           String
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  offerNumber        String
+  tenderInvitationId String              @unique
+  tenderInvitation   TenderInvitation    @relation(fields: [tenderInvitationId], references: [id])
+  /// Abgeleitet aus der Einladung, zur Sichtbarkeitsprüfung mitgeführt (3.5).
+  supplierId         String
+  supplier           Supplier            @relation(fields: [supplierId], references: [id])
+  availableFrom      DateTime
+  /// Darf unter `headcount` der Anfrage liegen (3.5).
+  offeredHeadcount   Int
+  offerValidUntil    DateTime?
+  /// Für den Kunden nur im Umfang von [18].
+  note               String?
+  submittedAt        DateTime?
+  /// Ab hier keine Änderung mehr durch `LD` ([19]).
+  reviewedAt         DateTime?
+  withdrawnAt        DateTime?
+  /// Begründung der Ablehnung — Pflicht und **ohne** Bezug auf ein fremdes
+  /// Angebot (2.3, Regel 3).
+  rejectionReason    String?
+  status             SupplierOfferStatus
+  externalReference  String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("OfferUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("OfferDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  items SupplierOfferItem[]
+
+  // Fachliche Kennung, eindeutig je Lieferant (3.5).
+  @@unique([supplierId, offerNumber])
+  @@index([tenantId])
+}
+
+/// Angebotsposition (`supplierOfferItem`, SPEC 3.5) — Preis- und Mengenangabe
+/// eines Angebots je Qualifikation.
+///
+/// Unterobjekt des Angebots: teilt dessen Mandanten und Matrixzeile (2.2,
+/// Lesart). Der Verrechnungssatz ist die **Einkaufsseite** und für
+/// Kundenrollen nicht sichtbar (3.3, [18] in 2.2).
+///
+/// Nicht geführt: die Liste `premiumRates` aus 3.5 — sie verweist auf die
+/// Zuschlagsart aus 3.8, die noch nicht modelliert ist.
+model SupplierOfferItem {
+  id                  String        @id @default(cuid())
+  supplierOfferId     String
+  supplierOffer       SupplierOffer @relation(fields: [supplierOfferId], references: [id])
+  qualificationLevel  String
+  headcount           Int
+  hourlyRate          Decimal       @db.Decimal(12, 4)
+  currency            String
+  /// Gesetzt, wenn der Satz aus der Einkaufspreisliste kommt (3.5).
+  rateCardItemId      String?
+  rateCardItem        RateCardItem? @relation(fields: [rateCardItemId], references: [id])
+  /// Pflicht bei Abweichung von der Preisliste (3.5, offene Frage 17).
+  rateDeviationReason String?
+  externalReference   String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("OfferItemCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("OfferItemUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("OfferItemDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([supplierOfferId])
 }
