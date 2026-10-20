@@ -1,0 +1,55 @@
+:root {
+  color-scheme: light dark;
+  --border: #c9c9c9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+header {
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+main {
+  padding: 1.5rem;
+  max-width: 70rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin-top: 2rem;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+code {
+  font-size: 0.85em;
+}
+
+.hint {
+  border-left: 3px solid var(--border);
+  padding-left: 0.8rem;
+}

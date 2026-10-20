@@ -1,0 +1,294 @@
+// Datenmodell zu SPEC Kapitel 3.11 (Benutzer, Rolle, Mandantenzuordnung).
+//
+// Umfang dieser Arbeitseinheit: Mandant, Benutzer, Rollenzuweisung,
+// Zuständigkeit, Betreuungszuordnung und Vertretung. Die Fachmodule aus
+// 3.1 bis 3.10 und 3.12 sind noch nicht modelliert.
+//
+// Jedes Modell trägt die Standardfelder aus SPEC 3.0:
+//   id, tenantId (bei mandantengebundenen Objekten), createdAt/createdById,
+//   updatedAt/updatedById, deactivatedAt/deactivatedById, externalReference.
+// Das Standardfeld `status` fehlt überall, weil 3.0 es nur verlangt, "wo ein
+// Statusmodell existiert" — und 3.11 nennt für jedes Objekt dieses Kapitels
+// ausdrücklich "Statusmodell: keines". Aktiv/inaktiv läuft über
+// `deactivatedAt`, die Wirksamkeit einer Vertretung über ihren Zeitraum.
+//
+// Die Rechte einer Rolle sind KEINE Daten (3.11): sie stehen als Code in
+// lib/authz/matrix.ts. Deshalb gibt es keine Tabelle für Rolle, Operation
+// oder Berechtigung — nur das Enum der acht Rollenkürzel aus 2.1.
+//
+// Anmelde- und Zahlungsdaten sind nicht Teil des Modells (3.0, Festlegung 4
+// und 5). `loginIdentifier` ist die Kennung der Person, kein Geheimnis.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Mandantentyp (3.11): genau ein Mandant trägt `operator`.
+enum TenantType {
+  operator
+  customer
+  supplier
+}
+
+/// Die acht Rollenkürzel aus SPEC 2.1 als fester Katalog (3.11).
+/// `temporaryWorker` existiert nur, wenn offene Frage 4 mit "eigener Zugang"
+/// beantwortet wird; andernfalls entfällt der Wert ersatzlos.
+enum RoleCode {
+  operatorAdmin
+  operatorCoordinator
+  demandOwner
+  approver
+  procurementController
+  supplierCoordinator
+  supplierAdmin
+  temporaryWorker
+}
+
+/// Art einer Zuständigkeit (3.11): Standort oder Kostenstelle.
+enum ScopeType {
+  site
+  costCenter
+}
+
+/// Mandant (`tenant`, SPEC 3.11) — der Datenraum einer Organisation.
+///
+/// `organizationId` verweist fachlich auf `customer` (3.1) bzw. `supplier`
+/// (3.2); welche der beiden gemeint ist, sagt `tenantType`. Beide Objekte
+/// gehören zu Fachmodulen, die hier noch nicht modelliert sind — das Feld
+/// bleibt deshalb vorerst ein Skalar ohne Fremdschlüssel und ist leer.
+///
+/// Invariante aus 3.11: höchstens ein Mandant mit `tenantType = operator`.
+/// PostgreSQL kennt dafür nur einen partiellen Index, den Prisma im Schema
+/// nicht ausdrücken kann; die Invariante wird in lib/tenants/invariants.ts
+/// geprüft und vom Seed eingehalten.
+model Tenant {
+  id                String      @id @default(cuid())
+  tenantNumber      String      @unique
+  tenantType        TenantType
+  organizationId    String?
+  displayName       String
+  externalReference String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("TenantCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("TenantUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("TenantDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  users                 User[]              @relation("TenantUsers")
+  roleAssignments       RoleAssignment[]
+  responsibilityScopes  ResponsibilityScope[]
+  delegations           Delegation[]
+  accountAssignments    AccountAssignment[] @relation("AccountAssignmentCustomerTenant")
+
+  @@index([tenantType])
+}
+
+/// Benutzer (`user`, SPEC 3.11) — eine Person mit Zugang zum System.
+///
+/// `tenantId` ist die Mandantenzuordnung: genau ein Mandant je Benutzer
+/// (3.11). Mehrfachrollen gibt es nur innerhalb dieser einen Organisation
+/// (Kapitel 2).
+model User {
+  id                String  @id @default(cuid())
+  userNumber        String
+  tenantId          String
+  tenant            Tenant  @relation("TenantUsers", fields: [tenantId], references: [id])
+  loginIdentifier   String  @unique
+  givenName         String
+  familyName        String
+  language          String?
+  externalReference String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("UserDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  roleAssignments     RoleAssignment[] @relation("RoleAssignmentUser")
+  grantedAssignments  RoleAssignment[] @relation("RoleAssignmentGrantedBy")
+  accountAssignments  AccountAssignment[] @relation("AccountAssignmentUser")
+  delegationsAsDelegate Delegation[]   @relation("DelegationDelegateUser")
+
+  // Rückbeziehungen der Protokollfelder aus 3.0. Prisma verlangt sie für jede
+  // Relation; fachlich werden sie nicht gelesen — das fachliche Protokoll ist
+  // der Audit-Eintrag aus 3.12.
+  createdTenants             Tenant[]              @relation("TenantCreatedBy")
+  updatedTenants             Tenant[]              @relation("TenantUpdatedBy")
+  deactivatedTenants         Tenant[]              @relation("TenantDeactivatedBy")
+  createdUsers               User[]                @relation("UserCreatedBy")
+  updatedUsers               User[]                @relation("UserUpdatedBy")
+  deactivatedUsers           User[]                @relation("UserDeactivatedBy")
+  createdRoleAssignments     RoleAssignment[]      @relation("RoleAssignmentCreatedBy")
+  updatedRoleAssignments     RoleAssignment[]      @relation("RoleAssignmentUpdatedBy")
+  deactivatedRoleAssignments RoleAssignment[]      @relation("RoleAssignmentDeactivatedBy")
+  createdScopes              ResponsibilityScope[] @relation("ScopeCreatedBy")
+  updatedScopes              ResponsibilityScope[] @relation("ScopeUpdatedBy")
+  deactivatedScopes          ResponsibilityScope[] @relation("ScopeDeactivatedBy")
+  createdAccountAssignments     AccountAssignment[] @relation("AccountAssignmentCreatedBy")
+  updatedAccountAssignments     AccountAssignment[] @relation("AccountAssignmentUpdatedBy")
+  deactivatedAccountAssignments AccountAssignment[] @relation("AccountAssignmentDeactivatedBy")
+  createdDelegations         Delegation[]          @relation("DelegationCreatedBy")
+  updatedDelegations         Delegation[]          @relation("DelegationUpdatedBy")
+  deactivatedDelegations     Delegation[]          @relation("DelegationDeactivatedBy")
+  revokedDelegations         Delegation[]          @relation("DelegationRevokedBy")
+
+  // Fachliche Kennungen sind je Mandant eindeutig (3.0).
+  @@unique([tenantId, userNumber])
+  @@index([tenantId])
+}
+
+/// Rollenzuweisung (`roleAssignment`, SPEC 3.11) — die Einheit, auf die sich
+/// Vertretung und Audit-Eintrag beziehen, nicht der Benutzer.
+///
+/// `tenantId` muss dem Mandanten des Benutzers entsprechen (3.11); das prüft
+/// lib/authz/grants.ts, weil Prisma die Gleichheit zweier Fremdschlüssel nicht
+/// erzwingen kann.
+model RoleAssignment {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation("RoleAssignmentUser", fields: [userId], references: [id])
+  roleCode          RoleCode
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  validFrom         DateTime
+  validTo           DateTime?
+  grantedById       String
+  grantedBy         User     @relation("RoleAssignmentGrantedBy", fields: [grantedById], references: [id])
+  externalReference String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("RoleAssignmentCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("RoleAssignmentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("RoleAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  responsibilityScopes ResponsibilityScope[]
+  delegations          Delegation[]
+
+  @@index([userId])
+  @@index([tenantId])
+}
+
+/// Zuständigkeit (`responsibilityScope`, SPEC 3.11) — Einschränkung innerhalb
+/// eines Mandanten. Fehlt zu einer Rollenzuweisung jede Zuständigkeit, wirkt
+/// sie auf den ganzen Mandanten.
+///
+/// Ob die Einschränkung überhaupt eingeführt wird, ist offene Frage 14; wird
+/// sie verworfen, entfällt dieses Modell ersatzlos.
+///
+/// `scopeRef` verweist fachlich auf `site` bzw. `costCenter` (3.1). Beide
+/// Objekte sind noch nicht modelliert — bis dahin ein Skalar ohne
+/// Fremdschlüssel.
+model ResponsibilityScope {
+  id                String         @id @default(cuid())
+  roleAssignmentId  String
+  roleAssignment    RoleAssignment @relation(fields: [roleAssignmentId], references: [id])
+  tenantId          String
+  tenant            Tenant         @relation(fields: [tenantId], references: [id])
+  scopeType         ScopeType
+  scopeRef          String
+  externalReference String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("ScopeCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("ScopeUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("ScopeDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([roleAssignmentId])
+  @@index([tenantId])
+}
+
+/// Betreuungszuordnung (`accountAssignment`, SPEC 3.11) — schränkt die
+/// Querschnittssicht eines MSP-Benutzers auf eine Teilmenge der Kunden ein
+/// (2.3). Fehlt sie für einen MSP-Benutzer vollständig, ist das eine bewusste
+/// Entscheidung des `MA` und Gegenstand des Berechtigungsreviews.
+///
+/// `customerTenantId` verweist auf den Mandanten des Kunden. 3.11 nennt hier
+/// einen Verweis auf `customer` (3.1); solange dieses Objekt nicht modelliert
+/// ist, trägt der Kundenmandant die Zuordnung — er steht 1:1 zum Kunden.
+model AccountAssignment {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation("AccountAssignmentUser", fields: [userId], references: [id])
+  customerTenantId  String
+  customerTenant    Tenant   @relation("AccountAssignmentCustomerTenant", fields: [customerTenantId], references: [id])
+  validFrom         DateTime
+  validTo           DateTime?
+  externalReference String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("AccountAssignmentCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("AccountAssignmentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("AccountAssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@unique([userId, customerTenantId, validFrom])
+  @@index([userId])
+}
+
+/// Vertretung (`delegation`, SPEC 3.11, Regeln in 2.4) — befristete
+/// Übertragung der Rechte einer Rollenzuweisung auf eine andere Person
+/// derselben Organisation.
+///
+/// `periodFrom` und `periodTo` sind beide Pflicht: unbefristete Vertretungen
+/// gibt es nicht (2.4, Regel 1). Keine Ketten, keine Rechteerweiterung, kein
+/// Übergang über Organisationsgrenzen — geprüft in lib/authz/grants.ts, weil
+/// es Bedingungen über mehrere Sätze hinweg sind.
+model Delegation {
+  id                          String         @id @default(cuid())
+  delegatedRoleAssignmentId   String
+  delegatedRoleAssignment     RoleAssignment @relation(fields: [delegatedRoleAssignmentId], references: [id])
+  delegateUserId              String
+  delegateUser                User           @relation("DelegationDelegateUser", fields: [delegateUserId], references: [id])
+  tenantId                    String
+  tenant                      Tenant         @relation(fields: [tenantId], references: [id])
+  periodFrom                  DateTime
+  periodTo                    DateTime
+  reason                      String?
+  revokedAt                   DateTime?
+  revokedById                 String?
+  revokedBy                   User?          @relation("DelegationRevokedBy", fields: [revokedById], references: [id])
+  externalReference           String?
+
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("DelegationCreatedBy", fields: [createdById], references: [id])
+  updatedAt         DateTime? @updatedAt
+  updatedById       String?
+  updatedBy         User?     @relation("DelegationUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt     DateTime?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("DelegationDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([delegatedRoleAssignmentId])
+  @@index([delegateUserId])
+  @@index([tenantId])
+}

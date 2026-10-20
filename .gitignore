@@ -21,6 +21,8 @@ out/
 .next/
 target/
 coverage/
+*.tsbuildinfo
+next-env.d.ts
 
 # Logs / temporäre Dateien
 *.log

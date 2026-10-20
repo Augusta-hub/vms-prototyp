@@ -5,6 +5,176 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Projektsetup, Mandanten-, Benutzer- und Rollenmodell (M3, erste Hälfte)
+
+**Gemacht**
+
+- **Erster Anwendungscode des Projekts.** Next.js (App Router) mit TypeScript
+  im Wurzelverzeichnis, Prisma auf PostgreSQL, Vitest für die Unit-Tests.
+  Verbindungsdaten ausschließlich über `DATABASE_URL` aus `.env`;
+  `.env.example` um `DATABASE_URL`-Form und `VMS_TEST_IDENTITY` ergänzt.
+  `package-lock.json` liegt im Repository, `node_modules/` bleibt ignoriert.
+  **Nichts committet.**
+
+  | Bereich | Dateien |
+  |---|---|
+  | Projektsetup | `package.json`, `tsconfig.json`, `next.config.ts`, `vitest.config.ts` |
+  | Datenmodell | `prisma/schema.prisma`, `prisma/migrations/20261020120000_init/` |
+  | Rechtemodell | `lib/authz/roles.ts`, `resources.ts`, `operations.ts`, `footnotes.ts`, `matrix.ts`, `check.ts`, `grants.ts` |
+  | Tests | `lib/authz/check.test.ts` (35), `lib/authz/grants.test.ts` (21) |
+  | Oberfläche | `app/layout.tsx`, `app/page.tsx`, `app/actions.ts`, `app/globals.css` |
+  | Identität, Hilfsmittel | `lib/prisma.ts`, `lib/identity/testIdentity.ts`, `lib/identity/loadSubject.ts`, `lib/tenants/invariants.ts` |
+  | Demo-Daten | `prisma/seed.ts` |
+
+- **Prisma-Schema zu SPEC 3.11:** `Tenant`, `User`, `RoleAssignment`,
+  `ResponsibilityScope`, `AccountAssignment`, `Delegation` — jedes mit den
+  Standardfeldern aus 3.0 (`id`, `tenantId` bei mandantengebundenen Objekten,
+  `createdAt`/`createdById`, `updatedAt`/`updatedById`,
+  `deactivatedAt`/`deactivatedById`, dazu `externalReference` aus der Notiz zu
+  Frage 7). Die Mandantenzuordnung ist das Feld `tenantId` am Benutzer — 3.11
+  führt dafür kein eigenes Objekt. Rollen sind das Enum `RoleCode` mit den acht
+  Kürzeln aus 2.1, **keine** pflegbare Tabelle.
+- **Berechtigungsmatrix 2.2 als Code**, an einer Stelle:
+  `lib/authz/matrix.ts` ist `Objektzeile → Rolle → Operation → Fußnoten`.
+  Alle 24 Objektzeilen aus 2.2 sind als Typ benannt, belegt sind die beiden
+  Zeilen zu 3.11. Die Fußnoten `[2]`, `[7]`, `[38]` und `[45]` tragen ihren
+  Wortlaut aus 2.2 **und** ein Prädikat, das gegen den Vorgang auswertet; die
+  übrigen 42 kommen mit ihren Zeilen, die Struktur trägt sie unverändert.
+- **Prüffunktion `checkPermission`** mit der Reihenfolge aus 2.3:
+  **Mandantengrenze → Rollenrecht → Fußnoten → Zuständigkeit**. Ein Zugriff,
+  den die Matrix nicht ausdrücklich nennt, wird verweigert; eine unbelegte
+  Zeile verweigert alles. Die Entscheidung nennt die Begründung mit
+  SPEC-Verweis, trägt den Vertretungsvermerk aus 2.4 Regel 6 und weist
+  mandantenübergreifende Zugriffe als `crossTenant` aus, damit die
+  Protokollpflicht aus 2.3 bedient werden kann, sobald 3.12 steht.
+- **56 Unit-Tests, alle grün** (`lib/authz/*.test.ts`, nicht in `tests/aueg/`):
+  je Rolle ein erlaubter und ein verweigerter Zugriff auf die Zeilen zu 3.11,
+  die Mandantengrenze zwischen Kunden, zwischen Lieferanten und gegenüber dem
+  Betreiber, die Betreuungszuordnung als Einschränkung der Querschnittssicht
+  und die Vertretungsregeln aus 2.4: befristet, personenbezogen, keine Ketten,
+  keine Rechteerweiterung, nicht vertretbare Rolle, vorzeitiges Ende.
+- **Synthetischer Seed:** ein Betreiber, zwei Kunden, zwei Lieferanten, je ein
+  Benutzer pro Rolle (acht), dazu eine Betreuungszuordnung (der MSP-Disponent
+  betreut nur Kunde 1) und eine Vertretung (der Genehmiger wird zwölf Tage
+  vertreten). Erfundene Organisationen, dieselben Namen wie in
+  `tests/aueg/*.feature`; E-Mail-Adressen in der reservierten Domain
+  `.example`. Keine Passwörter, keine Hashes, keine Token — der Prototyp
+  modelliert keine Anmeldedaten (3.0, Festlegung 4).
+- **Umschaltbare Testidentität statt Authentifizierung:** die handelnde Person
+  steht in einem Cookie, Vorbelegung über `VMS_TEST_IDENTITY`. Die Startseite
+  zeigt die wirksamen Rechte dieser Identität und die belegten Matrixzeilen,
+  gelesen aus dem Code.
+- **`tests/aueg/` unberührt.** Diese Arbeitseinheit implementiert keine
+  AÜG-Regel; die 254 Szenarien sind weiterhin ohne Runner (siehe „Offen").
+
+**Lokal starten**
+
+```
+npm install
+# DATABASE_URL in .env auf eine erreichbare PostgreSQL-Datenbank setzen
+npm run db:migrate     # legt das Schema an (prisma migrate dev)
+npm run db:seed        # synthetische Demo-Daten
+npm run dev            # http://localhost:3000
+```
+
+Ohne Datenbank startet die Anwendung trotzdem: die Startseite zeigt die
+Berechtigungsmatrix und sagt, dass keine Datenbank erreichbar ist.
+
+**Tests ausführen**
+
+```
+npm test               # Unit-Tests (Vitest), 56 Tests, ohne Datenbank
+npm run typecheck      # tsc --noEmit
+npm run build          # Produktionsbuild
+```
+
+Die Gherkin-Dateien in `tests/aueg/` werden von Vitest ausdrücklich nicht
+eingesammelt (`vitest.config.ts`); sie brauchen einen eigenen Runner.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Rechte sind Code, nicht Daten | 3.11 sagt es ausdrücklich: die Rechte einer Rolle sind keine pflegbaren Daten. Deshalb gibt es keine Tabelle für Rolle, Operation oder Berechtigung — die acht Rollen sind ein Enum, Bezeichnung und `appliesToTenantType` stehen im Katalog in `lib/authz/roles.ts` |
+| Fehlender Eintrag heißt „kein Zugriff" | Die Matrix ist ein partielles Abbild: fehlende Zeile, fehlende Rolle oder fehlende Operation verweigern. Das ist die positive Festlegung aus 2.3 im Typsystem — ein Recht entsteht nur durch einen Eintrag, nie durch eine Lücke |
+| Fußnoten sind Prädikate, keine Prosa | Jede Fußnote trägt ihren Wortlaut und eine Funktion über (Operation, Benutzer, Rollenzuweisung, Vorgang). Eine Fußnote kann ein Recht nur verkleinern. `undefined` und `[]` sind verschieden: `undefined` = nicht erlaubt, `[]` = erlaubt ohne Einschränkung |
+| Mandantengrenze vor allem anderen | `checkPermission` prüft sie als erstes und kennt nur eine Ausnahme: den Betreibermandanten, und den nur im Rahmen seiner Betreuungszuordnungen. Ein verweigerter Zugriff über die Grenze nennt `tenantBoundary`, nicht das fehlende Rollenrecht — die Begründung soll die Regel sagen, die wirklich greift |
+| Vertretung kann strukturell nicht erweitern | `Grant`s entstehen ausschließlich in `lib/authz/grants.ts`. Ein Vertretungs-`Grant` übernimmt Rolle, Mandant und Zuständigkeiten unverändert aus der vertretenen Rollenzuweisung (2.4 Regel 2); eine Vertretung belebt kein abgelaufenes Recht und überschreitet keine Organisationsgrenze |
+| Stichtag wird übergeben, nie „heute" | Wie in 5.0 für das Regelwerk festgelegt, nimmt `buildSubject` ein `evaluationDate`. Damit sind Vertretungszeiträume und Laufzeiten reproduzierbar prüfbar |
+| Kein `status` auf den Objekten aus 3.11 | 3.0 verlangt `status` nur, „wo ein Statusmodell existiert"; 3.11 nennt für jedes Objekt dieses Kapitels „Statusmodell: keines". Aktiv/inaktiv läuft über `deactivatedAt`, die Wirksamkeit einer Vertretung über ihren Zeitraum und `revokedAt` |
+| `temporaryWorker` gehört zum Lieferantenmandanten | `appliesToTenantType = supplier`. Begründung aus 2.1: ohne eigenen Zugang übernimmt der Lieferantendisponent alle Vorgänge dieser Rolle **in seinem Namen** — die Rolle sitzt also in der Lieferantenorganisation. Entfällt mit Frage 4, falls kein eigener Zugang kommt |
+| Testidentität statt Authentifizierung | Umschaltbar über Cookie, Vorbelegung über `VMS_TEST_IDENTITY`. Kein Anmeldeverfahren, keine Anmeldedaten im Modell (3.0, Festlegung 4; Auftrag dieser Arbeitseinheit) |
+| Vitest, Tests neben dem Code | Leichtgewichtig, TypeScript ohne Zusatzschritt, kein Browser nötig. `vitest.config.ts` sammelt nur `lib/**/*.test.ts` und schließt `tests/aueg/` ausdrücklich aus |
+| Initiale Migration ohne laufende Datenbank erzeugt | `prisma migrate diff --from-empty --to-schema-datamodel` schreibt `prisma/migrations/20261020120000_init/migration.sql`. So liegt die Migration im Repository, obwohl hier keine PostgreSQL-Instanz läuft (siehe „Offen") |
+
+**Offen**
+
+- **Migration und Seed sind nicht gegen eine Datenbank gelaufen.** Auf dieser
+  Maschine gibt es weder PostgreSQL noch Docker. Geprüft sind: `prisma
+  validate`, `prisma generate`, die erzeugte Migration als SQL,
+  `npx tsc --noEmit`, `next build`, die ausgelieferte Startseite (HTTP 200,
+  Matrix sichtbar) und die 56 Unit-Tests. **Nicht** geprüft sind: das
+  Anwenden der Migration, der schreibende Seed und die Seite mit Daten.
+  Nächster Schritt dafür: PostgreSQL lokal bereitstellen (z. B.
+  `brew install postgresql@17`, `brew services start postgresql@17`,
+  `createdb vms_dev`), `DATABASE_URL` setzen, `npm run db:migrate` und
+  `npm run db:seed`.
+- **Widerspruch 2.2 ↔ 3.11 beim Statuswechsel.** Die Zeile „Benutzer,
+  Rollenzuweisung, Mandantenzuordnung, Zuständigkeit" gibt `MA` ein `S` und
+  `LA` ein `S[7]`, aber 3.11 sagt für jedes Objekt dieses Kapitels
+  „Statusmodell: keines". Die Matrix im Code ist der SPEC treu geblieben (die
+  Operation `transition` steht dort), das Schema hat kein `status`-Feld — damit
+  ist das Recht derzeit ohne Gegenstand. Entweder meint `S` dort die
+  Aktivierung/Deaktivierung, dann gehört das in 3.11, oder die Zelle ist zu
+  streichen. **Nicht selbst entschieden.**
+- **Die Betreuungszuordnung hat in 2.2 keine Zeile.** 3.11 führt
+  `accountAssignment` als eigenes Objekt, die Matrix nennt es nicht. Der Code
+  ordnet es der Zeile „Benutzer, Rollenzuweisung, …" zu, weil 2.1 die
+  Verwaltung der Zuordnungen dem `MA` zuweist. Entweder bekommt 2.2 eine Zeile
+  oder 3.11 sagt ausdrücklich, dass das Objekt die Benutzerzeile teilt.
+- **Drei Verweise zeigen auf Objekte, die es noch nicht gibt** — benannt, nicht
+  stillschweigend umgebogen:
+  `Tenant.organizationId` (3.11: Pflicht außer beim Betreiber) bleibt leer und
+  ohne Fremdschlüssel, die Prüfung dazu ist in
+  `lib/tenants/invariants.ts` abschaltbar und steht auf „aus";
+  `AccountAssignment.customerTenantId` zeigt auf den **Kundenmandanten** statt
+  auf `customer` (3.1); `ResponsibilityScope.scopeRef` ist ein Skalar ohne
+  Fremdschlüssel, und der Seed legt deshalb **keine** Zuständigkeit an. Mit
+  3.1 und 3.2 sind alle drei auf echte Beziehungen zu ziehen.
+- **`createdById` ist nullable, 3.0 verlangt es als Pflicht.** Der erste
+  Mandant und der erste Benutzer entstehen mit der Einrichtung des Systems; es
+  gibt dafür keinen anlegenden Benutzer. Das Feld bleibt nur für diese
+  systemseitig angelegten Sätze leer. Entweder nimmt 3.0 das auf, oder die
+  Einrichtung erhält einen technischen Systembenutzer.
+- **`updatedAt` wird von Prisma schon beim Anlegen gesetzt**, 3.0 verlangt den
+  Wert erst „ab der ersten Änderung". Entweder wird 3.0 gelockert oder das Feld
+  ohne `@updatedAt` selbst gesetzt. Fachliche Wirkung hat es nur dort, wo
+  „nie geändert" von „einmal geändert" unterschieden werden soll.
+- **Für `AN` ist kein erlaubter Zugriff getestet**, weil beide Zeilen zu 3.11
+  für den Leiharbeitnehmer `–` tragen — das ist die Festlegung aus 2.2, keine
+  Lücke im Test. Der Test prüft stattdessen, dass **alle** Operationen auf
+  beiden Zeilen verweigert werden. Ein erlaubter Zugriff für `AN` ist zu
+  ergänzen, sobald eine Zeile mit `AN`-Zelle belegt wird (3.7, 3.8, 3.10).
+- **Auslegung in Fußnote [45]:** „keine Ketten" wird nur beim **Anlegen** einer
+  Vertretung geprüft. Lesen und Beenden der eigenen Vertretung bleibt dem
+  Vertreter im Rahmen der vertretenen Rollenzuweisung erlaubt, weil 2.4 Regel 4
+  das Bestimmen eines Untervertreters verbietet, nicht jede Handlung an einer
+  Vertretung. Falls das anders gemeint ist, ändert sich ein Prädikat.
+- **Drei neue offene Fragen in SPEC Kapitel 7: 33, 34 und 35** (damit 27 von 35
+  offen) — Eindeutigkeit der Anmeldekennung, Reichweite der Betreuungszuordnung
+  gegenüber Lieferanten, Wirkung einer Zuständigkeit auf Objekte ohne Standort
+  und Kostenstelle. Alle drei sind beim Schreiben des Codes aufgefallen und
+  **nicht selbst entschieden**; die Umsetzung nennt ihre vorläufige Auslegung
+  an der Fundstelle im Code und in der Fragentabelle.
+- **`tests/aueg/` bleibt ohne Runner.** Die 254 Szenarien sind weiterhin nicht
+  ausführbar — es fehlen Step-Definitions und ein Cucumber-Runner, und die
+  AÜG-Regeln selbst sind nicht Teil dieser Arbeitseinheit. Der Runner gehört
+  zu dem Meilenstein, der die Regeln umsetzt (M4).
+- **Installationsskripte sind in `package.json` freigegeben** (`allowScripts`
+  für `prisma`, `@prisma/client`, `@prisma/engines`, `esbuild`). npm 11
+  verlangt das ausdrücklich; ohne die Freigabe fehlen Prisma-Engines und die
+  esbuild-Binärdatei.
+
 ## 2026-10-20 — Gherkin-Szenarien für die AÜG-Regeln (M2)
 
 **Gemacht**

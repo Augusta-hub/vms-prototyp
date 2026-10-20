@@ -38,13 +38,16 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 - ✅ Entscheidung, welche Prüfung sperrt und welche nur warnt — 4.7 bestätigt
   bzw. geändert in 5.5.5 (38 bestätigt, 6 geändert, 4 neu)
 
-## M3 — Klickbare Demo: Stammdaten und Bedarfsanfrage ⬜
+## M3 — Klickbare Demo: Stammdaten und Bedarfsanfrage 🟨
 
-- ⬜ Projektsetup im gewählten Stack, lokal lauffähig
-- ⬜ Mandanten-, Benutzer- und Rollenmodell
+- ✅ Projektsetup im gewählten Stack, lokal lauffähig — Next.js (App Router)
+  mit TypeScript, Prisma auf PostgreSQL, Vitest für die Unit-Tests
+- ✅ Mandanten-, Benutzer- und Rollenmodell — Objekte aus SPEC 3.11, die
+  Berechtigungsmatrix 2.2 als typisierter Code mit Prüffunktion
 - ⬜ Kunden, Standorte, Lieferanten inkl. Erlaubnisnachweis
 - ⬜ Bedarfsanfrage anlegen, freigeben, an Lieferanten ausschreiben
-- ⬜ Synthetische Demo-Daten (Seed)
+- 🟨 Synthetische Demo-Daten (Seed) — Mandanten, Benutzer, Rollenzuweisungen,
+  Betreuungszuordnung und Vertretung stehen; die Fachmodule fehlen noch
 
 ## M4 — Klickbare Demo: Besetzung ⬜
 
