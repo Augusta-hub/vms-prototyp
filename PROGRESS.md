@@ -5,6 +5,113 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — Gherkin-Szenarien für die AÜG-Regeln (M2)
+
+**Gemacht**
+
+- **Vier `.feature`-Dateien in `tests/aueg/` geschrieben, 254 Szenarien**, alle
+  48 Zeilen der Querschnittstabelle 4.7 belegt. Geändert wurden nur
+  `tests/aueg/*.feature`, `tests/aueg/README.md`, `PROGRESS.md`,
+  `MILESTONES.md` und die Fragentabelle in Kapitel 7 der SPEC. **Kein
+  Anwendungscode, keine Step-Definitions, kein Runner** — das Projektsetup
+  existiert noch nicht (Frage 1 ist entschieden, M3 setzt um). Nichts
+  committet.
+
+| Datei | SPEC | Prüfungen | Szenarien |
+|---|---|---|---|
+| `max-assignment-duration.feature` | 5.1 | P1, P2 | 64 |
+| `equal-pay.feature` | 5.2 | P3, P4, P5 | 49 |
+| `revolving-door-and-strike.feature` | 5.3 | P6, P7, P8, P11 | 70 |
+| `permit-and-deadlines.feature` | 5.4 | P9, P10 | 71 |
+
+- **Je Prüfpunkt mindestens zwei Szenarien** (Prüfung geht durch / Prüfung
+  spricht an). Bei den 23 sperrenden Zeilen kommt ein drittes hinzu: die
+  dokumentierte Übersteuerung nach 5.5.4, wo die Prüfung übersteuerbar ist
+  (P1, P2, P9, P10, P11), und der **zurückgewiesene Versuch**, wo sie es nicht
+  ist (P4, P6, P7, P8).
+- **Die Rechenwege sind mit Zahlen hinterlegt**, nicht nur beschrieben:
+  Tagebudget 546 Tage für eine lückenlose Kette ab 15.01.2026 (Fristende
+  14.07.2027), Equal-Pay-Fristbudget 273 Tage (Fälligkeit 15.10.2026), die
+  Verschiebung um 91 Lückentage bei einer Unterbrechung von exakt drei Monaten,
+  die Vorlaufschwellen 90/30 und 60/30 als Stichtage. Jede Zahl ist aus 5.1.3
+  bzw. 5.2.3 nachgerechnet.
+- **Grenzfälle als eigene Szenarien**, wie in 4.7 verlangt: Tag genau auf der
+  Grenze (Fristende, Equal-Pay-Fälligkeit, Rückschaufenster der Drehtür,
+  `employedSince`, `validTo` der Erlaubnis), Unterbrechung exakt drei Monate
+  (als Szenariogrundriss mit den drei Rechenbeispielen aus 5.1.4),
+  Lieferantenwechsel mitten im Einsatz (in allen vier Dateien, weil er je Regel
+  anders wirkt), rückwirkende Korrektur, gleichzeitige Einsätze mit
+  überlappenden Tagen, fehlende und nur vorgeschlagene Personenidentität,
+  Zeitraum ohne Tarifzuordnung, fehlendes Vergleichsentgelt und
+  `wageSource = estimate`.
+- **Fristablauf hat eigene Szenarien** mit der Erwartung „Status unverändert,
+  Eskalation ausgelöst": die nicht entschiedene Verlängerung bleibt in
+  `requested`, der nicht genehmigte Stundenzettel bleibt in `inApproval`, und
+  eine AÜG-Sperre hebt sich nicht durch Zeitablauf auf.
+- **Der nächtliche Lauf ist abgedeckt** (N1 bis N6), jeweils mit der
+  Erwartung, dass er keinen Statuswechsel und keine Sperre erzeugt — N1 mit
+  der Stufenfolge 90/30/14 Tage als Szenariogrundriss.
+- **Sichtbarkeit ist Teil der Erwartung** (4.7, Regel 3): die Warnung an den
+  Lieferanten nennt nur den eigenen Einsatz, nie die Historie bei anderen
+  Lieferanten; der Kunde erhält den Fristenstand, nicht die Historie bei
+  anderen Kunden; der Lieferant erhält den Einsatzwert des Vergleichsentgelts,
+  nicht den Katalog des Standorts; die Personenidentität wird nie offengelegt.
+- **Tags durchgängig vergeben:** Abschnitt (`@spec-5.1`), Prüfpunkt (`@q07`),
+  Prüfung (`@p1`), Ergebnisart (`@information` / `@warnung` / `@sperre`) und
+  Zweck (`@grenzfall`, `@rueckwirkend`, `@uebersteuerung`,
+  `@keine-uebersteuerung`, `@nachtlauf`, `@frist-eskalation`,
+  `@sichtbarkeit`, `@rechenweg`, `@nachweisfluss`), dazu die Norm.
+- **`tests/aueg/README.md` um den Abschnitt „Vorhandene Dateien"** mit Tabelle
+  und Tagkonvention ergänzt.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Erwartung ist immer eine Ergebnisart | Jedes Szenario nennt `Information`, `Warnung` oder `Sperre` und den Status **nach** dem Übergang — nie „nicht erlaubt". Ein Szenario, in dem die Prüfung durchgeht, erwartet eine **Information**, weil es nach 5.5.2 keinen Zustand „Prüfung nicht durchgeführt" gibt |
+| Keine Step-Definitions | Die Dateien sind Spezifikation in ausführbarer Form. Ein Runner käme vor dem Projektsetup, und die Bindung an eine Technik würde die fachliche Lesbarkeit schwächen, die der Zweck dieser Dateien ist |
+| Tarifwerte als Vorbedingung | `maxAssignmentDurationMonths`, `equalPayDeadlineMonths` und `industryPremiumScheme` werden **im Szenario gesetzt** (Beispielwerte, Schemata „Beispieltarif E1/E2/E3", „Beispieltarif Z1", „Beispielschema B1"). Im Erwartungsteil steht kein Tarifwert, nur gesetzliche Werte (18, 15, 9, 6, 3 Monate) |
+| Synthetische Stammdaten, wiederverwendet | Dieselben erfundenen Organisationen und Personen über alle vier Dateien: „Nordwerk Metall GmbH" mit „Werk Süd" und „Werk Nord", „Nordwerk Service GmbH" im Konzern, die Lieferanten „Rheinpersonal GmbH", „Elbe Zeitarbeit GmbH" und „Saale Personal GmbH", die Kandidaten „Jana Behrens", „Tobias Krohn", „Miriam Falk" und „Lennart Voß". Keine echten Namen, keine echten Entgelte |
+| Rollen ausgeschrieben | In den Szenarien stehen „der MSP-Disponent", „der Genehmiger", „der Lieferantendisponent" statt der Kürzel `MD`, `KG`, `LD` — ein Disponent oder Jurist soll das Szenario ohne die Matrix aus 2.2 lesen können. Die Kürzel bleiben der SPEC |
+| „Fristende erreicht" heißt „überschritten" | Q23 und Q26 sprechen von „Fristende bereits erreicht". Gelesen wird das nach **5.1.5**: `maxDurationEndDate` ist der **letzte zulässige** Überlassungstag, ein Start oder eine Wiederaufnahme **an** diesem Tag geht durch (mit Warnung, weil das Restbudget danach null ist), erst der Folgetag ist gesperrt. Sonst widersprächen sich 5.1.5 und 4.7 |
+| Q04 wirkt je Einladung | Nach 5.4.1 modelliert: der nicht gedeckte Lieferant wird nicht eingeladen, der Übergang nach `tendered` findet statt, solange eine zulässige Einladung bleibt; nur wenn **kein** Lieferant zulässig ist, bleibt die Anfrage in `approved` |
+| Arbeitskampf fachlich formuliert | Anzeige und Zusicherung werden als Sachverhalt benannt („für den Standort ist eine Arbeitskampfanzeige vom … bis … erfasst"), **ohne ein Feld zu erfinden** — die Datenlücke bleibt Frage 30, die Szenarien bleiben gültig, sobald sie entschieden ist |
+
+**Offen**
+
+- **Zwei neue offene Fragen, 31 und 32** (damit 24 von 32 offen). Beide sind
+  beim Schreiben der Szenarien als **Abweichung zwischen 4.7 und Kapitel 5**
+  aufgefallen und **nicht selbst entschieden** worden:
+  - **31** Sammelprüfung P10 gegen Pflichtkatalog 5.4.4: 4.7 ordnet Q21, Q42,
+    Q43 und Q44 eine **Sperre** zu, der Katalog führt `qualificationCertificate`
+    und `clearanceCertificate` aber als „nie Sperre"; umgekehrt bleibt Q10
+    **Information**, während der Katalog einen fehlenden Qualifikationsnachweis
+    als Warnung führt. Die Szenarien rechnen nach dem **Katalog**, weil 5.4.6
+    für fehlende Nachweise ausdrücklich dorthin verweist, und benennen die
+    Abweichung im Kommentar über dem Szenario
+    (`permit-and-deadlines.feature`).
+  - **32** Rangfolge in 5.2.2: bei `equalPayDeadlineMonths` über 15 **ohne**
+    Branchenzuschlagsschema treffen Fall 5 (9 Monate) und Fall 6 (15 Monate)
+    beide zu, eine Rangfolge nennt die Tabelle nicht. Diese Kombination ist in
+    `equal-pay.feature` **ausgelassen**; geprüft werden nur die eindeutigen
+    Fälle 1 bis 5 und die Begrenzung auf 15 mit Schema.
+- **Dokumentarische Unschärfe in 3.6, keine Fachfrage:** das Feld
+  `previousEmploymentDeclaration` ist dort „optional; vor dem Übergang des
+  Einsatzes nach `planned` erforderlich", während 5.3.1 und Q12 die Sperre
+  schon bei der **Zusage** des Profilvorschlags setzen. Die Szenarien folgen
+  5.3.1 (Sperre bei Q12 und Q15); die Klammerbemerkung in 3.6 sollte beim
+  nächsten Durchgang durch Kapitel 3 nachgezogen werden.
+- **Kein Runner, keine Step-Definitions** — bis zum Projektsetup (M3) sind alle
+  Szenarien formal „rot" im Sinne von „nicht ausgeführt". Dass sie ausführbar
+  werden, ist ein Punkt von M3, nicht von M2.
+- **Noch nicht abgeleitet:** die Zeilen des nächtlichen Laufs sind abgedeckt,
+  die Prüfungen bei der **Speicherung** (5.5.1 b) nur dort, wo eine
+  rückwirkende Änderung sie auslöst. Ein eigener Satz Szenarien „Speichern
+  sperrt nie" je Feld ist bewusst nicht entstanden — die Regel ist in drei
+  Szenarien belegt, eine Vervollständigung gehört zu M4.
+- **Kapitel 6 (Datenschutz) ist weiter Gliederung**; Löschfristen und
+  Aufbewahrung berühren die Aufzeichnungspflichten aus 5.4.7 (Frage 22).
+
 ## 2026-10-20 — SPEC Kapitel 5: AÜG-Regeln (M2)
 
 **Gemacht**

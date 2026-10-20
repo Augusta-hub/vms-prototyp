@@ -30,6 +30,31 @@ und dann mit Begründung in [PROGRESS.md](../../PROGRESS.md).
 - Grenzfälle gehören dazu: Tag genau auf der Grenze, Unterbrechung exakt
   3 Monate, Lieferantenwechsel mitten im Einsatz, rückwirkende Korrektur.
 
+## Vorhandene Dateien
+
+Stand 20.10.2026 — abgeleitet aus der Querschnittstabelle 4.7 (Q01 bis Q48),
+den Berechnungsvorschriften und Grenzfalltabellen aus Kapitel 5 und dem
+nächtlichen Lauf (5.5.1, N1 bis N6):
+
+| Datei | SPEC | Prüfungen | Szenarien |
+|---|---|---|---|
+| `max-assignment-duration.feature` | 5.1 | P1, P2 | 64 (63 Szenarien, 1 Szenariogrundriss mit 3 Beispielen) |
+| `equal-pay.feature` | 5.2 | P3, P4, P5 | 49 |
+| `revolving-door-and-strike.feature` | 5.3 | P6, P7, P8, P11 | 70 (68 Szenarien, 2 Szenariogrundrisse mit 7 Beispielen) |
+| `permit-and-deadlines.feature` | 5.4 | P9, P10 | 71 (69 Szenarien, 2 Szenariogrundrisse mit 8 Beispielen) |
+
+**254 Szenarien**, alle 48 Zeilen der Tabelle 4.7 belegt: je Prüfpunkt
+mindestens eines, in dem die Prüfung durchgeht, und eines, in dem sie
+anspricht; bei einer Sperre zusätzlich die Übersteuerung nach 5.5.4 — bei den
+nicht übersteuerbaren Prüfungen P4, P6, P7 und P8 stattdessen der
+zurückgewiesene Versuch.
+
+**Tags.** `@spec-5.1` bis `@spec-5.4` (Abschnitt), `@q07` (Prüfpunkt),
+`@p1` bis `@p11` (Prüfung), `@information` / `@warnung` / `@sperre`
+(Ergebnisart), dazu `@grenzfall`, `@rueckwirkend`, `@uebersteuerung`,
+`@keine-uebersteuerung`, `@nachtlauf`, `@frist-eskalation`, `@sichtbarkeit`,
+`@rechenweg`, `@nachweisfluss` und die Norm als `@aueg-1-abs-1b`.
+
 ## Reihenfolge
 
 Szenarien werden geschrieben, **bevor** die zugehörige Logik entsteht
