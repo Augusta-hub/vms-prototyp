@@ -23,15 +23,18 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 - ✅ SPEC Kapitel 2 (Rollen) ausgearbeitet
 - ✅ SPEC Kapitel 3.1–3.7 (Stammdaten bis Einsatz) ausgearbeitet
 - ✅ SPEC Kapitel 4.1–4.3 (Statusmodelle des Kernprozesses) ausgearbeitet
-- 🟨 Glossar DE → EN angelegt (Kapitel 2 und 3 gemappt, Kapitel 4–6 offen)
+- 🟨 Glossar DE → EN angelegt (Kapitel 2 bis 5 gemappt, Kapitel 6 offen)
 
-## M2 — AÜG-Regelwerk als Testbasis ⬜
+## M2 — AÜG-Regelwerk als Testbasis 🟨
 
-- ⬜ SPEC Kapitel 5.1 Höchstüberlassungsdauer ausformuliert
-- ⬜ SPEC Kapitel 5.2 Equal Pay ausformuliert
-- ⬜ SPEC Kapitel 5.4 Erlaubnis und Fristen ausformuliert
+- ✅ SPEC Kapitel 5.1 Höchstüberlassungsdauer ausformuliert
+- ✅ SPEC Kapitel 5.2 Equal Pay ausformuliert
+- ✅ SPEC Kapitel 5.4 Erlaubnis und Fristen ausformuliert
+- ✅ SPEC Kapitel 5.0, 5.3 und 5.5 ausformuliert (Konventionen, Drehtür /
+  Arbeitskampf / Kennzeichnung, Regelwerk-Mechanik)
 - ⬜ `tests/aueg/*.feature` für 5.1, 5.2, 5.4 geschrieben (rot)
-- ⬜ Entscheidung, welche Prüfung sperrt und welche nur warnt
+- ✅ Entscheidung, welche Prüfung sperrt und welche nur warnt — 4.7 bestätigt
+  bzw. geändert in 5.5.5 (38 bestätigt, 6 geändert, 4 neu)
 
 ## M3 — Klickbare Demo: Stammdaten und Bedarfsanfrage ⬜
 

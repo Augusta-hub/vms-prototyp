@@ -5,6 +5,143 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — SPEC Kapitel 5: AÜG-Regeln (M2)
+
+**Gemacht**
+
+- **Kapitel 5 vollständig ausgearbeitet**, 5.0 bis 5.5, rund 1.500 Zeilen. Die
+  Gliederungspunkte mit `TODO` sind ersetzt; in Kapitel 5 steht kein `TODO`
+  mehr. Nur `SPEC.md`, `PROGRESS.md` und `MILESTONES.md` geändert, nichts
+  committet. Kein Anwendungscode, **keine Testdateien** — `tests/aueg/` ist
+  unberührt, die Szenarien sind der nächste Schritt.
+- **Neuer Abschnitt 5.0 „Konventionen für alle Regeln"** (analog 3.0 und 4.0):
+  Lesart, Stichtag und Prüfzeitraum je Prüfanlass als Tabelle,
+  Fristenarithmetik nach §§ 187 Abs. 2, 188 Abs. 2 und 3 BGB, die
+  **Überlassungskette** als gemeinsame Rechengrundlage von 5.1 und 5.2, der
+  Grundsatz für fehlende Daten, die Festwerte des Regelwerks und eine Liste
+  dessen, was das Kapitel nicht tut.
+- **5.1 Höchstüberlassungsdauer** (P1, P2): Rangfolge der Grenze
+  (Standort → Kunde → Regelgrenze 18 Monate, Verleiherseite ausdrücklich
+  irrelevant), siebenschrittige Berechnungsvorschrift mit Eingangsdaten E1–E7,
+  Tagebudget und Ableitung von `maxDurationEndDate`, die Drei-Monats-Regel in
+  einer Formel mit drei Rechenbeispielen, zwölf Grenzfälle, Schwellen und
+  Eskalation, Rechtsfolge nach §§ 9, 10, 16 AÜG, sieben Fälle fehlender Daten.
+- **5.2 Equal Pay** (P3, P4, P5): sechs Datenlagen für die Frist, darunter die
+  wichtigste — **ohne Verleihertarif gilt Equal Pay ab dem ersten
+  Überlassungstag**, nicht nach neun Monaten. Berechnung von `equalPayDueDate`,
+  Verwendbarkeitsprüfung des Vergleichsentgelts samt `estimate`-Behandlung,
+  Stufenbestimmung des Branchenzuschlags ohne eine einzige Tarifzahl, elf
+  Grenzfälle.
+- **5.3 Drehtür, Arbeitskampf, Kennzeichnung** (P6, P7, P8, P11): Herkunft und
+  Form der Erklärung zur Vorbeschäftigung festgelegt (3.6 verwies hierher), die
+  fünf Prüfkriterien K1–K5 der Konkretisierung, der Prüfzeitpunkt für P11
+  festgelegt (3.6 verwies hierher), Abgrenzung zu Werk- und Dienstvertrag.
+- **5.4 Erlaubnis und Nachweise** (P9, P10): tagesgenaue Deckungsprüfung über
+  die historisierten Erlaubnissätze, die **zwei Entscheidungen, die 4.6 offen
+  gelassen hatte**, der **Nachweisfluss des Dokuments** (3.10 und 4.0 verwiesen
+  hierher), der Pflichtkatalog um Prüfzeitpunkt, Fristen und Ablaufbehandlung je
+  Art erweitert, Aufzeichnungspflichten nach §§ 7, 17 AÜG.
+- **5.5 Regelwerk-Mechanik**: drei Prüfanlässe (Statusübergang, Speicherung,
+  nächtlicher Lauf mit den Zeilen N1–N6), die drei Ergebnisarten bestätigt und
+  um sechs Festlegungen ergänzt, Stichtagslogik und sieben Regeln R1–R7 für
+  rückwirkende Änderungen, die Übersteuerung mit sechs Invarianten und einer
+  Übersteuerbarkeitstabelle je Prüfung.
+- **Die Spalte „Ergebnisart" in 4.7 ist entschieden** (M2-Punkt): alle 44 Zeilen
+  durchgegangen, **38 bestätigt mit Begründung, 6 geändert, 4 neu**. 4.7 ist
+  nachgezogen — Spaltenname ohne „Vorschlag", geänderte Zeilen mit Vermerk
+  *(geändert, 5.5.5)*, Q45–Q48 ergänzt.
+- **Kapitel 4 nachgezogen**, wo 5.5 etwas ändert: 4.0 (Nachweis-Vorlauf,
+  Statusmodell des Dokuments), 4.2.3 und seine Prüfungstabelle, 4.3.1
+  (Vorbedingungen von → `planned` und `planned` → `active`,
+  `interrupted` → `active`, Beendigung aus Rechtsgründen), 4.3 Prüfungstabelle,
+  4.4 (Zettelgenehmigung), 4.6 (automatische Sperre, laufende Einsätze), 4.7
+  (Szenarienregel 1, Abschlussabsatz).
+- **Kapitel 3 nachgezogen**, wo es auf Kapitel 5 verwies: 3.2 (`supplierPermit`
+  Statusmodell), 3.6 (`previousEmploymentDeclaration`), 3.7 (Unterbrechung),
+  3.10 (Statusmodell des Dokuments). **Kein Feld hinzugefügt** — Kapitel 3
+  bleibt führend.
+- **Glossar 1.5 um 23 Einträge** ergänzt (Rechen- und Prüfbegriffe), in dieselbe
+  Tabelle. Der TODO-Marker an 1.5 ist auf „TODO (Kapitel 6)" reduziert.
+- **Kapitel 7 um die Fragen 26 bis 30** ergänzt, davon drei als „juristisch zu
+  prüfen" gekennzeichnet. Die Tabelle war zwischen Zeile 24 und 25 in zwei
+  Tabellen zerfallen — zusammengeführt. Status von Frage 10 um den Hinweis
+  erweitert, dass 5.5.4 jede Antwort verträgt.
+- **Kopfzeile der SPEC** von „Status: Gliederung" auf „Status: in Arbeit" mit
+  Angabe der ausgearbeiteten Kapitel umgestellt — die alte Aussage war mit
+  4.800 Zeilen nicht mehr richtig.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Zählgröße | **Überlassungstage, nicht Monate.** Die Monatsgrenze wird nach BGB-Fristenarithmetik in ein **Tagebudget** ab Kettenbeginn umgerechnet; gezählt werden Kalendertage. Keine Umrechnung Monat → 30 Tage, keine Rundung |
+| Gemeinsame Rechengrundlage | 5.1 und 5.2 rechnen auf **derselben Überlassungskette** — § 8 Abs. 4 Satz 4 wiederholt die Drei-Monats-Regel des § 1 Abs. 1b Satz 2. Das ist die Struktur des Gesetzes und hält die Szenarien konsistent |
+| Lückentage | Verbrauchen **Kalenderzeit, aber kein Fristbudget**: `maxDurationEndDate` und `equalPayDueDate` verschieben sich um die Lückentage nach hinten. Additive Lesart; die kalendarische wäre strenger → **Frage 26**, juristisch zu prüfen |
+| Exakt drei Monate | **Kein Reset.** „Nicht mehr als drei Monate" schließt den Grenzfall ein; Formel und drei Rechenbeispiele stehen in 5.1.4 |
+| Welche Tarifseite gilt | **5.1 liest die Entleiherseite** (Standort, dann Kunde) — die Öffnungsklausel des § 1 Abs. 1b ist eine Regelung der Einsatzbranche. **5.2 liest die Verleiherseite** — die Abweichung vom Gleichstellungsgrundsatz ist eine Regelung des Zeitarbeitstarifs |
+| Ohne Verleihertarif | **Equal Pay ab dem ersten Überlassungstag**, nicht nach neun Monaten. Die Frist setzt den Tarifvertrag voraus (§ 8 Abs. 2, 4 AÜG). Die Regelfrist 9 gilt nur, wenn eine Zuordnung besteht und keinen abweichenden Wert nennt |
+| Gesetzliche Schranken | 15 Monate (§ 8 Abs. 4 Satz 2) und die Bindung der Verlängerung über 9 Monate an ein Branchenzuschlagsschema sind **Gesetzeswerte** und werden erzwungen: ein höherer oder unzulässig konfigurierter Wert wird begrenzt und erzeugt eine Warnung an `MA` |
+| Fehlende Daten | **Eine fehlende Rechengrundlage wirkt wie ein Treffer, nicht wie ein Freibrief.** Einzige Ausnahme: eine fehlende Arbeitskampfanzeige (sonst wäre jeder Einsatzstart gesperrt) — die Ausnahme ist benannt und begründet |
+| Fehlende Tarifzuordnung | Der einzige Fall mit definiertem Ersatzwert, weil das Gesetz ihn liefert: 18 Monate (5.1), bzw. Equal Pay ab Tag eins (5.2). Immer mit Information, damit eine vergessene Zuordnung nicht als Entscheidung durchgeht |
+| Lieferantenwechsel | Ein Einsatz gehört zu genau einem Lieferanten — ein Wechsel ist `terminatedEarly` plus **neuer** Einsatz. Die Kette läuft über beide (§ 1 Abs. 1b Satz 2: „denselben oder einen anderen Verleiher"), die Equal-Pay-Frist kann sich ändern, weil sie vom Verleihertarif kommt |
+| Kriterium für Sperren | **Eine Sperre ist nur dort richtig, wo ein Weg offensteht, sie rechtmäßig aufzulösen.** Dieses eine Kriterium trägt alle sechs Änderungen in 4.7 |
+| Drehtürklausel (Q12, Q15) | **Von Sperre auf Warnung.** § 8 Abs. 3 AÜG untersagt die Überlassung nicht — er nimmt die tarifliche Abweichung. Rechtsfolge ist Equal Pay ab dem ersten Tag. **Sperre bleibt nur bei fehlender Erklärung**, weil dann die Tatsachengrundlage fehlt |
+| Arbeitsverhältnis (Q13, Q17) | **Von Sperre auf Warnung.** Es muss am ersten Überlassungstag bestehen, nicht bei der Zusage oder Einsatzplanung — ein Kandidat als `applicant` ist der Regelfall der Branche. Die Sperre wandert in die neue Zeile **Q47** (Einsatzstart) |
+| Wiederaufnahme (Q26) | **Von Warnung auf Sperre**, wenn das Fristende erreicht ist. `interrupted` → `active` ist ein Überlassungsbeginn wie `planned` → `active`, und dort sperrt Q23 — eine Warnung wäre ein Widerspruch im selben Statusmodell |
+| Zettelgenehmigung (Q35) | **Von Sperre auf Warnung mit Pflicht-Eskalation.** Die Zeiten sind erbracht; die Sperre verhindert keine Überlassung, sondern nur die Abrechnung geleisteter Arbeit, belastet Leiharbeitnehmer und Lieferant für einen Fehler des Betreibers und erzeugt einen hängenden Zettel (Frage 24) |
+| Vergleichsentgelt (Q36) | **Sperre bestätigt**, aber präzisiert: nur bei **keinem verwendbaren** Eintrag. `wageSource = estimate` lässt den Übergang zu und warnt (3.3). Unterschied zu Q35: hier steht ein zumutbarer Weg offen, und ihn zu gehen ist die Pflicht des Entleihers |
+| Vier neue Zeilen | **Q45, Q46** (Kennzeichnung und Konkretisierung am Einsatz und am Einsatzstart — die schärfste Rechtsfolge des AÜG war in 4.7 nur an der Bedarfsanfrage geprüft), **Q47** (Arbeitsverhältnis am Einsatzstart), **Q48** (Vergleichsentgelt, wenn Equal Pay ab Tag eins geschuldet ist). Keine Zeile entfernt, keine umbenannt |
+| Erlaubnis sperrt nicht automatisch (4.6, Frage a) | **Nein, kein automatischer Übergang nach `blocked`.** Die Wirkung tritt ohne Statuswechsel über P9 ein; der nächtliche Lauf eskaliert mit dem Vorschlag zu sperren, den Übergang vollzieht ein Mensch mit `blockReason`. Ein Systemübergang würde die Pflichtbegründung und das Vier-Augen-Prinzip aus [5] unterlaufen |
+| Laufender Einsatz bei Erlöschen (4.6, Frage b) | **Das System beendet ihn nicht.** Einsatzstart und Verlängerung sind gesperrt, der laufende Einsatz erzeugt eine tägliche Warnung mit Pflicht-Eskalation, der Übergang `terminatedEarly` aus Rechtsgründen steht bereit. Die Rechtsfolge hängt vom Erlöschensgrund ab → **Frage 29** |
+| Sperre je Einladung | Q04 wirkt **je Lieferant**: ein gesperrter Lieferant wird nicht eingeladen, die Ausschreibung findet statt, solange eine zulässige Einladung bleibt. Nur wenn kein Lieferant zulässig ist, ist der Übergang gesperrt |
+| Prüfung sperrt nie das Speichern | Gesperrt werden **Handlungen** (Statusübergänge), nicht **Feststellungen**. Eine Korrektur der Wahrheit darf nicht daran scheitern, dass die Wahrheit unbequem ist |
+| Rückwirkende Änderungen | Neuberechnung ja, Rückbau von Übergängen nein. Ein Verstoß in der Vergangenheit wird **festgestellt und eskaliert**, nicht gesperrt — es gibt nichts mehr zu sperren. Genehmigte Zettel und freigegebene Belege werden nicht entwertet |
+| Übersteuerung (Frage 10) | **Dreiteiliger Grundsatz:** die Angabe ist nachweislich unrichtig, die Berichtigung nicht rechtzeitig möglich, **und** die Überlassung wäre nach richtiger Datenlage zulässig. Fehlt das Dritte, ist die Sperre nicht übersteuerbar. Eine Übersteuerung korrigiert eine falsche Datenlage, sie erlaubt keine rechtswidrige Überlassung. P4, P6, P7 und P8 sind **nicht** übersteuerbar |
+| Vorlauffristen | **Festwerte des Regelwerks**, nicht je Kunde konfigurierbar und keine Tarifwerte: sie beschreiben, wie früh gewarnt wird, nicht was rechtlich gilt. Sie stehen in 5.0 und 5.4.4, nicht in `processDeadlineConfig` |
+| Grenze der Prüfbarkeit | Ausdrücklich benannt statt stillschweigend überspielt: das System kann nicht feststellen, ob Equal Pay **gezahlt** wurde (kein Entgelt im Modell → **Frage 28**), ob eine Tätigkeitsbeschreibung die Wirklichkeit trifft, ob eine Überlassung verdeckt läuft, oder ob eine Erlaubnis widerrufen wurde, ohne dass es jemand einträgt |
+
+**Offen**
+
+- **Fünf neue offene Fragen, 26 bis 30** (damit 22 von 30 offen):
+  - **26** *(juristisch)* Zählen Unterbrechungen bis drei Monate als
+    Überlassungsdauer mit? 5.1.3 und 5.2.3 rechnen additiv; bei anderer Antwort
+    ändert sich nur je ein Rechenschritt.
+  - **27** *(juristisch)* Welche Grenze gilt, wenn sich der Monatswert während
+    einer laufenden Kette ändert? Heute: Wert am Stichtag.
+  - **28** Soll der Verleiher das tatsächliche Entgelt melden, damit Equal Pay
+    prüfbar wird? Betrifft 5.2, 6.3, 6.4.
+  - **29** *(juristisch)* Rechtsfolge des Erlöschens der Erlaubnis für laufende
+    Überlassungen (Abwicklungszeitraum, Erlöschensgrund) und wer die Beendigung
+    entscheidet.
+  - **30** Wie wird ein Arbeitskampf erfasst, und wer gibt die Zusicherung nach
+    § 11 Abs. 5 Satz 2 AÜG ab?
+- **Widerspruch zu Kapitel 3, nicht stillschweigend aufgelöst: 3.1 führt kein
+  Feld für die Arbeitskampfanzeige** und 3.7 kein Objekt für die Zusicherung,
+  obwohl 4.7 sie in Q05 und Q22 voraussetzt. 5.3.2 beschreibt die benötigten
+  Angaben, **erfindet aber kein Feld** und nennt den Behelf (`document` mit
+  `documentCategory = other`). Der Feldsatz gehört nach 3.1 bzw. 3.7 und ist mit
+  **Frage 30** zu entscheiden. Dies ist die einzige echte Datenlücke, die
+  Kapitel 5 gefunden hat.
+- **Spannung zu 3.12:** Die Übersteuerung wird heute nur als Audit-Eintrag mit
+  `reason` geführt. Braucht sie ein eigenes Objekt mit Antrag, Entscheidung und
+  Nachfrist, entscheidet die Antwort auf **Frage 10**; 5.5.4 hält die Stelle
+  offen und nennt, was sich dann in Kapitel 2 und 3 ändert.
+- **Frage 24 ist entschärft, nicht gelöst:** mit der Änderung von Q35 entfällt
+  ein Anlass für hängende Stundenzettel (eine AÜG-Sperre an der
+  Zettelgenehmigung), der Grundkonflikt zwischen Periodenschluss und
+  unentschiedenen Zetteln bleibt.
+- **Als Nächstes: die Szenarien in `tests/aueg/`** — 48 Zeilen aus 4.7, sechs
+  Zeilen N1–N6 aus 5.5.1 und die Grenzfalltabellen aus 5.1.5, 5.2.6, 5.3 und
+  5.4.5. Je Zeile mindestens zwei Szenarien, bei übersteuerbaren Sperren ein
+  drittes, bei nicht übersteuerbaren ein Szenario, das den Versuch zurückweist.
+  Erst danach Anwendungscode.
+- **Nicht angefasst**, weil nicht Auftrag dieser Arbeitseinheit: die weiter
+  fehlenden Statusmodelle für Rahmenvertrag und Preisliste (3.3, 4.0) und
+  Kapitel 1 und 6.
+- Noch offen: 2, 4, 5, 7–14, 16, 17, 21, 22, 24–30.
+
+---
+
 ## 2026-10-20 — Fragen 15, 18, 19, 20 entschieden (M2-Vorbereitung)
 
 **Gemacht**
