@@ -20,16 +20,22 @@ markiert. Keine Annahmen — ungeklärtes gehört in [Offene Fragen](#7-offene-f
 - 1.4 Nicht im Umfang (Lohnabrechnung, Zeitwirtschaft des Entleihers,
   Bewerbermanagement des Lieferanten) — TODO
 - 1.5 Glossar DE → EN (Fachbegriff, englischer Bezeichner, Definition) — die
-  Begriffe aus Kapitel 2 und die Objekt- und Attributbezeichner aus Kapitel 3
-  sind unten gemappt; die Statusnamen aus Kapitel 4, die Rechenbegriffe aus
-  Kapitel 5 und die Datenschutzbegriffe aus Kapitel 6 folgen mit diesen
-  Kapiteln — TODO (Kapitel 4–6)
+  Begriffe aus Kapitel 2, die Objekt- und Attributbezeichner aus Kapitel 3 und
+  die Status- und Übergangsbegriffe aus Kapitel 4 sind unten gemappt; die
+  Rechenbegriffe aus Kapitel 5 und die Datenschutzbegriffe aus Kapitel 6 folgen
+  mit diesen Kapiteln — TODO (Kapitel 5–6)
 
 ### 1.5 Glossar DE → EN
 
 Enthält die Begriffe aus Kapitel 2 (Rollen, Berechtigung, Mandant, Vertretung,
-Eskalation) und die Objekt- und Attributbezeichner aus Kapitel 3. Weitere
-Begriffe werden in **diese** Tabelle ergänzt, nicht in eine zweite.
+Eskalation), die Objekt- und Attributbezeichner aus Kapitel 3 und die Status-
+und Übergangsbegriffe aus Kapitel 4. Weitere Begriffe werden in **diese**
+Tabelle ergänzt, nicht in eine zweite.
+
+**Zu den Statuswerten aus Kapitel 4:** Dieselbe Bedeutung trägt denselben
+Bezeichner, auch über Modelle hinweg; die Spalte „Bedeutung" nennt deshalb die
+Modelle, in denen ein Wert vorkommt. Wo ein Zustand fachlich etwas anderes ist,
+trägt er einen anderen Namen (4.0, Namenskonvention).
 
 | Deutsch | Englischer Bezeichner | Bedeutung |
 |---|---|---|
@@ -132,6 +138,72 @@ Begriffe werden in **diese** Tabelle ergänzt, nicht in eine zweite.
 | Benutzer | `user` | Person mit Zugang zum System (Kapitel 3.11) |
 | Rollenkürzel | `roleCode` | technischer Code einer Rolle (`operatorAdmin` …) |
 | Audit-Eintrag | `auditEntry` | fachlicher Protokollsatz (Kapitel 3.12) |
+| Statusmodell | `statusModel` | Satz zulässiger Zustände und Übergänge eines Objekts (Kapitel 4) |
+| Zustand | `state` | ein Wert des Statusmodells |
+| Endzustand | `terminalState` | Zustand, aus dem kein Übergang herausführt (4.0, Regel 9) |
+| Übergang | `transition` | Wechsel von einem Zustand in einen anderen |
+| Auslösende Rolle | `triggeringRole` | Rolle, die einen Übergang auslöst; braucht `S` in 2.2 |
+| Vorbedingung | `precondition` | Bedingung, die vor einem Übergang erfüllt sein muss |
+| Nebenwirkung | `sideEffect` | Folge eines Übergangs: Benachrichtigung, Sperre, Protokolleintrag, Fristenlauf |
+| Systemübergang | `systemTransition` | Übergang ohne Benutzerhandlung, zeitgesteuert oder abgeleitet (4.0, Regel 10) |
+| Prozessfrist | `processDeadline` | Frist des Verfahrens ohne rechtliche Wirkung; Vorbelegungen in 4.0 |
+| Fristvorbelegung | `…DeadlineDays` | Konfigurationsschlüssel einer Prozessfrist in `processDeadlineConfig` (3.1), Werte in 4.0 |
+| Fristenlauf | `deadlineClock` | Beginn und Fortlauf einer Frist, die ein Übergang in Gang setzt |
+| Prüfergebnis | `ruleCheckResult` | Ergebnis einer AÜG-Prüfung (Kapitel 4.7, 5.5) |
+| Information (Ergebnisart) | `info` | Übergang findet statt, Ergebnis wird vermerkt (4.7) |
+| Warnung (Ergebnisart) | `warning` | Übergang findet statt, erzeugt Benachrichtigung und Eskalationsanlass (4.7) |
+| Sperre (Ergebnisart) | `block` | Übergang findet nicht statt; Übersteuerung nur nach 5.5 (4.7) |
+| Entwurf | `draft` | Anfangszustand: Bedarfsanfrage (4.1), Angebot und Profilvorschlag (4.2), Rahmenvertrag und Preisliste (3.3) |
+| Eingereicht | `submitted` | zur Entscheidung vorgelegt: Bedarfsanfrage, Angebot, Profilvorschlag, Stundenzettel (4.1, 4.2, 4.4); auch Anerkennungsstatus eines Nachweises (5.4) |
+| Freigegeben / genehmigt | `approved` | kundenseitig entschieden: Bedarfsanfrage (4.1), Verlängerung (4.3), Stundenzettel (4.4); auch Anerkennungsstatus eines Nachweises (5.4) |
+| Ausgeschrieben | `tendered` | Bedarfsanfrage ist an Lieferanten verteilt (4.1) |
+| In Auswahl | `inSelection` | mindestens ein Profil ist dem Kunden vorgelegt (4.1) |
+| Besetzt | `filled` | so viele Einsätze wie `headcount` (4.1) |
+| Storniert | `cancelled` | Vorgang aufgehoben: Bedarfsanfrage (4.1), Abrechnungsbeleg (4.5) |
+| Abgelaufen | `expired` | Frist verstrichen, ohne dass etwas zustande kam: Bedarfsanfrage, Einladung, Angebot (4.1, 4.2); auch Preisliste und Rahmenvertrag (3.3) |
+| Eingeladen | `invited` | Einladung zugestellt (4.2) |
+| Zur Kenntnis genommen | `viewed` | Einladung geöffnet (4.2) |
+| Angebot abgegeben | `offerSubmitted` | Einladung ist mit einem Angebot beantwortet (4.2) |
+| Abgesagt | `declined` | Lieferant bietet nicht an (4.2) *(offene Frage 23)* |
+| Gesichtet | `reviewed` | Betreiber hat Angebot bzw. Profilvorschlag bewertet (4.2) |
+| Dem Kunden vorgelegt | `releasedToCustomer` | Profilvorschlag ist pseudonymisiert beim Kunden (4.2, 6.4) |
+| Interview vereinbart | `interviewScheduled` | Kunde will die Person kennenlernen (4.2) |
+| Zugesagt | `accepted` | Zuschlag bzw. fachliche Zusage (4.2); auch Anerkennungsstatus eines Nachweises (5.4) |
+| Abgelehnt | `rejected` | Absage mit Begründung: Angebot, Profilvorschlag, Verlängerung, Stundenzettel (4.2–4.4); auch Anerkennungsstatus eines Nachweises (5.4) |
+| Zurückgezogen | `withdrawn` | durch den Einreicher beendet: Angebot, Profilvorschlag, Verlängerung (4.2, 4.3) |
+| Geplant | `planned` | Einsatz angelegt, Überlassung nicht begonnen (4.3) |
+| Aktiv | `active` | läuft: Einsatz (4.3), Lieferant (4.6); auch Preisliste und Rahmenvertrag (3.3) |
+| Unterbrochen | `interrupted` | dokumentierte Unterbrechung der Überlassung läuft (4.3) |
+| Beendet | `completed` | Einsatz regulär zum geplanten Ende abgelaufen (4.3) |
+| Vorzeitig beendet | `terminatedEarly` | Einsatz endet vor dem geplanten Ende (4.3) |
+| Beantragt | `requested` | Verlängerung beantragt, nicht entschieden (4.3) |
+| Wirksam | `effective` | Verlängerung vollzogen, `plannedEndDate` verschoben (4.3) |
+| Erfasst | `recorded` | Stundenzettel in Erfassung, Zeitpositionen änderbar (4.4) |
+| In Prüfung (Stundenzettel) | `inApproval` | mindestens ein Freigabeschritt offen (4.4) *(offene Frage 5)* |
+| Korrigiert | `corrected` | Stundenzettel durch eine genehmigte Korrekturfassung ersetzt (4.4) |
+| Korrekturfassung | `correctionOf` | neuer Stundenzettel, der einen genehmigten ersetzt (3.8, 4.4) |
+| Offen (Periode) | `open` | Abrechnungsperiode nimmt Zeiten und Belege auf (4.5) |
+| Geschlossen (Periode) | `closed` | Abrechnungsperiode abgeschlossen (4.5) |
+| Erstellt | `created` | Abrechnungsbeleg erzeugt, nicht abgegeben (4.5) |
+| In Prüfung (Beleg) | `inReview` | Abrechnungsbeleg wird vor der Freigabe geprüft (4.5) |
+| Freigegeben (Beleg) | `released` | Vier-Augen-Freigabe erfolgt, Beleg abgegeben (4.5) |
+| Beanstandet | `disputed` | Gegenseite widerspricht dem Beleg (4.5) |
+| Bestätigt | `confirmed` | Gegenseite bestätigt den Beleg; nur Einkaufsseite (4.5) *(offene Frage 6)* |
+| Onboarding | `onboarding` | Lieferant angelegt, Voraussetzungen unvollständig (4.6) |
+| Gesperrt | `blocked` | Teilnahme des Lieferanten ausgesetzt (4.6) |
+| Inaktiv | `inactive` | Beauftragung des Lieferanten beendet (4.6); auch Kandidat (3.6) |
+| Gekündigt | `terminated` | Rahmenvertrag beendet (3.3); Statusmodell noch nicht geführt (4.0) |
+| Höchstüberlassungsprüfung | `maxDurationCheck` | Prüfung P1 (4.7, 5.1) |
+| Unterbrechungsprüfung | `interruptionResetCheck` | Prüfung P2 (4.7, 5.1) |
+| Equal-Pay-Fristprüfung | `equalPayDeadlineCheck` | Prüfung P3 (4.7, 5.2) |
+| Vergleichsentgeltprüfung | `comparableWageCheck` | Prüfung P4 (4.7, 5.2) |
+| Branchenzuschlagsprüfung | `industryPremiumCheck` | Prüfung P5 (4.7, 5.2) |
+| Drehtürprüfung | `revolvingDoorCheck` | Prüfung P6 (4.7, 5.3) |
+| Arbeitskampfprüfung | `industrialActionCheck` | Prüfung P7 (4.7, 5.3) |
+| Konkretisierungsprüfung | `concretizationCheck` | Prüfung P8 (4.7, 5.3) |
+| Erlaubnisprüfung | `permitValidityCheck` | Prüfung P9 (4.7, 5.4) |
+| Nachweisprüfung | `mandatoryDocumentCheck` | Prüfung P10 (4.7, 5.4) |
+| Arbeitsverhältnisprüfung | `employmentRelationshipCheck` | Prüfung P11 (4.7, 5.3) |
 
 ## 2. Rollen und Berechtigungen
 
@@ -2101,22 +2173,1021 @@ Lieferant), `ASSIGNMENT` (Betreiber ↔ Kunde ↔ Lieferant), `TIMESHEET`
 
 ## 4. Statusmodelle
 
-Je Modell: Zustände, erlaubte Übergänge, auslösende Rolle, Vorbedingungen,
-Nebenwirkungen (Benachrichtigung, Sperre, Protokolleintrag).
+Dieses Kapitel beschreibt, **welcher Übergang wann und durch wen** zulässig
+ist. Die Berechtigungsmatrix 2.2 sagt mit `S` nur, *wer überhaupt* einen Status
+wechseln darf; dieses Kapitel ist die zweite Hälfte dieser Aussage. Die Objekte
+und ihre Felder stehen in Kapitel 3 und werden hier nicht erweitert.
 
-- 4.1 Bedarfsanfrage: Entwurf → freigegeben → ausgeschrieben → in Auswahl →
-  besetzt → storniert / abgelaufen — TODO verfeinern
-- 4.2 Lieferantenangebot / Profilvorschlag: eingereicht → gesichtet →
-  Interview → zugesagt → abgelehnt → zurückgezogen — TODO verfeinern
-- 4.3 Einsatz: geplant → aktiv → unterbrochen → verlängert → beendet →
-  vorzeitig beendet — TODO verfeinern
-- 4.4 Stundenzettel: erfasst → eingereicht → in Prüfung → genehmigt →
-  abgelehnt → korrigiert — TODO verfeinern
-- 4.5 Abrechnungsbeleg: offen → erstellt → geprüft → freigegeben →
-  storniert — TODO verfeinern
-- 4.6 Lieferantenstatus: Onboarding → aktiv → gesperrt → inaktiv — TODO
-- 4.7 Querschnitt: welche Statusübergänge AÜG-Prüfungen auslösen (Verweis
-  auf Kapitel 5) — TODO
+- 4.1 Bedarfsanfrage
+- 4.2 Einladung, Lieferantenangebot, Profilvorschlag
+- 4.3 Einsatz und Verlängerung
+- 4.4 Stundenzettel und Freigabeschritte
+- 4.5 Abrechnungsperiode und Abrechnungsbeleg
+- 4.6 Lieferantenstatus
+- 4.7 Querschnitt: Statusübergang → AÜG-Prüfung → Ergebnisart
+
+### 4.0 Konventionen für alle Statusmodelle
+
+Die folgenden Regeln gelten für **jedes** Modell dieses Kapitels und werden in
+den einzelnen Abschnitten nicht wiederholt.
+
+1. **Nur genannte Übergänge.** Ein Status wechselt ausschließlich durch einen in
+   diesem Kapitel genannten Übergang. Was nicht aufgeführt ist, ist nicht
+   zulässig — auch nicht „aus Versehen" durch eine Feldänderung. Jedes Modell
+   nennt deshalb ausdrücklich, welche Übergänge es **nicht** gibt.
+2. **Berechtigung ist dreifach bedingt.** Die auslösende Rolle braucht `S` in
+   der Matrix 2.2, die Mandantenzuordnung des Objekts und die Zuständigkeit
+   (Kapitel 2). Fehlt eine der drei, ist der Übergang unzulässig, selbst wenn
+   dieses Kapitel ihn nennt.
+3. **Jeder Übergang wird protokolliert.** Ein Übergang erzeugt einen
+   Audit-Eintrag mit `operation = transition` und `statusFrom` / `statusTo`
+   (3.12). Handlungen in Vertretung tragen zusätzlich den Vertretungsvermerk
+   (2.4, Regel 6). Die Spalte „Nebenwirkungen" nennt den Protokolleintrag nur
+   dort gesondert, wo er über diesen Pflichtumfang hinausgeht (z. B. eine
+   Pflichtbegründung).
+4. **Kein genehmigender Übergang durch Fristablauf.** Zeit allein genehmigt,
+   verlängert, besetzt und bestätigt nichts (2.4, Regel 1). Zeitgesteuerte
+   Übergänge gibt es nur dort, wo sie **entziehen** statt zu gewähren:
+   `expired` bei Bedarfsanfrage, Einladung und Angebot. Alles andere wird
+   eskaliert, nicht gewechselt.
+5. **Sperren sind keine Zustände.** Ein Prüfergebnis „Sperre" (5.5) verhindert
+   einen Übergang; es erzeugt keinen eigenen Status. Ein gesperrter Vorgang
+   bleibt in seinem Zustand stehen. Nur beim Lieferanten ist `blocked` ein
+   echter Zustand (4.6) — er beschreibt die Organisation, nicht ein
+   Prüfergebnis.
+6. **Vier-Augen-Prinzip.** Wo ein Übergang eine Freigabe ist, darf er nicht von
+   derselben Person ausgelöst werden, die den Vorgang erstellt oder beantragt
+   hat — auch nicht in Vertretung (2.4, Regel 5). Das betrifft die Freigabe der
+   Bedarfsanfrage (4.1), die Freigabe des Abrechnungsbelegs (4.5, Fußnote [30])
+   und die Entsperrung eines Lieferanten (4.6, Fußnote [5]).
+7. **Der Betreiber ersetzt keine Kundenentscheidung.** Kein Übergang, den
+   dieses Kapitel einer Kundenrolle zuweist, darf vom Betreiber vollzogen
+   werden — auch nicht in Vertretung und auch nicht nach Fristablauf (2.1,
+   2.4 Regel 3). Liegengebliebene Entscheidungen werden eskaliert.
+8. **Benachrichtigungen unterliegen den Sichtbarkeitsregeln.** Eine
+   Benachrichtigung aus einem Übergang enthält nur Daten, die der Empfänger
+   nach 2.3 sehen darf; mehrere Lieferanten stehen nie gemeinsam im Adressfeld
+   (2.3, Regel 2).
+9. **Endzustände sind endgültig.** Aus einem Endzustand führt kein Übergang
+   zurück. Ein Vorgang, der nach einem Endzustand wiederholt werden soll,
+   entsteht als **neues** Objekt (neue Ausschreibungsrunde, neuer Einsatz,
+   Korrekturfassung, Storno- und Nachbeleg).
+10. **Systemübergänge.** Zeitgesteuerte und abgeleitete Übergänge trägt das
+    System. Der Audit-Eintrag führt dann ein Systemkennzeichen statt eines
+    Benutzers (3.12).
+
+**Namenskonvention.** Statusbezeichner sind modellübergreifend einheitlich:
+derselbe Bezeichner bedeutet dasselbe. Wo ein Zustand fachlich etwas anderes
+ist, trägt er einen anderen Namen — deshalb heißt die besetzte Bedarfsanfrage
+`filled` und der regulär beendete Einsatz `completed`, nicht beides „fertig".
+
+**Prozessfristen.** Die Fristwerte dieses Kapitels sind **Vorbelegungen** und je
+Kunde über `processDeadlineConfig` (3.1) konfigurierbar (2.4, Regel 5). Sie sind
+Prozessfristen ohne rechtliche Wirkung; die AÜG-Fristen stehen ausschließlich in
+Kapitel 5. Fristablauf löst Erinnerung und Eskalation aus, nie einen Übergang
+(Regel 4).
+
+| Anlass | Konfigurationsschlüssel | Vorbelegung | Wirkung bei Ablauf |
+|---|---|---|---|
+| Entscheidung über eine eingereichte Bedarfsanfrage | `demandApprovalDeadlineDays` | 3 Arbeitstage ab `submitted` | Eskalation KG → Vertretung → KB → MD (2.4) |
+| Kenntnisnahme einer Einladung | `invitationViewDeadlineDays` | 1 Arbeitstag ab `invitedAt` | Erinnerung an LD, dann LA |
+| Angebotsfrist | Objektfeld `offerDeadline` (3.4, 3.5) | keine Vorbelegung — je Anfrage bzw. Runde | Einladung ohne Angebot auf `expired`; Eskalation (2.4) |
+| Bindefrist eines Angebots | Objektfeld `offerValidUntil` (3.5) | keine Vorbelegung — je Angebot, optional | Angebot auf `expired`, offene Profilvorschläge werden abgelehnt (4.2) |
+| Rückmeldung des Kunden auf ein vorgelegtes Profil | `submissionFeedbackDeadlineDays` | 3 Arbeitstage ab `releasedToCustomer` | Eskalation KB → Vertretung → KG → MD (2.4) |
+| Entscheidung über eine Verlängerung | `extensionApprovalDeadlineDays` | 5 Arbeitstage ab `requested`, spätestens 10 Kalendertage vor Einsatzende | Eskalation KG → Vertretung → KE → MD |
+| Einreichung eines Stundenzettels | `timesheetSubmissionDeadlineDays` | 3 Kalendertage nach `periodTo` | Eskalation LD → LA → MD (2.4) |
+| Genehmigung eines Stundenzettels | `timesheetApprovalDeadlineDays` | bis `closingDate` der Abrechnungsperiode, Erinnerung 3 Kalendertage vorher | Eskalation; **keine** Genehmigungsfiktion |
+| Prüfung eines Abrechnungsbelegs | `billingReviewDeadlineDays` | 14 Kalendertage ab `released` | Erinnerung, dann Eskalation; **keine** Bestätigungsfiktion |
+| Vorlauf vor Ablauf eines Nachweises | → Kapitel 5.4 | dort festzulegen | dort festzulegen |
+
+**Statusmodelle, die dieses Kapitel nicht führt.** Kapitel 3 verweist für jedes
+Objekt auf sein Statusmodell. Sieben Objekte haben einen Lebenszyklus, für den
+die Gliederung von Kapitel 4 keines vorsah. Zwei davon trägt dieses Kapitel
+nach, fünf bleiben offen:
+
+| Objekt | Stand |
+|---|---|
+| Einladung (3.5) | **nachgetragen** in 4.2 |
+| Abrechnungsperiode (3.9) | **nachgetragen** in 4.5 |
+| Rahmenvertrag (3.3) | offen — `draft` / `active` / `expired` / `terminated`, Pflege ausschließlich `MA`; gehört in ein eigenes Unterkapitel |
+| Preisliste (3.3) | offen — `draft` / `active` / `expired`, dito |
+| Ausschreibung (3.5) | kein eigenes Modell nötig: offen bis `closedAt`, der Fortschritt ergibt sich aus 4.1 und den Einladungen |
+| Dokument / Nachweis (3.10) | gehört nach **5.4** (Anerkennung mit Fristen und Sperrwirkung), nicht in dieses Kapitel |
+| Kunde, Standort, Kostenstelle (3.1) | kein Modell; aktiv/inaktiv über `validTo` und `deactivatedAt`. Die Matrix hält `S` für `MA` frei, damit ein Onboarding-Modell analog 4.6 nachgetragen werden kann |
+
+### 4.1 Bedarfsanfrage
+
+Objekt: `demandRequest` (3.4). Matrixzeile „Bedarfsanfrage (3.4)" in 2.2.
+
+#### Zustände
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Entwurf | `draft` | Der Bedarfsträger beschreibt den Bedarf. Der **einzige** Zustand, in dem `KB` inhaltlich ändern darf (Fußnote [11]). |
+| Zur Freigabe eingereicht | `submitted` | Der Bedarf ist vollständig beschrieben und wartet auf die Entscheidung des Genehmigers. Eskalationsanlass (2.4). |
+| Freigegeben | `approved` | Bedarf und Kostenwirkung sind kundenseitig freigegeben ([13]); `approvedAt` / `approvedBy` sind gesetzt. Noch nicht an Lieferanten verteilt. |
+| Ausgeschrieben | `tendered` | Mindestens eine Ausschreibung (3.5) ist veröffentlicht; die Angebotsfrist läuft. Weitere Runden ändern den Zustand nicht. |
+| In Auswahl | `inSelection` | Mindestens ein Profilvorschlag ist dem Kunden vorgelegt (4.2). Der Auswahlprozess läuft. |
+| Besetzt | `filled` | So viele Einsätze sind wirksam, wie `headcount` verlangt (4.3). **Endzustand.** |
+| Storniert | `cancelled` | Der Bedarf ist entfallen; `cancellationReason` ist Pflicht. **Endzustand.** |
+| Abgelaufen | `expired` | Der Bedarfsbeginn ist erreicht, ohne dass eine Besetzung zustande kam. **Endzustand.** |
+
+**Teilbesetzung ist kein eigener Zustand.** Sind bei `headcount > 1` erst
+einige Stellen besetzt, bleibt die Anfrage in `inSelection`. Erst die letzte
+Besetzung führt nach `filled`. Das hält die Zahl der Zustände klein und
+verhindert, dass Teilmengen in Berichten doppelt gezählt werden.
+
+#### Übergänge
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `draft` | `KB` (anlegen), `MD` im Auftrag ([10]) | Kunde, Standort und Kostenstelle gesetzt; Zuständigkeit des Bedarfsträgers *(offene Frage 14)* | Bei Anlage durch `MD` ist `createdOnBehalfOf` Pflicht ([10]) |
+| `draft` | `submitted` | `KB` ([12]), `MD` | Pflichtfelder vollständig: `activityDescription`, mindestens eine Anforderung, `siteRef`, `startDate`, `weeklyHours`, `headcount` | Benachrichtigung an `KG`; `demandApprovalDeadlineDays` beginnt; ab hier keine inhaltliche Änderung durch `KB` ([11]); AÜG-Prüfung P8 (5.3) |
+| `submitted` | `approved` | `KG` ([13]) | Auslöser ist **nicht** `requestedBy` (2.4, Regel 5); Kostenwirkung beurteilt ([8]) | `approvedAt` / `approvedBy` werden gesetzt; Benachrichtigung an `KB` und `MD`; Frist endet; AÜG-Prüfungen P8, P1-Vorschau |
+| `submitted` | `draft` | `KG` ([13]) | Begründung Pflicht (Rückweisung zur Überarbeitung; 3.4 führt dafür **kein** Feld — siehe Hinweis unten) | Benachrichtigung an `KB`; `KB` darf wieder ändern ([11]); Protokolleintrag mit Begründung |
+| `approved` | `tendered` | `MD`, `MA` | Ausschreibung mit mindestens einer Einladung veröffentlicht; `offerDeadline` gesetzt; je eingeladenem Lieferanten: Status `active` (4.6) und anerkannte, gültige Erlaubnis (5.4) | Einladungen entstehen in `invited` (4.2); je Lieferant **eine einzeln adressierte** Benachrichtigung (2.3, Regel 2); Angebotsfrist läuft; AÜG-Prüfungen P9 (Sperre je Einladung), P7 |
+| `tendered` | `tendered` | `MD`, `MA` | Vorherige Ausschreibung geschlossen (`closedAt`); neue Ausschreibung mit `tenderRound + 1` | **Kein** Statuswechsel, aber ein Protokolleintrag am neuen Ausschreibungsobjekt; neue Einladungen; die alten Einladungen bleiben in ihrem Endzustand |
+| `tendered` | `inSelection` | `MD` ([17]) | Mindestens ein Profilvorschlag steht in `releasedToCustomer` (4.2) | Benachrichtigung an `KB`; `submissionFeedbackDeadlineDays` beginnt; AÜG-Prüfungen P1, P6, P11 je Vorschlag |
+| `inSelection` | `tendered` | `MD` | Alle vorgelegten Vorschläge sind abgelehnt oder zurückgezogen **und** die Angebotsfrist läuft noch oder eine neue Runde ist eröffnet | Benachrichtigung an `KB`; Protokolleintrag. Kein Rückfall, wenn bereits ein Einsatz aus der Anfrage besteht |
+| `inSelection` | `filled` | `MD` | So viele Einsätze in `planned` oder `active` wie `headcount`; je Einsatz keine Sperre aus 5.1, 5.3, 5.4 | Offene Einladungen auf `expired`, offene Angebote und Vorschläge auf `rejected` mit Begründung **ohne** Bezug auf ein fremdes Angebot (2.3, Regel 3); Ausschreibung erhält `closedAt`; einzeln adressierte Benachrichtigungen |
+| `draft`, `submitted`, `approved`, `tendered`, `inSelection` | `cancelled` | `KB` ([12]), `MD`, `MA` | `cancellationReason` Pflicht; **kein** wirksamer Einsatz aus dieser Anfrage (dann 4.3) | Offene Einladungen, Angebote und Vorschläge werden beendet (4.2); einzeln adressierte Benachrichtigungen; Protokolleintrag mit Begründung |
+| `approved`, `tendered`, `inSelection` | `expired` | System | `startDate` erreicht und kein Einsatz zu dieser Anfrage vorhanden | Wie `cancelled`, ohne Begründungsfeld; Benachrichtigung an `KB` und `MD`; Protokolleintrag mit Systemkennzeichen. Entzieht nur — genehmigt nichts (4.0, Regel 4) |
+
+#### Endzustände und ausgeschlossene Übergänge
+
+**Endzustände:** `filled`, `cancelled`, `expired`.
+
+Ausdrücklich **nicht** vorhanden:
+
+- **Kein** `draft` → `approved`. Einreichen und Freigeben sind getrennte
+  Handlungen zweier Rollen (Vier-Augen-Prinzip).
+- **Keine** Freigabe durch `MA` oder `MD`. Die Freigabe ist eine
+  Kundenentscheidung; eine liegengebliebene Freigabe wird eskaliert, nicht
+  übernommen (2.4, Regel 3).
+- **Kein** `submitted` → `tendered`. Ohne Freigabe keine Ausschreibung.
+- **Kein** zeitgesteuerter Übergang nach `approved`, `tendered`, `inSelection`
+  oder `filled`. Fristablauf gewährt nichts.
+- **Kein** Rückweg aus `filled`, `cancelled` oder `expired`. Eine Nachbesetzung
+  nach vorzeitiger Beendigung eines Einsatzes ist eine **neue** Bedarfsanfrage,
+  keine Wiederöffnung — sonst verliert die Historie den Bezug zwischen Anfrage,
+  Angebot und Einsatz.
+- **Kein** `filled` → `cancelled`. Ein besetzter Bedarf wird über den Einsatz
+  beendet (4.3), nicht über die Anfrage.
+- **Kein** Übergang durch Änderung eines Feldes. Eine Verschiebung von
+  `startDate` oder `endDate` im Zustand `draft` ist eine Änderung, kein
+  Statuswechsel.
+
+> **Hinweis auf eine Lücke in 3.4.** Die Rückweisung `submitted` → `draft`
+> verlangt eine Begründung, damit der Bedarfsträger weiß, was zu ändern ist.
+> 3.4 führt nur `cancellationReason` (Storno), kein Feld für den
+> Rückweisungsgrund. Bis das entschieden ist, steht die Begründung im
+> Audit-Eintrag (`reason`, 3.12). Entweder erhält 3.4 ein eigenes Feld oder die
+> Protokolllösung wird ausdrücklich festgeschrieben — stillschweigend bleibt es
+> nicht.
+
+#### Diagramm
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft : anlegen (KB, MD im Auftrag)
+    draft --> submitted : einreichen (KB)
+    submitted --> approved : freigeben (KG)
+    submitted --> draft : zurueckweisen (KG)
+    approved --> tendered : ausschreiben (MD)
+    tendered --> tendered : neue Runde (MD)
+    tendered --> inSelection : Profil vorgelegt (MD)
+    inSelection --> tendered : alle Vorschlaege abgelehnt (MD)
+    inSelection --> filled : headcount besetzt (MD)
+    draft --> cancelled : stornieren (KB, MD)
+    submitted --> cancelled : stornieren (KB, MD)
+    approved --> cancelled : stornieren (KB, MD)
+    tendered --> cancelled : stornieren (KB, MD)
+    inSelection --> cancelled : stornieren (KB, MD)
+    approved --> expired : Bedarfsbeginn erreicht (System)
+    tendered --> expired : Bedarfsbeginn erreicht (System)
+    inSelection --> expired : Bedarfsbeginn erreicht (System)
+    filled --> [*]
+    cancelled --> [*]
+    expired --> [*]
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| `draft` → `submitted` | P8 Kennzeichnung und Konkretisierung: liegt eine konkrete Tätigkeitsbeschreibung vor? | 5.3 |
+| `submitted` → `approved` | P8 erneut; P1 Vorschau: überschreitet der angefragte Zeitraum die Höchstüberlassungsdauer schon rechnerisch? (ohne Person, daher nur Information) | 5.3, 5.1 |
+| `approved` → `tendered` | P9 Erlaubnis je eingeladenem Lieferanten; P7 Arbeitskampf am Standort | 5.4, 5.3 |
+| `tendered` → `inSelection` | P1, P6, P11 je vorgelegtem Profilvorschlag — siehe 4.2 | 5.1, 5.3 |
+| `inSelection` → `filled` | Keine eigene Prüfung; die Prüfungen liegen am Einsatz (4.3) | 5.1–5.4 |
+
+Die Ergebnisarten stehen in der Querschnittstabelle 4.7.
+
+### 4.2 Einladung, Lieferantenangebot, Profilvorschlag
+
+Drei Objekte mit eigenem Lebenszyklus, die denselben Vorgang tragen: die
+Einladung (`tenderInvitation`, 3.5) ist die Teilnahme eines Lieferanten, das
+Angebot (`supplierOffer`, 3.5) seine Antwort, der Profilvorschlag
+(`candidateSubmission`, 3.6) die Vorlage einer Person. Sie werden gemeinsam
+behandelt, weil die Übergänge voneinander abhängen — aber sie sind **drei**
+Modelle, nicht eines.
+
+Die Matrix 2.2 führt sie in drei Zeilen: „Ausschreibung, Einladung (3.5)",
+„Lieferantenangebot, Angebotsposition (3.5)" und „Kandidat / Profilvorschlag
+(3.6)".
+
+#### 4.2.1 Einladung
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Eingeladen | `invited` | Die Einladung ist zugestellt; der Lieferant hat sie noch nicht geöffnet. |
+| Zur Kenntnis genommen | `viewed` | Der Lieferant hat die Anfrage im Umfang von [14] gesehen; `viewedAt` ist gesetzt. Grundlage der Eskalation (2.4). |
+| Angebot abgegeben | `offerSubmitted` | Zu dieser Einladung existiert ein eingereichtes Angebot. **Ende des eigenen Lebenszyklus** — der Vorgang läuft am Angebot weiter. |
+| Abgesagt | `declined` | Der Lieferant bietet nicht an; `declineReason` ist Pflicht. **Endzustand.** |
+| Abgelaufen | `expired` | Die Angebotsfrist ist verstrichen oder die Ausschreibung ist geschlossen, ohne dass ein Angebot vorliegt. **Endzustand.** |
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `invited` | `MD`, `MA` | Ausschreibung veröffentlicht (4.1); Lieferant `active` (4.6) mit anerkannter, gültiger Erlaubnis (5.4) | Einzeln adressierte Benachrichtigung an `LD` (2.3, Regel 2); `invitationViewDeadlineDays` beginnt; AÜG-Prüfung P9 (Sperre) |
+| `invited` | `viewed` | System | Erster lesender Zugriff eines Benutzers des Lieferanten auf die Einladung | `viewedAt` wird gesetzt; Erinnerungsfrist endet. **Kein** Rechtsgeschäft und keine Zusage |
+| `invited`, `viewed` | `offerSubmitted` | System, als Folge des Übergangs `draft` → `submitted` am Angebot (4.2.2) | Angebot zu dieser Einladung in `submitted` | `respondedAt` wird gesetzt; Benachrichtigung an `MD` |
+| `invited`, `viewed` | `declined` | `LD` — *Statusrecht fehlt in 2.2, siehe **offene Frage 23*** | `declineReason` Pflicht | `respondedAt` wird gesetzt; Benachrichtigung an `MD`; die Absage enthält keinen Bezug auf andere Lieferanten |
+| `invited`, `viewed` | `expired` | System | `offerDeadline` der Ausschreibung verstrichen **oder** Ausschreibung geschlossen (`closedAt`), und kein Angebot vorhanden | Benachrichtigung an `MD`; Eskalationsanlass „Ausschreibung ohne Angebot" (2.4). Entzieht nur |
+
+**Endzustände:** `declined`, `expired`. `offerSubmitted` ist das Ende des
+eigenen Lebenszyklus: die Einladung ist beantwortet, der Vorgang läuft am
+Angebot weiter (4.2.2).
+
+**Ausgeschlossen:**
+
+- **Kein** Rückweg von `declined` oder `expired`. Eine zweite Chance ist eine
+  neue Ausschreibungsrunde mit neuer Einladung (3.5), keine Wiederbelebung.
+- **Kein** `offerSubmitted` → `viewed`. Zieht der Lieferant sein Angebot zurück,
+  bleibt die Einladung auf `offerSubmitted`: sie **war** beantwortet, und der
+  Rückzug ist am Angebot dokumentiert.
+- **Keine** Mitteilung über fremde Einladungen. Kein Übergang darf erkennbar
+  machen, wie viele Lieferanten eingeladen wurden oder geantwortet haben
+  (2.3, „Zwischen Lieferanten").
+
+```mermaid
+stateDiagram-v2
+    [*] --> invited : einladen (MD)
+    invited --> viewed : erster Zugriff (System)
+    invited --> offerSubmitted : Angebot eingereicht (System)
+    viewed --> offerSubmitted : Angebot eingereicht (System)
+    invited --> declined : absagen (LD, offene Frage 23)
+    viewed --> declined : absagen (LD, offene Frage 23)
+    invited --> expired : Angebotsfrist verstrichen (System)
+    viewed --> expired : Angebotsfrist verstrichen (System)
+    offerSubmitted --> [*]
+    declined --> [*]
+    expired --> [*]
+```
+
+> *(offene Frage 23, neu)* Die Einladung trägt in 3.5 `declineReason`,
+> `respondedAt` und den Wert `declined` — die Absage ist also fachlich
+> vorgesehen. Die Matrix 2.2 gibt dem Lieferantendisponenten in der Zeile
+> „Ausschreibung, Einladung (3.5)" aber nur `L[16]`, kein `S` und kein `Ä`. Der
+> Widerspruch wird hier **nicht** stillschweigend aufgelöst: entweder erhält
+> `LD` ein eng begrenztes `S` auf die eigene Einladung (analog [20]: nur den
+> eigenen Vorgang), oder die Absage wird vom `MD` auf Meldung des Lieferanten
+> erfasst. Das ist eine Entscheidung über Kapitel 2, nicht über Kapitel 4.
+
+#### 4.2.2 Lieferantenangebot
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Entwurf | `draft` | Der Lieferant erfasst Verfügbarkeit, Menge und Preis. Löschen nur hier ([21]). |
+| Eingereicht | `submitted` | Das Angebot liegt beim Betreiber; `submittedAt` ist gesetzt. Änderung durch `LD` noch möglich ([19]). |
+| Gesichtet | `reviewed` | Der Betreiber hat das Angebot bewertet; `reviewedAt` ist gesetzt. **Ab hier keine Änderung durch `LD`** ([19]). |
+| Zugesagt | `accepted` | Der Lieferant erhält den Zuschlag: mindestens ein Profilvorschlag dieses Angebots ist besetzt. **Endzustand.** |
+| Abgelehnt | `rejected` | Der Betreiber lehnt ab; Begründung Pflicht und **ohne** Bezug auf ein fremdes Angebot (2.3, Regel 3). **Endzustand.** |
+| Zurückgezogen | `withdrawn` | Der Lieferant zieht zurück; `withdrawnAt` ist gesetzt. **Endzustand.** |
+| Abgelaufen | `expired` | Die Bindefrist `offerValidUntil` ist verstrichen, ohne Entscheidung. **Endzustand.** |
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `draft` | `LD` (anlegen) | Eigene Einladung in `invited` oder `viewed`; Angebotsfrist nicht verstrichen | Je Einladung höchstens **ein** Angebot (3.13) |
+| `draft` | `submitted` | `LD` ([20]) | Mindestens eine Angebotsposition; `availableFrom` und `offeredHeadcount` gesetzt; Angebotsfrist nicht verstrichen | Einladung auf `offerSubmitted` (4.2.1); Benachrichtigung an `MD`; Angebot wird für den Betreiber sichtbar |
+| `submitted` | `submitted` | `LD` ([19]) | Angebot noch nicht gesichtet | Inhaltliche Änderung, **kein** Statuswechsel; Protokolleintrag mit geänderten Feldern (3.12) |
+| `submitted` | `reviewed` | `MD` ([17]), `MA` | — | `reviewedAt` wird gesetzt; ab hier keine Änderung durch `LD` ([19]); keine Benachrichtigung an andere Lieferanten |
+| `reviewed` | `accepted` | `MD` ([17]) | Mindestens ein Profilvorschlag dieses Angebots in `accepted` (4.2.3) | Benachrichtigung an `LD` — Zuschlag ohne Angaben zu fremden Angeboten; Grundlage für den Einsatz (4.3) |
+| `submitted`, `reviewed` | `rejected` | `MD` ([17]), `MA` | Begründung Pflicht, ohne Fremdbezug (2.3, Regel 3) | Benachrichtigung an `LD`; offene Profilvorschläge dieses Angebots auf `rejected`; Protokolleintrag mit Begründung |
+| `draft`, `submitted`, `reviewed` | `withdrawn` | `LD` ([20]) | Angebot noch nicht `accepted` | Benachrichtigung an `MD`; offene Profilvorschläge dieses Angebots auf `withdrawn`; Einladung bleibt auf `offerSubmitted` |
+| `submitted`, `reviewed` | `expired` | System | `offerValidUntil` verstrichen und keine Entscheidung getroffen | Benachrichtigung an `LD` und `MD`; offene Profilvorschläge auf `expired`-Wirkung (4.2.3: `rejected` mit Fristbegründung). Entzieht nur |
+
+**Endzustände:** `accepted`, `rejected`, `withdrawn`, `expired`.
+
+**Ausgeschlossen:**
+
+- **Kein** `accepted` → irgendwohin. Ein Widerruf des Zuschlags ist die
+  vorzeitige Beendigung des entstandenen Einsatzes (4.3), nicht ein Rückschritt
+  des Angebots.
+- **Keine** inhaltliche Änderung durch den Betreiber. `MA` darf sperren oder
+  stornieren, aber nicht ändern (2.1); `rejected` ist deshalb kein Ersatz für
+  eine Korrektur.
+- **Kein** `draft` → `reviewed`. Ein nicht eingereichtes Angebot ist für den
+  Betreiber nicht sichtbar.
+- **Kein** Übergang, der dem Lieferanten die eigene Platzierung verrät — auch
+  nicht in der Ablehnungsbegründung (2.3, „Zwischen Lieferanten").
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft : anlegen (LD)
+    draft --> submitted : einreichen (LD)
+    submitted --> submitted : aendern bis zur Sichtung (LD)
+    submitted --> reviewed : sichten (MD)
+    reviewed --> accepted : Zuschlag (MD)
+    submitted --> rejected : ablehnen (MD)
+    reviewed --> rejected : ablehnen (MD)
+    draft --> withdrawn : zurueckziehen (LD)
+    submitted --> withdrawn : zurueckziehen (LD)
+    reviewed --> withdrawn : zurueckziehen (LD)
+    submitted --> expired : Bindefrist verstrichen (System)
+    reviewed --> expired : Bindefrist verstrichen (System)
+    accepted --> [*]
+    rejected --> [*]
+    withdrawn --> [*]
+    expired --> [*]
+```
+
+#### 4.2.3 Profilvorschlag
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Entwurf | `draft` | Der Lieferant stellt den Vorschlag zusammen. Löschen nur hier ([21]). |
+| Eingereicht | `submitted` | Der Vorschlag liegt beim Betreiber; `submittedAt` ist gesetzt. |
+| Gesichtet | `reviewed` | Der Betreiber hat geprüft und die AÜG-Vorprüfungen ausgeführt. |
+| Dem Kunden vorgelegt | `releasedToCustomer` | Der Vorschlag ist dem Bedarfsträger zugänglich — **pseudonymisiert**, `releasedToCustomerAt` gesetzt ([22], 6.4). |
+| Interview vereinbart | `interviewScheduled` | Der Bedarfsträger will die Person kennenlernen; `interviewScheduledAt` ist gesetzt. |
+| Zugesagt | `accepted` | Fachliche Zusage des Kunden; `decision = accepted`. Offenlegungsstufe wechselt auf `identified` (6.4). **Endzustand.** |
+| Abgelehnt | `rejected` | Absage; `decisionReason` Pflicht, **ohne** Bezug auf ein fremdes Angebot (2.3, Regel 3). **Endzustand.** |
+| Zurückgezogen | `withdrawn` | Der Lieferant zieht den Vorschlag zurück; `withdrawnAt` ist gesetzt. **Endzustand.** |
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `draft` | `LD` (anlegen) | Eigenes Angebot in `draft`, `submitted` oder `reviewed`; Kandidat vorhanden (3.6); `pseudonym` gesetzt | Derselbe Kandidat darf in mehreren Vorschlägen stehen, mit eigenem Status je Vorschlag (3.13) |
+| `draft` | `submitted` | `LD` ([20]) | `availableFrom` gesetzt; Offenlegungsstufe `pseudonymized` | Benachrichtigung an `MD`; der Vorschlag wird für den Betreiber sichtbar, für den Kunden **nicht** |
+| `submitted` | `reviewed` | `MD` ([17]), `MA` | — | AÜG-Prüfungen P1, P6, P10, P11; Doppelvorschlag desselben Kandidaten wird **nur** beim Betreiber sichtbar (2.3, Regel 4) |
+| `reviewed` | `releasedToCustomer` | `MD` ([22]) | Offenlegungsstufe `pseudonymized`; Prüfergebnisse ohne Sperre; Pflichtnachweise im Umfang von 5.4 geprüft | Benachrichtigung an `KB`; `submissionFeedbackDeadlineDays` beginnt; Bedarfsanfrage auf `inSelection` (4.1); **keine** Klardaten an den Kunden (6.4) |
+| `releasedToCustomer` | `interviewScheduled` | `KB` ([24]) | — | Benachrichtigung an `MD`, von dort an `LD`; Klardaten bleiben verdeckt, bis die Zusage erfolgt (6.4) |
+| `releasedToCustomer`, `interviewScheduled` | `accepted` | `KB` entscheidet ([24]), wirksam gegenüber dem Lieferanten durch `MD` ([17]) | `decision`, `decidedAt`, `decidedBy` gesetzt; AÜG-Prüfungen P1, P6, P11 ohne Sperre | Offenlegungsstufe wechselt auf `identified`, jeder Zugriff auf Klardaten wird protokolliert (3.12, 6.4); Angebot auf `accepted` (4.2.2); Einsatz kann angelegt werden (4.3) |
+| `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` | `rejected` | `KB` entscheidet ([24]) bzw. `MD` ([17]) bei Vorgängen, die den Kunden nicht erreicht haben | `decisionReason` Pflicht, ohne Fremdbezug | Benachrichtigung an `LD` über `MD`; Klardaten bleiben verdeckt; Löschfrist für abgelehnte Kandidaten läuft (6.5) |
+| `draft`, `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` | `withdrawn` | `LD` ([20]) | Vorschlag noch nicht `accepted` | Benachrichtigung an `MD` und `KB`; Bedarfsanfrage bleibt in `inSelection`, solange ein anderer Vorschlag offen ist |
+
+**Abschluss offener Vorschläge.** Erreicht die Bedarfsanfrage `filled`,
+`cancelled` oder `expired` (4.1), setzt `MD` die noch offenen Vorschläge auf
+`rejected` mit einer Begründung, die den Anlass nennt („Anfrage anderweitig
+besetzt", „Bedarf entfallen", „Frist abgelaufen") und **keinen** Hinweis auf
+ein fremdes Angebot enthält. Das ist ein Übergang mit Auslöser, kein
+Zeitablauf (4.0, Regel 4).
+
+**Endzustände:** `accepted`, `rejected`, `withdrawn`. Der Profilvorschlag hat
+**keinen** Zustand `expired`: eine ausbleibende Entscheidung läuft nie ab, sie
+wird eskaliert (2.4) und am Ende mit Begründung abgelehnt.
+
+**Ausgeschlossen:**
+
+- **Kein** `accepted` → `rejected`. Wird die Zusage hinfällig, ist das die
+  vorzeitige Beendigung des Einsatzes (4.3).
+- **Keine** Zusage durch den Betreiber. Die fachliche Auswahl ist eine
+  Kundenentscheidung ([24], 2.4 Regel 3); `MD` führt nur den Status gegenüber
+  dem Lieferanten.
+- **Kein** `releasedToCustomer` ohne Pseudonymisierung. Der Übergang **ist**
+  die Umsetzung der Datenminimierung (6.4); eine Vorlage mit Klardaten ist kein
+  Sonderfall, sondern unzulässig.
+- **Kein** zeitgesteuerter Übergang nach `rejected`. Eine ausbleibende
+  Rückmeldung des Kunden wird eskaliert (2.4), nicht entschieden.
+- **Kein** Übergang, der einem Lieferanten einen Doppelvorschlag desselben
+  Kandidaten offenbart (2.3, Regel 4).
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft : anlegen (LD)
+    draft --> submitted : vorlegen (LD)
+    submitted --> reviewed : sichten und pruefen (MD)
+    reviewed --> releasedToCustomer : pseudonymisiert vorlegen (MD)
+    releasedToCustomer --> interviewScheduled : Interview (KB)
+    releasedToCustomer --> accepted : zusagen (KB, wirksam MD)
+    interviewScheduled --> accepted : zusagen (KB, wirksam MD)
+    submitted --> rejected : ablehnen (MD)
+    reviewed --> rejected : ablehnen (MD)
+    releasedToCustomer --> rejected : ablehnen (KB)
+    interviewScheduled --> rejected : ablehnen (KB)
+    draft --> withdrawn : zurueckziehen (LD)
+    submitted --> withdrawn : zurueckziehen (LD)
+    reviewed --> withdrawn : zurueckziehen (LD)
+    releasedToCustomer --> withdrawn : zurueckziehen (LD)
+    interviewScheduled --> withdrawn : zurueckziehen (LD)
+    accepted --> [*]
+    rejected --> [*]
+    withdrawn --> [*]
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| Einladung → `invited` | P9 Erlaubnis des Lieferanten gültig und anerkannt | 5.4 |
+| Profilvorschlag `submitted` → `reviewed` | P1 bisher angerechnete Dauer dieser Person bei diesem Kunden; P6 Drehtürklausel; P10 Pflichtnachweise des Kandidaten; P11 Arbeitsverhältnis beim Verleiher | 5.1, 5.3, 5.4 |
+| Profilvorschlag `reviewed` → `releasedToCustomer` | Keine AÜG-Prüfung — hier greift die Datenminimierung (6.4) | 6.4 |
+| Profilvorschlag → `accepted` | P1, P6, P11 erneut, jetzt mit Sperrwirkung | 5.1, 5.3 |
+
+**Abhängigkeit von offener Frage 18.** P1 und P6 setzen voraus, dass der
+Betreiber erkennt, ob zwei Kandidatensätze dieselbe Person betreffen
+(`workerIdentity`, 3.6). Wird Frage 18 mit „nein" beantwortet, prüfen diese
+Übergänge nur innerhalb eines Lieferanten; Kapitel 5 muss dann einen anderen
+Weg beschreiben. Die Zustände und Übergänge dieses Abschnitts ändern sich
+dadurch **nicht**.
+
+### 4.3 Einsatz und Verlängerung
+
+Zwei Modelle: der Einsatz (`assignment`, 3.7) und die Verlängerung
+(`assignmentExtension`, 3.7). Beide teilen die Matrixzeile „Einsatz,
+Verlängerung, Unterbrechung (3.7)" in 2.2.
+
+#### 4.3.1 Einsatz
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Geplant | `planned` | Der Einsatz ist angelegt und terminiert, die Überlassung hat nicht begonnen. `plannedStartDate` liegt in der Zukunft oder der Start ist noch nicht bestätigt. |
+| Aktiv | `active` | Die Überlassung läuft; `actualStartDate` ist gesetzt. Der Fristenlauf nach 5.1 und 5.2 läuft. |
+| Unterbrochen | `interrupted` | Eine dokumentierte Unterbrechung (3.7) läuft; es wird keine Arbeitsleistung erbracht. Das Arbeitsverhältnis beim Verleiher bleibt unberührt. |
+| Beendet | `completed` | Die Überlassung ist zum vorgesehenen Ende abgelaufen; `actualEndDate` ist gesetzt. **Endzustand.** |
+| Vorzeitig beendet | `terminatedEarly` | Die Überlassung endet vor dem geplanten Ende; `terminationReason` und `terminationRequestedBy` sind Pflicht. **Endzustand.** |
+
+**„Verlängert" ist kein Zustand des Einsatzes.** Die Gliederung dieses Kapitels
+nannte „verlängert" als Zustand. Das ist in der Ausarbeitung bewusst anders
+gelöst: eine wirksame Verlängerung verschiebt `plannedEndDate` und lässt den
+Einsatz in seinem Zustand (`planned` oder `active`). Der Vorgang selbst hat
+seinen eigenen Lebenszyklus (4.3.2) — so bleibt sichtbar, ob eine Verlängerung
+beantragt, genehmigt oder wirksam ist, ohne den Einsatz aus `active`
+herauszunehmen und damit Zeiterfassung und Fristenlauf zu unterbrechen.
+
+**Der Antrag auf vorzeitige Beendigung ist kein Zustand.** Ein offener Antrag
+ändert am Einsatz nichts: er läuft weiter, Zeiten werden weiter erfasst, der
+Fristenlauf läuft weiter. Erst die Wirksamkeit führt nach `terminatedEarly`.
+Das ist die Anwendung von 2.4 Regel 1 — ein unentschiedener Vorgang bewirkt
+nichts (siehe auch den Hinweis am Ende dieses Abschnitts).
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `planned` | `MD`, `MA` | Profilvorschlag in `accepted` (4.2.3) oder Einsatz ohne vorangegangene Anfrage; Lieferant `active` (4.6); eigene `activityDescription` (nicht nur ein Verweis, 5.3); vereinbarte Preisposition beider Seiten; AÜG-Prüfungen P1, P6, P9, P11 ohne Sperre | Benachrichtigung an `KB`, `KE` und `LD`; abgeleitete Felder `maxDurationEndDate`, `equalPayDueDate`, `countedDurationDays` werden berechnet (5.1, 5.2); Bedarfsanfrage ggf. auf `filled` (4.1) |
+| `planned` | `active` | `MD` | `actualStartDate` gesetzt; P9 Erlaubnis gültig; P10 Pflichtnachweise vorhanden *(offene Frage 20)*; P7 kein Arbeitskampf am Standort; P1 Fristende nicht überschritten | **Fristenlauf beginnt** (5.1, 5.2); Stundenzettel für die laufende Abrechnungsperiode wird erwartet (4.4); Benachrichtigung an `KB` und `LD` |
+| `active` | `interrupted` | `MD`, auf Anzeige von `LD` oder `KB` ([25]) | Unterbrechung (3.7) mit `interruptionFrom` und Grund angelegt | Zeiterfassung für den Unterbrechungszeitraum gesperrt (4.4); P2 bewertet die Wirkung auf die Zählung (`countsAsReset`, 5.1); Benachrichtigung an beide Seiten |
+| `interrupted` | `active` | `MD` | `interruptionTo` gesetzt; P9 Erlaubnis weiterhin gültig; P7 kein Arbeitskampf | P1 und P2 werden neu gerechnet — eine Unterbrechung über der Schwelle aus 5.1 setzt die Zählung zurück; `maxDurationEndDate` wird neu abgeleitet; Benachrichtigung |
+| `active` | `completed` | `MD` | `plannedEndDate` erreicht; `actualEndDate` gesetzt; keine laufende Unterbrechung | Keine neuen Zeitpositionen möglich (4.4); offene Stundenzettel müssen eingereicht und genehmigt werden; Fristenlauf endet; Löschfrist für den beendeten Einsatz beginnt (6.5) |
+| `planned`, `active`, `interrupted` | `terminatedEarly` | `MD` setzt wirksam; Antrag durch `KB` oder `LD` ([25]); Genehmigung durch `KG` ([26]) **nur** bei Antrag der Kundenseite | `terminationReason` und `terminationRequestedBy` Pflicht; bei Kundenantrag Genehmigung `KG` vorhanden; `actualEndDate` gesetzt | Wie `completed`; zusätzlich Benachrichtigung an die jeweils andere Seite mit Begründung; eine Nachbesetzung ist eine **neue** Bedarfsanfrage (4.1) |
+
+**Zuweisung der Genehmigung (Festlegung dieses Kapitels).** Fußnote [26] in 2.2
+weist `KG` die Genehmigung von Verlängerung und vorzeitiger Beendigung zu,
+„soweit Kapitel 4.3 sie der Kundenseite zuweist". Dieses Kapitel weist zu:
+
+- **Verlängerung:** immer genehmigungspflichtig durch `KG`, unabhängig davon,
+  wer sie beantragt — sie erzeugt Kosten beim Kunden (4.3.2).
+- **Vorzeitige Beendigung auf Antrag der Kundenseite:** genehmigungspflichtig
+  durch `KG`, weil Mindestlaufzeiten und Kündigungsfristen Kostenwirkung haben.
+- **Vorzeitige Beendigung auf Antrag des Lieferanten:** **keine** Genehmigung
+  der Kundenseite. Der Verleiher entscheidet über den Einsatz seines
+  Arbeitnehmers; der Kunde wird unterrichtet, nicht gefragt.
+- **Vorzeitige Beendigung aus Rechtsgründen** (entzogene Erlaubnis,
+  AÜG-Sperre): `MD` setzt sie mit Pflichtbegründung wirksam. **Ob** ein
+  laufender Einsatz bei Erlöschen der Erlaubnis zu beenden ist, entscheidet
+  5.4 — dieses Kapitel hält nur den Übergang bereit und nimmt die Rechtsfolge
+  nicht vorweg.
+
+**Endzustände:** `completed`, `terminatedEarly`.
+
+**Ausgeschlossen:**
+
+- **Kein** `completed` oder `terminatedEarly` → `active`. Eine erneute
+  Überlassung derselben Person beim selben Kunden ist ein **neuer** Einsatz —
+  und zählt nach 5.1 weiter, statt neu zu beginnen.
+- **Kein** `planned` → `completed`. Ein Einsatz, der nie begonnen hat, wird
+  `terminatedEarly` mit Begründung; so bleibt erkennbar, dass keine
+  Arbeitsleistung erbracht wurde.
+- **Kein** Zustand `blocked`. Eine AÜG-Sperre verhindert den Übergang nach
+  `active` oder die Wirksamkeit einer Verlängerung; der Einsatz bleibt stehen
+  (4.0, Regel 5).
+- **Kein** zeitgesteuerter Übergang nach `active`. Der Beginn wird bestätigt,
+  nicht unterstellt — sonst beginnt der Fristenlauf nach 5.1 für eine
+  Überlassung, die es nicht gibt.
+- **Kein** zeitgesteuerter Übergang nach `completed`. Das Erreichen von
+  `plannedEndDate` erzeugt eine Erinnerung; das tatsächliche Ende wird
+  festgestellt, weil `actualEndDate` die Grundlage der Abrechnung und des
+  Fristenlaufs ist.
+- **Keine** stille Verlängerung. Das Verschieben von `plannedEndDate` ohne
+  Verlängerungsvorgang ist unzulässig (3.7).
+- **Kein** `interrupted` → `completed` ohne Wiederaufnahme. Endet der Einsatz
+  während einer Unterbrechung, ist das `terminatedEarly`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> planned : anlegen (MD)
+    planned --> active : Beginn bestaetigen (MD)
+    active --> interrupted : unterbrechen (MD)
+    interrupted --> active : fortsetzen (MD)
+    active --> completed : regulaer beenden (MD)
+    planned --> terminatedEarly : vorzeitig beenden (MD)
+    active --> terminatedEarly : vorzeitig beenden (MD)
+    interrupted --> terminatedEarly : vorzeitig beenden (MD)
+    completed --> [*]
+    terminatedEarly --> [*]
+```
+
+#### 4.3.2 Verlängerung
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Beantragt | `requested` | Der Antrag liegt vor; `requestedAt` / `requestedBy` gesetzt. Der Einsatz läuft unverändert. |
+| Genehmigt | `approved` | Die Kundenseite hat zugestimmt; `approvedAt` / `approvedBy` gesetzt. Noch **nicht** wirksam. |
+| Abgelehnt | `rejected` | Die Kundenseite lehnt ab. **Endzustand.** |
+| Wirksam | `effective` | Der Betreiber hat die Verlängerung vollzogen; `effectiveAt` / `effectiveBy` gesetzt und `plannedEndDate` des Einsatzes verschoben. **Endzustand.** |
+| Zurückgezogen | `withdrawn` | Der Antragsteller zieht zurück. **Endzustand.** |
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `requested` | `KB` ([25]), `LD` ([25]), `MD` | Einsatz in `planned`, `active` oder `interrupted`; `newEndDate` nach dem bisherigen Ende; Begründung Pflicht | Benachrichtigung an `KG`; `extensionApprovalDeadlineDays` beginnt; AÜG-Vorprüfungen P1 und P3 als `ruleCheckResult` am Vorgang |
+| `requested` | `approved` | `KG` ([26]) | Auslöser ist nicht `requestedBy` (2.4, Regel 5); Kostenwirkung beurteilt ([8]) | Benachrichtigung an `MD` und den Antragsteller; Frist endet |
+| `requested` | `rejected` | `KG` ([26]) | Begründung Pflicht | Benachrichtigung an den Antragsteller; der Einsatz endet zum unveränderten `plannedEndDate` |
+| `requested` | `withdrawn` | Antragsteller (`KB`, `LD` oder `MD`) | Noch nicht genehmigt | Benachrichtigung an `KG` |
+| `approved` | `effective` | `MD` | P1 `newEndDate` innerhalb von `maxDurationEndDate` — sonst **Sperre** (5.1, 5.5); P9 Erlaubnis für den verlängerten Zeitraum gültig; P3 Equal-Pay-Fälligkeit geprüft | `plannedEndDate` des Einsatzes wird verschoben; `maxDurationEndDate` und `equalPayDueDate` werden neu abgeleitet; Benachrichtigung an alle Beteiligten; Protokolleintrag am Einsatz **und** am Vorgang |
+
+**Endzustände:** `effective`, `rejected`, `withdrawn`.
+
+**Ausgeschlossen:**
+
+- **Kein** `requested` → `effective`. Ohne kundenseitige Genehmigung wird keine
+  Verlängerung wirksam — der Betreiber ersetzt die Entscheidung nicht (2.4,
+  Regel 3).
+- **Kein** `approved` → `rejected`. Eine genehmigte, aber nicht gewollte
+  Verlängerung wird nicht wirksam gesetzt und läuft über die Frist aus; der
+  Vorgang bleibt in `approved` und ist dokumentiert.
+- **Kein** zeitgesteuerter Übergang nach `approved` oder `effective`.
+  Fristablauf verlängert nichts (2.4, Regel 1).
+- **Keine** Verlängerung über `maxDurationEndDate` hinaus ohne dokumentierte
+  Übersteuerung nach 5.5 *(offene Frage 10)*.
+- **Keine** Rückgängigmachung einer wirksamen Verlängerung. Das verkürzte Ende
+  ist eine vorzeitige Beendigung (4.3.1).
+
+```mermaid
+stateDiagram-v2
+    [*] --> requested : beantragen (KB, LD, MD)
+    requested --> approved : genehmigen (KG)
+    requested --> rejected : ablehnen (KG)
+    requested --> withdrawn : zurueckziehen (Antragsteller)
+    approved --> effective : wirksam setzen (MD)
+    effective --> [*]
+    rejected --> [*]
+    withdrawn --> [*]
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| → `planned` | P1 Höchstüberlassungsdauer über alle Vorläufer derselben Person beim selben Kunden; P6 Drehtürklausel; P9 Erlaubnis; P11 Arbeitsverhältnis beim Verleiher; P4 Vergleichsentgelt vorhanden; P5 Branchenzuschlagsschema zugeordnet | 5.1–5.4 |
+| `planned` → `active` | P9 Erlaubnis am Starttag; P10 Pflichtnachweise *(offene Frage 20)*; P7 Arbeitskampf am Standort; P1 Fristende nicht erreicht | 5.4, 5.3, 5.1 |
+| `active` → `interrupted` | P2 Erfassung der Unterbrechung für die Zählung | 5.1 |
+| `interrupted` → `active` | P2 Bewertung der Unterbrechungsdauer (Zurücksetzen der Zählung); P1 Neuberechnung | 5.1 |
+| Verlängerung `requested` → `approved` | P1 und P3 als Vorschau, damit die Kundenseite die Fristwirkung kennt | 5.1, 5.2 |
+| Verlängerung `approved` → `effective` | P1 mit Sperrwirkung; P9 für den verlängerten Zeitraum; P3 / P4 Equal Pay | 5.1, 5.4, 5.2 |
+| `active` → `completed` / `terminatedEarly` | P1 und P3 Abschlussrechnung der Fristen (Dokumentation, keine Sperre) | 5.1, 5.2 |
+
+> **Hinweis auf eine Lücke in 3.7.** Die Verlängerung ist ein eigenes Objekt mit
+> Antrag, Genehmigung und Wirksamkeit. Die vorzeitige Beendigung ist das
+> **nicht**: 3.7 führt sie als Felder am Einsatz (`terminationReason`,
+> `terminationRequestedBy`). Ein beantragter, noch nicht entschiedener
+> Beendigungsvorgang hat deshalb keinen eigenen Zustand und ist nur über das
+> Feld und die Eskalation sichtbar. Für den Prototyp genügt das; wird eine
+> mehrstufige Genehmigung der Beendigung gewünscht, ist in 3.7 ein eigener
+> Vorgang analog `assignmentExtension` nachzutragen.
+
+### 4.4 Stundenzettel und Freigabeschritte
+
+Objekte: `timesheet` und `timesheetApproval` (3.8). Matrixzeile „Stundenzettel,
+Freigabeschritt (3.8)" in 2.2; der Freigabeschritt teilt die Zeile.
+
+> **Abhängigkeit von offener Frage 5.** Wie viele Genehmigungsstufen es gibt und
+> welche Rolle welche Stufe trägt, ist offen. Dieses Modell ist deshalb so
+> gebaut, dass die **Stufenzahl in den Daten steht, nicht im Statusmodell**: die
+> Zustände und Übergänge unten gelten für eine wie für fünf Stufen. Was sich mit
+> der Antwort ändert, ist allein der Inhalt von `assignedRoleCode` je
+> `timesheetApproval` (3.8) — kein Zustand, kein Übergang, keine Nebenwirkung.
+> Die betroffenen Stellen sind mit *(offene Frage 5)* gekennzeichnet.
+
+#### Zustände
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Erfasst | `recorded` | Zeiten werden erfasst oder nachgearbeitet. Der **einzige** Zustand, in dem Zeitpositionen frei angelegt, geändert und entfernt werden dürfen ([44]). |
+| Eingereicht | `submitted` | Der Zettel liegt zur Genehmigung vor; `submittedAt` / `submittedBy` gesetzt. Keine Änderung durch die erfassende Seite mehr. |
+| In Prüfung | `inApproval` | Mindestens ein Freigabeschritt ist offen. Bei mehreren Stufen bleibt der Zettel so lange hier, bis die letzte Stufe entschieden ist *(offene Frage 5)*. |
+| Genehmigt | `approved` | Alle Stufen haben zugestimmt; `approvedAt` / `approvedBy` tragen die **letzte** Stufe. Grundlage für Abrechnungsbelege (4.5). |
+| Abgelehnt | `rejected` | Eine Stufe hat abgelehnt; `rejectionReason` ist Pflicht. Der Zettel ist zur Nacharbeit freigegeben. |
+| Korrigiert | `corrected` | Eine genehmigte Korrekturfassung hat diesen Zettel ersetzt (`correctionOf` am neuen Zettel). **Endzustand.** |
+
+**Die Zeitposition trägt keinen Status** (Fußnote [44] in 2.2). Genehmigt wird
+der Zettel; die Zeitpositionen folgen seinem Zustand.
+
+#### Übergänge
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `recorded` | `AN` *(offene Frage 4)*, `LD` im Namen des Leiharbeitnehmers ([27]), `MD` ([27]) | Einsatz in `active`, `interrupted`, `completed` oder `terminatedEarly`; Abrechnungsperiode `open` (4.5); je Einsatz und Periode genau **ein** Zettel (3.13) | `recordedBy` wird gesetzt; `timesheetSubmissionDeadlineDays` beginnt mit dem Periodenende |
+| `recorded` | `submitted` | `AN` *(offene Frage 4)*, `LD` ([20]), `MD` | Mindestens eine Zeitposition; Summen abgeleitet; Zeitpositionen liegen innerhalb `periodFrom` / `periodTo` und außerhalb einer laufenden Unterbrechung (4.3) | Freigabeschritte werden nach der konfigurierten Stufenfolge erzeugt *(offene Frage 5)*; Benachrichtigung an die Rolle der ersten Stufe; AÜG-Prüfungen P1 und P4 |
+| `submitted` | `inApproval` | System | Mindestens ein Freigabeschritt vorhanden | Erste Stufe wird geöffnet; `timesheetApprovalDeadlineDays` läuft gegen `closingDate` der Periode (4.5) |
+| `inApproval` | `inApproval` | Rolle der offenen Stufe — `KB` oder `KG` ([29]) *(offene Frage 5)* | Entscheidung `approved` am Freigabeschritt; weitere Stufen offen | Nächste Stufe wird geöffnet; Benachrichtigung an deren Rolle; **kein** Statuswechsel des Zettels |
+| `inApproval` | `approved` | Rolle der **letzten** Stufe ([29]) *(offene Frage 5)* | Alle Stufen `approved`; AÜG-Prüfungen P1 und P4 ohne Sperre | `approvedAt` / `approvedBy` gesetzt; Zeitpositionen sind gesperrt — Änderungen nur über eine Korrekturfassung ([28]); der Zettel wird für die Belegerstellung verfügbar (4.5); Benachrichtigung an `MD` und `LD` |
+| `inApproval` | `rejected` | Rolle einer offenen Stufe ([29]) *(offene Frage 5)* | `rejectionReason` Pflicht | Noch offene Stufen entfallen; Benachrichtigung an die erfassende Seite mit Begründung; Protokolleintrag mit Begründung |
+| `rejected` | `recorded` | `AN` *(offene Frage 4)*, `LD`, `MD` | Abrechnungsperiode noch `open` (4.5) | Vorhandene Freigabeschritte werden verworfen und bei der nächsten Einreichung neu erzeugt; Korrekturen tragen Begründung und Protokolleintrag ([28]) |
+| `approved` | `corrected` | System, als Folge der Genehmigung einer Korrekturfassung | Neuer Zettel mit `correctionOf` auf diesen Zettel ist `approved` | Belegpositionen, die auf diesem Zettel beruhen, sind zu stornieren und neu zu erstellen (4.5); Benachrichtigung an `KE` bzw. `LD` |
+
+**Korrekturen nach der Genehmigung.** Ein genehmigter Zettel wird nie wieder
+geändert. Die Korrektur ist ein **neuer** Zettel mit `correctionOf` (3.8), der
+den vollen Zyklus `recorded` → `submitted` → `inApproval` → `approved`
+durchläuft. Erst seine Genehmigung setzt den alten Zettel auf `corrected`. Die
+Regel „ein Zettel je Einsatz und Periode" (3.13) ist dadurch nicht verletzt:
+genau ein Zettel ist zu jedem Zeitpunkt der **gültige**, die Korrekturfassungen
+bilden eine Kette.
+
+**Endzustände:** `corrected`. `approved` ist ein Ruhezustand: endgültig, solange
+keine Korrekturfassung genehmigt wird.
+
+**Ausgeschlossen:**
+
+- **Kein** `recorded` → `approved`. Einreichen und Genehmigen sind getrennt.
+- **Keine** Genehmigung durch die erfassende Seite. Wer den Zettel eingereicht
+  hat, genehmigt ihn nicht — auch nicht in Vertretung (2.4, Regel 5). Das
+  schließt insbesondere `LD` und `AN` von jeder Freigabestufe aus.
+- **Keine** Genehmigung durch den Betreiber. `MD` darf erfassen und korrigieren
+  ([27], [28]), aber keine Stufe entscheiden: die Zeitfreigabe ist eine
+  Kundenentscheidung (2.1, 2.4 Regel 3).
+- **Kein** Übergang durch Fristablauf. Ein nicht genehmigter Zettel wird mit
+  Erreichen von `closingDate` eskaliert und bleibt in `inApproval`; er gilt
+  **nicht** als genehmigt (2.4, Regel 1). Er kann dadurch die Abrechnung
+  blockieren — das ist beabsichtigt.
+- **Kein** `approved` → `recorded` und **kein** `approved` → `rejected`.
+  Nachträgliche Änderungen laufen ausschließlich über die Korrekturfassung.
+- **Kein** `corrected` → irgendwohin. Der ersetzte Zettel bleibt als Beleg der
+  Historie stehen.
+- **Keine** Erfassung von Zeiten für einen Zeitraum, in dem der Einsatz
+  `interrupted` war, und keine Erfassung in einer geschlossenen
+  Abrechnungsperiode (4.5).
+
+#### Diagramm
+
+```mermaid
+stateDiagram-v2
+    [*] --> recorded : erfassen (AN, LD, MD)
+    recorded --> submitted : einreichen (AN, LD, MD)
+    submitted --> inApproval : Freigabeschritte eroeffnen (System)
+    inApproval --> inApproval : Stufe genehmigt, weitere offen (KB, KG)
+    inApproval --> approved : letzte Stufe genehmigt (KB, KG)
+    inApproval --> rejected : ablehnen (KB, KG)
+    rejected --> recorded : nacharbeiten (AN, LD, MD)
+    approved --> corrected : Korrekturfassung genehmigt (System)
+    corrected --> [*]
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| `recorded` → `submitted` | P1 liegen Zeiten nach `maxDurationEndDate` im Zettel? P4 ist für den Zeitraum ein Vergleichsentgelt hinterlegt? | 5.1, 5.2 |
+| `submitted` → `inApproval` | P3 Equal-Pay-Fälligkeit im Zeitraum erreicht? | 5.2 |
+| `inApproval` → `approved` | P1 mit Sperrwirkung für Zeiten nach Fristende; P4 Vergleichsentgelt bei erreichter Fälligkeit; P10 Unterweisungsnachweis für den Standort | 5.1, 5.2, 5.4 |
+
+### 4.5 Abrechnungsperiode und Abrechnungsbeleg
+
+Zwei Modelle: die Abrechnungsperiode (`billingPeriod`, 3.9) und der
+Abrechnungsbeleg (`billingDocument`, 3.9). Die Belegposition teilt die
+Matrixzeile des Belegs.
+
+> **Abhängigkeit von offener Frage 6.** Ob die Lieferantenseite im
+> **Gutschriftverfahren** (der Betreiber erstellt `supplierCreditNote`, der
+> Lieferant bestätigt oder beanstandet) oder im **Rechnungseingang** (der
+> Lieferant reicht `supplierInvoice` ein, der Betreiber prüft) läuft, ist offen.
+> Dieses Modell trägt beide Antworten: die **Zustände sind identisch**, nur die
+> auslösende Rolle einzelner Übergänge unterscheidet sich. Die Übergangstabelle
+> führt dafür die Spalte „Seite / Variante" mit den Werten **Verkauf** (immer),
+> **Einkauf A** (Gutschriftverfahren) und **Einkauf B** (Rechnungseingang).
+
+#### 4.5.1 Abrechnungsperiode
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Offen | `open` | Zeiten dürfen erfasst, eingereicht und genehmigt werden; Belege dürfen entstehen. |
+| Geschlossen | `closed` | Die Periode ist abgeschlossen; keine neuen Zettel und keine neuen Belege zu dieser Periode. **Endzustand.** |
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `open` | `MA` (anlegen), `MD` öffnet ([33]) | `periodFrom`, `periodTo` und `closingDate` gesetzt; keine überlappende offene Periode für denselben Kunden | Stundenzettel können angelegt werden (4.4); Benachrichtigung an `LD` der beteiligten Lieferanten |
+| `open` | `closed` | `MD` ([33]), `MA` | Kein Stundenzettel der Periode in `recorded`, `submitted` oder `inApproval`; alle Belege der Periode in `released`, `confirmed` oder `cancelled` — *(offene Frage 24)* | Keine neuen Zettel und Belege; `closedAt` / `closedBy` gesetzt; Benachrichtigung an `KE` und `LD` |
+
+**Ausgeschlossen:**
+
+- **Kein** `closed` → `open`. Nachträgliche Zeiten laufen über eine
+  Korrekturfassung (4.4) in der **nächsten** offenen Periode, nachträgliche
+  Beträge über Storno und Nachbeleg (4.5.2). Ein Wiederöffnen wäre eine
+  Änderung dieses Kapitels, kein Sonderfall im Betrieb.
+- **Kein** Schließen durch Fristablauf. Das Erreichen von `closingDate` erzeugt
+  Erinnerung und Eskalation (2.4), nicht den Übergang.
+
+```mermaid
+stateDiagram-v2
+    [*] --> open : anlegen und oeffnen (MA, MD)
+    open --> closed : schliessen (MD, MA)
+    closed --> [*]
+```
+
+> *(offene Frage 24, neu)* Darf eine Abrechnungsperiode geschlossen werden,
+> solange einzelne Stundenzettel nicht entschieden sind, und wer trägt diese
+> Entscheidung? Die Vorbedingung oben verlangt heute, dass **alle** Zettel
+> entschieden sind — das ist die strenge Folge aus 2.4 Regel 1 (kein
+> Statuswechsel durch Fristablauf), hat aber den Preis, dass ein einzelner
+> hängender Zettel die Abrechnung der ganzen Periode aufhält. Die Alternative
+> (Schließen mit Übertrag der offenen Zettel in die nächste Periode) ist eine
+> kaufmännische Festlegung und wird hier **nicht** geraten.
+
+#### 4.5.2 Abrechnungsbeleg
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Erstellt | `created` | Der Beleg ist aus genehmigten Stundenzetteln erzeugt, aber nicht abgegeben. Eine inhaltliche Änderung kann nur `MA` vornehmen — `MD` trägt in 2.2 kein `Ä` auf dieser Zeile; der Regelfall ist Storno und Neuerstellung. |
+| In Prüfung | `inReview` | Der Beleg wird geprüft: auf der Verkaufsseite betreiberintern vor der Freigabe, auf der Einkaufsseite in Variante B die eingegangene Lieferantenrechnung. |
+| Freigegeben | `released` | Vier-Augen-Freigabe erfolgt ([30]); der Beleg gilt als abgegeben. Auf der Verkaufsseite der Ruhezustand, solange keine Beanstandung erfolgt. |
+| Beanstandet | `disputed` | Die Gegenseite widerspricht; `disputeReason`, `disputedAt` / `disputedBy` Pflicht. Eskalationsanlass (2.4). |
+| Bestätigt | `confirmed` | Die Gegenseite hat ausdrücklich bestätigt ([32]). **Nur auf der Einkaufsseite** — die Verkaufsseite kennt keine Bestätigung. **Endzustand.** |
+| Storniert | `cancelled` | Der Beleg ist aufgehoben; der Storno erzeugt einen **neuen** Beleg mit `cancellationOf` (3.9). **Endzustand.** |
+
+| Von | Nach | Seite / Variante | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|---|
+| — | `created` | Verkauf, Einkauf A | `MD`, `MA` | Alle zugrunde liegenden Stundenzettel in `approved` (3.9, 4.4); Abrechnungsperiode `open`; Preisposition der jeweiligen Seite vorhanden (3.3) | Belegpositionen werden aus den Zetteln abgeleitet; `createdBy` gesetzt; AÜG-Prüfungen P9 und P4 als Warnung |
+| — | `created` | **Einkauf B** | `LD` — *Recht `A` fehlt in 2.2, siehe Hinweis* | Wie oben; der Lieferant reicht die Rechnung zu genehmigten Zetteln ein | Benachrichtigung an `MD` |
+| `created` | `inReview` | alle | `MD`, `MA`; in Variante B prüft `MD` die Lieferantenrechnung | Summen abgeleitet und mit den Zetteln abgeglichen | Keine inhaltliche Änderung mehr ohne Protokolleintrag |
+| `inReview` | `released` | alle | `MD`, `MA` | Auslöser ist **nicht** `createdBy` ([30], 2.4 Regel 5) | `releasedAt` / `releasedBy` gesetzt; Beleg wird für die Gegenseite sichtbar; `billingReviewDeadlineDays` beginnt; Benachrichtigung an `KE` bzw. `LD` |
+| `released` | `disputed` | Verkauf | `KE` ([31]) | `disputeReason` Pflicht; innerhalb der Prüffrist | Benachrichtigung an `MD`; Eskalationsanlass „Beleg beanstandet und nicht geklärt" (2.4) |
+| `released` | `disputed` | Einkauf A, Einkauf B | `LD` ([32]) | Wie oben | Wie oben |
+| `released` | `confirmed` | Einkauf A, Einkauf B | `LD` ([32]) | Keine offene Beanstandung | Beleg ist abgeschlossen; Übergabe an ein Fremdsystem nach *(offener Frage 7)* |
+| `disputed` | `inReview` | alle | `MD`, `MA` | Beanstandung geklärt, Klärung dokumentiert; wenn sich die Zeiten ändern: Korrekturfassung genehmigt (4.4) | Erneute Freigabe erforderlich ([30]); Benachrichtigung an die beanstandende Seite |
+| `created`, `inReview`, `released`, `disputed` | `cancelled` | alle | `MD`, `MA` | Begründung Pflicht; bei `released` und `disputed` entsteht ein Storno- und ggf. ein Nachbeleg mit `cancellationOf` (3.9) | Benachrichtigung an die Gegenseite; der stornierte Beleg bleibt erhalten — Belegnummern bleiben lückenlos |
+
+**Endzustände:** `confirmed` (nur Einkaufsseite), `cancelled`. Auf der
+Verkaufsseite ist `released` der Ruhezustand: 2.2 gibt `KE` mit [31] nur die
+Beanstandung, keine Bestätigung — der Beleg gilt als akzeptiert, solange keine
+Beanstandung erfolgt, **ohne** dass ein Übergang das feststellt.
+
+**Ausgeschlossen:**
+
+- **Keine** Freigabe durch den Ersteller. Vier-Augen-Prinzip ([30]).
+- **Keine** Bestätigungsfiktion. Der Ablauf von `billingReviewDeadlineDays`
+  erzeugt Erinnerung und Eskalation, nie den Übergang nach `confirmed` (2.4,
+  Regel 1).
+- **Kein** Beleg aus nicht genehmigten Zeiten. `created` setzt ausschließlich
+  Zettel in `approved` voraus (3.9).
+- **Keine** Änderung eines freigegebenen Belegs. Korrekturen laufen über Storno
+  und Nachbeleg; der alte Beleg bleibt (3.9).
+- **Kein** Übergang `disputed` → `released` ohne erneute Freigabe. Die Klärung
+  führt zurück in die Prüfung, nicht direkt in die Freigabe.
+- **Kein** `confirmed` oder `cancelled` → irgendwohin.
+- **Keine** Statusführung durch den Lieferanten oder den Kunden über die
+  Beanstandung bzw. Bestätigung hinaus ([31], [32]).
+
+```mermaid
+stateDiagram-v2
+    [*] --> created : erstellen (MD, in Variante B der LD)
+    created --> inReview : pruefen (MD)
+    inReview --> released : freigeben (MD, nicht der Ersteller)
+    released --> disputed : beanstanden (KE bzw. LD)
+    released --> confirmed : bestaetigen (LD, nur Einkaufsseite)
+    disputed --> inReview : Klaerung (MD)
+    created --> cancelled : stornieren (MD, MA)
+    inReview --> cancelled : stornieren (MD, MA)
+    released --> cancelled : stornieren (MD, MA)
+    disputed --> cancelled : stornieren (MD, MA)
+    confirmed --> [*]
+    cancelled --> [*]
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| → `created` (Einkaufsseite) | P9 war die Erlaubnis des Lieferanten im Leistungszeitraum gültig? | 5.4 |
+| → `created` (beide Seiten) | P4 war für Zeiträume nach `equalPayDueDate` ein Vergleichsentgelt hinterlegt? | 5.2 |
+| `inReview` → `released` | Keine eigene AÜG-Prüfung; die Prüfungen liegen am Stundenzettel (4.4) | — |
+
+> **Hinweis auf eine Lücke in 2.2.** Wird offene Frage 6 mit **Rechnungseingang**
+> beantwortet, muss der Lieferant einen Beleg **anlegen** können. Die Matrix 2.2
+> gibt `LD` in der Zeile „Abrechnungsbeleg, Belegposition (3.9)" aber nur
+> `L[7] S[32]` — kein `A`. Die Variante B ist mit der heutigen Matrix nicht
+> durchführbar; mit der Antwort auf Frage 6 ist in 2.2 ein `A[7]` nachzutragen
+> (und Fußnote [32] um das Einreichen zu erweitern). Dieses Kapitel löst das
+> nicht stillschweigend auf.
+
+### 4.6 Lieferantenstatus
+
+Objekt: `supplier` (3.2). Matrixzeile „Lieferant / Verleiher (3.2)" in 2.2. Die
+AÜG-Erlaubnis ist ein eigenes Objekt mit eigenem Nachweisfluss (3.2, 5.4); sie
+ist hier **Vorbedingung**, nicht Zustand.
+
+#### Zustände
+
+| Deutsch | Bezeichner | Fachliche Bedeutung |
+|---|---|---|
+| Onboarding | `onboarding` | Der Lieferant ist angelegt, die Voraussetzungen für eine Beauftragung sind noch nicht vollständig: Rahmenvertrag, Tarifbindung, anerkannte Erlaubnis, Nachweise. Keine Teilnahme am Kernprozess. |
+| Aktiv | `active` | Der Lieferant darf eingeladen werden, anbieten, Kandidaten vorschlagen und Einsätze führen. |
+| Gesperrt | `blocked` | Die Teilnahme ist ausgesetzt; `blockReason`, `blockedAt` / `blockedBy` Pflicht. Laufende Einsätze sind davon zunächst **nicht** betroffen (siehe unten). |
+| Inaktiv | `inactive` | Die Beauftragung ist beendet. Kein neuer Vorgang; die Historie bleibt lesbar. |
+
+`blocked` ist der einzige Zustand dieses Kapitels, der eine Sperre **ist** — er
+beschreibt die Organisation. Prüfergebnisse „Sperre" aus 5.5 bleiben dagegen
+Prüfergebnisse und erzeugen keinen Zustand (4.0, Regel 5).
+
+#### Übergänge
+
+| Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
+|---|---|---|---|---|
+| — | `onboarding` | `MA` | `supplierNumber`, `legalName`, `address`, mindestens ein Ansprechpartner | Lieferantenmandant wird angelegt (3.11); `LA` kann Stammdaten und Nachweise pflegen ([7]) |
+| `onboarding` | `active` | `MA` | Rahmenvertrag `active` (3.3); `supplierCollectiveAgreement` gesetzt (3.2, Pflicht ab `active`); AÜG-Erlaubnis mit `verificationStatus = accepted` und gültigem Zeitraum (5.4); Pflichtnachweise vorhanden *(offene Frage 20)* | Benachrichtigung an `LA` und `LD`; der Lieferant erscheint im Einladungskreis (4.2); AÜG-Prüfungen P9, P10 |
+| `active` | `blocked` | `MA`, `MD` ([5]) | `blockReason` Pflicht | **Keine** neue Einladung, kein neues Angebot, kein neuer Profilvorschlag, kein neuer Einsatz; offene Einladungen bleiben stehen und laufen in `expired` (4.2); laufende Einsätze, Zeiterfassung und Abrechnung laufen weiter; Benachrichtigung an `LA`; Eskalation an `MA` |
+| `blocked` | `active` | **nur** `MA` ([5]) | Sperrgrund behoben und dokumentiert; Auslöser ist nicht die sperrende Person (Vier-Augen, 2.4 Regel 5); Erlaubnis gültig und anerkannt | Benachrichtigung an `LA` und `LD`; Protokolleintrag mit Aufhebungsgrund |
+| `onboarding`, `active`, `blocked` | `inactive` | `MA` | `validTo` gesetzt; kein Einsatz dieses Lieferanten in `planned`, `active` oder `interrupted` | Zugänge des Lieferantenmandanten werden gesperrt (3.11); offene Einladungen und Angebote enden (4.2); Historie und Belege bleiben lesbar; Löschfristen nach 6.5 |
+| `inactive` | `active` | **nur** `MA` ([5]) | Reaktivierung: Rahmenvertrag und Erlaubnis wieder gültig und anerkannt; Begründung Pflicht | Wie `onboarding` → `active`; Protokolleintrag mit Reaktivierungsgrund |
+
+**Wirkung auf laufende Einsätze.** Eine Sperre unterbricht oder beendet keinen
+laufenden Einsatz. Das ist bewusst so: ein Statuswechsel am Lieferanten darf
+nicht still eine Überlassung beenden, die arbeits- und vertragsrechtliche
+Folgen hat. **Ob** bei Erlöschen oder Entzug der AÜG-Erlaubnis ein laufender
+Einsatz zu beenden ist — und wer das entscheidet — gehört nach **5.4**; der
+Übergang dafür liegt in 4.3.1 bereit (`terminatedEarly` aus Rechtsgründen).
+
+**Endzustände:** keiner im strengen Sinn. `inactive` ist der Ruhezustand am
+Ende der Beauftragung, aus dem `MA` reaktivieren darf ([5]). Das ist die einzige
+Ausnahme von 4.0 Regel 9 und steht ausdrücklich in Fußnote [5]
+(„Entsperrung und Reaktivierung nur durch MA").
+
+**Ausgeschlossen:**
+
+- **Keine** Entsperrung durch `MD`. [5] sagt ausdrücklich: sperren ja,
+  entsperren nein.
+- **Keine** Entsperrung oder Reaktivierung durch den Lieferanten selbst. `LA`
+  pflegt Stammdaten und Nachweise ([7]), nicht den Status seiner Organisation.
+- **Kein** `onboarding` → `blocked` → … als Umweg um die Voraussetzungen.
+  Fehlende Nachweise im Onboarding sind keine Sperre, sondern ein noch nicht
+  erfüllter Übergang nach `active`.
+- **Kein** `inactive` bei laufendem Einsatz. Erst sind die Einsätze zu beenden
+  (4.3), dann endet die Beauftragung.
+- **Kein** zeitgesteuerter Übergang. Ob der Ablauf der Erlaubnis oder das
+  Vertragsende automatisch sperrt, ist in **5.4** zu entscheiden; dieses
+  Kapitel unterstellt es nicht.
+- **Keine** Vertretung für die Entsperrung, soweit sie mit einer Übersteuerung
+  einer AÜG-Sperre zusammenfällt (2.4, Regel 8).
+
+#### Diagramm
+
+```mermaid
+stateDiagram-v2
+    [*] --> onboarding : anlegen (MA)
+    onboarding --> active : freischalten (MA)
+    active --> blocked : sperren (MA, MD)
+    blocked --> active : entsperren (nur MA)
+    onboarding --> inactive : Onboarding abbrechen (MA)
+    active --> inactive : Beauftragung beenden (MA)
+    blocked --> inactive : Beauftragung beenden (MA)
+    inactive --> active : reaktivieren (nur MA)
+```
+
+#### AÜG-Prüfungen (→ Kapitel 5)
+
+| Übergang | Prüfung | Kapitel |
+|---|---|---|
+| `onboarding` → `active` | P9 Erlaubnis anerkannt und gültig; P10 Pflichtnachweise vollständig *(offene Frage 20)* | 5.4 |
+| `active` → `blocked` | Die Sperre ist in der Regel das **Ergebnis** einer Prüfung (P9, P10), nicht ihr Anlass | 5.4, 5.5 |
+| `blocked` → `active` | P9 und P10 erneut, mit Sperrwirkung | 5.4 |
+| `inactive` → `active` | P9 und P10 wie beim erstmaligen Freischalten | 5.4 |
+
+### 4.7 Querschnitt: Statusübergang → AÜG-Prüfung → Ergebnisart
+
+Diese Tabelle ist die Brücke zwischen den Statusmodellen und dem Regelwerk in
+Kapitel 5 — und die Vorlage für die Gherkin-Szenarien in `tests/aueg/`. Jede
+Zeile ist ein prüfbarer Satz: ein Übergang, eine Prüfung, ein erwartetes
+Ergebnis.
+
+#### Die geprüften Regeln
+
+| Kürzel | Prüfung | Bezeichner | Kapitel |
+|---|---|---|---|
+| P1 | Höchstüberlassungsdauer je Person und Entleiher | `maxDurationCheck` | 5.1 |
+| P2 | Unterbrechung und Zurücksetzen der Zählung | `interruptionResetCheck` | 5.1 |
+| P3 | Equal-Pay-Frist erreicht | `equalPayDeadlineCheck` | 5.2 |
+| P4 | Vergleichsentgelt vorhanden und verwendbar | `comparableWageCheck` | 5.2 |
+| P5 | Branchenzuschlagsstufe zutreffend | `industryPremiumCheck` | 5.2 |
+| P6 | Drehtürklausel (Vorbeschäftigung beim Entleiher oder im Konzern) | `revolvingDoorCheck` | 5.3 |
+| P7 | Einsatzverbot bei Arbeitskampf | `industrialActionCheck` | 5.3 |
+| P8 | Kennzeichnungs- und Konkretisierungspflicht | `concretizationCheck` | 5.3 |
+| P9 | AÜG-Erlaubnis des Lieferanten gültig und anerkannt | `permitValidityCheck` | 5.4 |
+| P10 | Pflichtnachweise vorhanden und gültig | `mandatoryDocumentCheck` | 5.4 |
+| P11 | Arbeitsverhältnis beim Verleiher besteht | `employmentRelationshipCheck` | 5.3 |
+
+#### Ergebnisarten
+
+| Ergebnisart | Bezeichner | Wirkung im Statusmodell |
+|---|---|---|
+| Information | `info` | Der Übergang findet statt. Das Ergebnis wird am Objekt vermerkt (`ruleCheckResult`) und protokolliert. |
+| Warnung | `warning` | Der Übergang findet statt, erzeugt aber eine Benachrichtigung an die zuständige Rolle und einen Eskalationsanlass (2.4). |
+| Sperre | `block` | Der Übergang findet **nicht** statt. Das Objekt bleibt in seinem Zustand (4.0, Regel 5). Eine Übersteuerung ist nur nach 5.5 möglich, mit Begründung und Protokolleintrag, und ist **nicht vertretbar** (2.4, Regel 8) — *(offene Frage 10)*. |
+
+> **Die Spalte „Ergebnisart" ist ein Vorschlag aus Sicht der Statusmodelle.**
+> Welche Prüfung sperrt und welche nur warnt, ist eine Entscheidung des
+> Regelwerks und steht als offener Punkt in M2 („Entscheidung, welche Prüfung
+> sperrt und welche nur warnt"). Kapitel 5.5 bestätigt oder ändert die Spalte;
+> bis dahin ist sie die Arbeitsgrundlage für die Szenarien. Geändert wird sie
+> dann **hier**, nicht im Code.
+
+#### Querschnittstabelle
+
+| Nr. | Objekt | Übergang | Prüfung | Prüfgegenstand | Ergebnisart (Vorschlag) |
+|---|---|---|---|---|---|
+| Q01 | Bedarfsanfrage | `draft` → `submitted` | P8 | Tätigkeitsbeschreibung vorhanden und konkret | Information |
+| Q02 | Bedarfsanfrage | `submitted` → `approved` | P8 | dito, vor der Freigabe | Warnung |
+| Q03 | Bedarfsanfrage | `submitted` → `approved` | P1 | angefragter Zeitraum länger als die Höchstüberlassungsdauer (ohne Person) | Information |
+| Q04 | Bedarfsanfrage | `approved` → `tendered` | P9 | je eingeladenem Lieferanten: Erlaubnis anerkannt und über die Angebotsfrist hinaus gültig | **Sperre** (je Einladung) |
+| Q05 | Bedarfsanfrage | `approved` → `tendered` | P7 | Arbeitskampf am Standort angezeigt | Warnung |
+| Q06 | Einladung | → `invited` | P9 | Lieferant `active` und Erlaubnis gültig | **Sperre** |
+| Q07 | Profilvorschlag | `submitted` → `reviewed` | P1 | bisher angerechnete Dauer dieser Person bei diesem Kunden; Warnschwelle aus 5.1 | Warnung |
+| Q08 | Profilvorschlag | `submitted` → `reviewed` | P6 | Vorbeschäftigung beim Entleiher oder im Konzern innerhalb der Frist aus 5.3 | Warnung |
+| Q09 | Profilvorschlag | `submitted` → `reviewed` | P11 | `employmentStatusWithSupplier = employed` oder Zusage dazu | Warnung |
+| Q10 | Profilvorschlag | `submitted` → `reviewed` | P10 | Pflichtnachweise des Kandidaten (Arbeitserlaubnis, Qualifikation) | Information *(offene Frage 20)* |
+| Q11 | Profilvorschlag | → `accepted` | P1 | Höchstüberlassungsdauer würde im angefragten Zeitraum überschritten | **Sperre** |
+| Q12 | Profilvorschlag | → `accepted` | P6 | Drehtürklausel greift | **Sperre** |
+| Q13 | Profilvorschlag | → `accepted` | P11 | kein Arbeitsverhältnis beim Verleiher | **Sperre** |
+| Q14 | Einsatz | → `planned` | P1 | `maxDurationEndDate` liegt vor dem geplanten Ende | **Sperre** |
+| Q15 | Einsatz | → `planned` | P6 | Drehtürklausel greift | **Sperre** |
+| Q16 | Einsatz | → `planned` | P9 | Erlaubnis für den geplanten Zeitraum gültig | **Sperre** |
+| Q17 | Einsatz | → `planned` | P11 | Arbeitsverhältnis beim Verleiher besteht | **Sperre** |
+| Q18 | Einsatz | → `planned` | P4 | Vergleichsentgelt hinterlegt | Warnung *(offene Frage 15)* |
+| Q19 | Einsatz | → `planned` | P5 | Branchenzuschlagsschema am Standort zugeordnet | Information |
+| Q20 | Einsatz | `planned` → `active` | P9 | Erlaubnis am Starttag gültig und anerkannt | **Sperre** |
+| Q21 | Einsatz | `planned` → `active` | P10 | Pflichtnachweise zum Einsatz, insbesondere Unterweisung am Standort | **Sperre** *(offene Frage 20)* |
+| Q22 | Einsatz | `planned` → `active` | P7 | Arbeitskampf am Einsatzort | **Sperre** |
+| Q23 | Einsatz | `planned` → `active` | P1 | Fristende bereits erreicht | **Sperre** |
+| Q24 | Einsatz | `active` → `interrupted` | P2 | Unterbrechung wird mit Beginn und Grund erfasst | Information |
+| Q25 | Einsatz | `interrupted` → `active` | P2 | Unterbrechungsdauer über der Schwelle aus 5.1 — Zählung wird zurückgesetzt | Information |
+| Q26 | Einsatz | `interrupted` → `active` | P1 | Neuberechnung von `maxDurationEndDate` nach der Unterbrechung | Warnung bei Überschreitung |
+| Q27 | Einsatz | → `completed` / `terminatedEarly` | P1, P3 | Abschlussstand der Fristen wird festgeschrieben | Information |
+| Q28 | Verlängerung | `requested` → `approved` | P1 | Fristwirkung des neuen Endes für die Kundenseite sichtbar | Warnung |
+| Q29 | Verlängerung | `requested` → `approved` | P3 | Equal-Pay-Fälligkeit fällt in den verlängerten Zeitraum | Warnung |
+| Q30 | Verlängerung | `approved` → `effective` | P1 | `newEndDate` nach `maxDurationEndDate` | **Sperre** |
+| Q31 | Verlängerung | `approved` → `effective` | P9 | Erlaubnis für den verlängerten Zeitraum gültig | **Sperre** |
+| Q32 | Verlängerung | `approved` → `effective` | P4 | Vergleichsentgelt für den Zeitraum ab Equal-Pay-Fälligkeit | Warnung *(offene Frage 15)* |
+| Q33 | Stundenzettel | `recorded` → `submitted` | P1 | Zeitpositionen nach `maxDurationEndDate` enthalten | Warnung |
+| Q34 | Stundenzettel | `submitted` → `inApproval` | P3 | Equal-Pay-Fälligkeit im Zettelzeitraum erreicht | Warnung |
+| Q35 | Stundenzettel | `inApproval` → `approved` | P1 | Zeiten nach Fristende sollen genehmigt werden | **Sperre** |
+| Q36 | Stundenzettel | `inApproval` → `approved` | P4 | Fälligkeit erreicht, Vergleichsentgelt fehlt | **Sperre** *(offene Frage 15)* |
+| Q37 | Stundenzettel | `inApproval` → `approved` | P10 | Unterweisungsnachweis für den Standort gültig | Warnung *(offene Frage 20)* |
+| Q38 | Abrechnungsbeleg | → `created` (Einkauf) | P9 | Erlaubnis im gesamten Leistungszeitraum gültig | Warnung |
+| Q39 | Abrechnungsbeleg | → `created` | P4 | Vergleichsentgelt für Zeiträume nach Fälligkeit hinterlegt | Warnung |
+| Q40 | Abrechnungsbeleg | → `created` | P5 | Branchenzuschlagsstufe der abgerechneten Zuschläge plausibel | Information |
+| Q41 | Lieferant | `onboarding` → `active` | P9 | Erlaubnis anerkannt und gültig | **Sperre** |
+| Q42 | Lieferant | `onboarding` → `active` | P10 | Pflichtnachweise vollständig | **Sperre** *(offene Frage 20)* |
+| Q43 | Lieferant | `blocked` → `active` | P9, P10 | Sperrgrund behoben, Nachweise gültig | **Sperre** |
+| Q44 | Lieferant | `inactive` → `active` | P9, P10 | wie beim erstmaligen Freischalten | **Sperre** |
+
+#### Ableitungsmuster für die Szenarien
+
+Jede Zeile der Tabelle lässt sich unmittelbar in ein Gherkin-Szenario
+überführen. Das Muster ist für alle drei Ergebnisarten dasselbe und
+unterscheidet sich nur im `Dann`-Teil:
+
+```
+Szenario: <Nr.> <Prüfung> bei <Übergang>
+  Gegeben <Ausgangslage aus Kapitel 3: Objekte, Fristen, Nachweise>
+  Und das Objekt steht im Status <Von-Zustand>
+  Wenn <auslösende Rolle> den Übergang nach <Nach-Zustand> auslöst
+  Dann ist das Ergebnis <Information | Warnung | Sperre>
+  Und der Status ist <Nach-Zustand bei Information/Warnung, Von-Zustand bei Sperre>
+  Und ein Protokolleintrag mit der Regel <Kürzel> liegt vor
+```
+
+Drei Regeln für die Szenarien, die sich aus diesem Kapitel ergeben:
+
+1. **Je Zeile mindestens zwei Szenarien** — eines, in dem die Prüfung durchgeht,
+   und eines, in dem sie anspricht. Bei einer Sperre kommt ein drittes hinzu:
+   die dokumentierte Übersteuerung nach 5.5 *(offene Frage 10)*.
+2. **Fristablauf gehört in ein eigenes Szenario** mit der Erwartung
+   „Status unverändert, Eskalation ausgelöst" — niemals „genehmigt" (2.4,
+   Regel 1). Das ist die schärfste Zusicherung dieses Kapitels und muss
+   ausführbar geprüft werden.
+3. **Sichtbarkeit ist Teil der Erwartung.** Wo ein Übergang eine
+   Benachrichtigung auslöst, prüft das Szenario mit, dass sie keine Fremddaten
+   enthält (2.3, Regeln 1–4) — besonders bei `rejected` und `expired` im
+   Ausschreibungsprozess.
+
+Die `.feature`-Dateien selbst entstehen mit Kapitel 5 (Meilenstein M2), weil
+erst dort die Fristwerte, Schwellen und Rechenvorschriften stehen. Dieses
+Kapitel liefert die Übergänge und die erwartete Wirkung, nicht die Zahlen.
 
 ## 5. AÜG-Regeln
 
@@ -2216,5 +3287,7 @@ Gherkin-Szenario hinterlegt, bevor sie implementiert wird.
 | 20 | Welche Nachweisarten sind Pflicht — je Lieferant und je Einsatz — und blockiert ein fehlender Nachweis den Einsatzstart oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | offen |
 | 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | offen |
 | 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | offen |
+| 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? 3.5 sieht die Absage vor (`declined`, `declineReason`), die Matrix 2.2 gibt ihm auf dieser Zeile aber nur `L[16]` — kein `S`. Entweder erhält `LD` ein eng begrenztes Statusrecht auf die eigene Einladung oder der `MD` erfasst die Absage. | Kapitel 2.2, 3.5, 4.2 | offen |
+| 24 | Darf eine Abrechnungsperiode geschlossen werden, solange einzelne Stundenzettel nicht entschieden sind — und wer entscheidet das? Heute verhindert ein hängender Zettel das Schließen der ganzen Periode. | Kapitel 3.9, 4.4, 4.5 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

@@ -5,6 +5,145 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-10-20 — SPEC Kapitel 4: Statusmodelle (M1)
+
+**Gemacht**
+
+- Kapitel 4 in `SPEC.md` vollständig ausgearbeitet, TODO-Marker der
+  Unterpunkte 4.1–4.7 entfernt:
+  - **4.0** (neu): Konventionen für alle Statusmodelle — zehn Regeln (nur
+    genannte Übergänge, dreifach bedingte Berechtigung, Protokollpflicht, kein
+    genehmigender Übergang durch Fristablauf, Sperren sind keine Zustände,
+    Vier-Augen, keine Betreiberentscheidung anstelle des Kunden,
+    Sichtbarkeit von Benachrichtigungen, Endgültigkeit von Endzuständen,
+    Systemübergänge), die Namenskonvention der Statusbezeichner, die Tabelle
+    der **Prozessfristen** mit Vorbelegungen (2.4 Regel 5 verlangt sie hier)
+    und die Liste der Statusmodelle, die dieses Kapitel **nicht** führt
+  - **4.1–4.6**: je Modell eine Zustandstabelle (deutscher Begriff, englischer
+    Bezeichner, fachliche Bedeutung), eine Übergangstabelle (Von, Nach,
+    auslösende Rolle mit Fußnotenbezug auf 2.2, Vorbedingungen,
+    Nebenwirkungen: Benachrichtigung, Sperre, Protokolleintrag, Fristenlauf),
+    die Endzustände, eine ausdrückliche Liste der Übergänge, die es **nicht**
+    gibt, ein `stateDiagram-v2` und die ausgelösten AÜG-Prüfungen
+  - **4.7**: Querschnitt — elf benannte Prüfungen P1–P11 mit englischem
+    Bezeichner, die drei Ergebnisarten mit ihrer Wirkung im Statusmodell, eine
+    Tabelle über 44 Zeilen (Q01–Q44) Statusübergang → Prüfung → Prüfgegenstand
+    → Ergebnisart und ein Ableitungsmuster für die Gherkin-Szenarien
+- Zehn Statusmodelle statt der sechs aus der Gliederung: 4.2 und 4.3 und 4.5
+  enthalten je zwei bzw. drei Modelle, weil Einladung, Angebot und
+  Profilvorschlag (4.2), Einsatz und Verlängerung (4.3) sowie
+  Abrechnungsperiode und Abrechnungsbeleg (4.5) **verschiedene** Objekte mit
+  eigenem Lebenszyklus sind (Kapitel 3). Zwei der sieben von Kapitel 3
+  gemeldeten Lücken sind damit geschlossen (Einladung, Abrechnungsperiode).
+- Glossar 1.5 um 67 Status-, Übergangs- und Prüfbegriffe auf **165 Einträge**
+  ergänzt — in **dieselbe** Tabelle. Statuswerte stehen einmal mit allen
+  Modellen, in denen sie vorkommen, nicht je Modell erneut. Der TODO-Marker an 1.5 ist auf
+  „TODO (Kapitel 5–6)" reduziert.
+- `MILESTONES.md`: „SPEC Kapitel 4.1–4.3 (Statusmodelle des Kernprozesses)
+  ausgearbeitet" unter M1 auf ✅
+- Kein Anwendungscode, keine Testdateien, keine neuen Verzeichnisse — nur
+  `SPEC.md`, `MILESTONES.md`, `PROGRESS.md`. Nichts committet.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Aufgabenteilung 2.2 ↔ 4 | Die Matrix sagt, *wer überhaupt* einen Status wechseln darf (`S`); Kapitel 4 sagt, *welchen Übergang wann*. Kapitel 4 darf einschränken, nie erweitern |
+| Geschlossene Übergangsmenge | Was nicht in Kapitel 4 steht, ist unzulässig. Jedes Modell nennt deshalb ausdrücklich die Übergänge, die es **nicht** gibt — das ist der prüfbare Teil |
+| Fristablauf | Zeitgesteuerte Übergänge gibt es nur, wo sie **entziehen** (`expired` bei Bedarfsanfrage, Einladung, Angebot). Kein `approved`, `confirmed`, `active` oder `completed` durch Zeitablauf (2.4 Regel 1) |
+| Sperren sind keine Zustände | Ein Prüfergebnis „Sperre" verhindert den Übergang; der Vorgang bleibt stehen. Einzige Ausnahme ist `blocked` beim Lieferanten — das beschreibt die Organisation, nicht ein Prüfergebnis |
+| Prozessfristen | Vorbelegungen in 4.0, je Kunde über `processDeadlineConfig` konfigurierbar, ohne rechtliche Wirkung. AÜG-Fristen bleiben ausschließlich in Kapitel 5 |
+| Statusbezeichner | modellübergreifend einheitlich: gleiche Bedeutung, gleicher Bezeichner. Deshalb `filled` für die besetzte Anfrage und `completed` für den beendeten Einsatz |
+| „Eingereicht" als eigener Zustand (4.1) | Die Gliederung kannte nur Entwurf → freigegeben. Fußnoten [12] und [13] trennen Einreichen (`KB`) und Freigeben (`KG`); ohne `submitted` gäbe es den Eskalationsanlass aus 2.4 nicht |
+| Teilbesetzung | kein eigener Zustand: bei `headcount > 1` bleibt die Anfrage in `inSelection`, bis die letzte Stelle besetzt ist |
+| `filled` ist Endzustand | Eine Nachbesetzung nach vorzeitiger Beendigung ist eine **neue** Bedarfsanfrage, keine Wiederöffnung — sonst verliert die Historie den Bezug zwischen Anfrage, Angebot und Einsatz |
+| „verlängert" ist **kein** Zustand des Einsatzes | Eine wirksame Verlängerung verschiebt `plannedEndDate` und lässt den Einsatz in `active`. Der Vorgang hat seinen eigenen Lebenszyklus (4.3.2) — sonst würden Zeiterfassung und Fristenlauf für einen Verwaltungsakt unterbrochen |
+| Antrag auf Beendigung ist **kein** Zustand | Ein offener Antrag ändert nichts; erst die Wirksamkeit führt nach `terminatedEarly` (2.4 Regel 1) |
+| Rücknahme vor Beginn | wird als `terminatedEarly` geführt, nicht als eigener Zustand — so bleibt die Pflichtbegründung erhalten und erkennbar, dass keine Arbeitsleistung erbracht wurde |
+| Genehmigung nach [26] | Verlängerung: **immer** durch `KG`, unabhängig vom Antragsteller (Kostenwirkung). Vorzeitige Beendigung: durch `KG` nur bei Antrag der Kundenseite; auf Antrag des Lieferanten keine Genehmigung, nur Unterrichtung — der Verleiher entscheidet über den Einsatz seines Arbeitnehmers |
+| Stundenzettel und offene Frage 5 | Die Stufenzahl steht in den Daten (`timesheetApproval`), nicht im Statusmodell. `inApproval` trägt eine wie fünf Stufen; mit der Antwort ändert sich nur `assignedRoleCode` |
+| Keine Zeitfreigabe durch den Betreiber | `MD` darf erfassen und korrigieren ([27], [28]), aber keine Freigabestufe entscheiden — die Zeitfreigabe ist eine Kundenentscheidung |
+| Korrektur genehmigter Zeiten | ausschließlich über eine Korrekturfassung, die den vollen Zyklus durchläuft; erst ihre Genehmigung setzt den alten Zettel auf `corrected`. Die Regel „ein Zettel je Einsatz und Periode" (3.13) meint den jeweils **gültigen** Zettel |
+| „Offen" gehört zur Periode, nicht zum Beleg | Die Gliederung nannte „offen → erstellt" als Belegzustände. `open` ist der Zustand der Abrechnungsperiode (4.5.1); der Beleg beginnt mit `created` |
+| Belegmodell trägt offene Frage 6 | Gutschriftverfahren und Rechnungseingang haben **dieselben** Zustände; unterschiedlich ist nur die auslösende Rolle. Die Übergangstabelle führt dafür die Spalte „Seite / Variante" (Verkauf, Einkauf A, Einkauf B) |
+| `confirmed` nur auf der Einkaufsseite | 2.2 gibt `KE` mit [31] nur die Beanstandung, keine Bestätigung. Auf der Verkaufsseite ist `released` der Ruhezustand — ohne Bestätigungsfiktion durch Fristablauf |
+| Kein Wiederöffnen einer Periode | Nachträgliche Zeiten laufen über eine Korrekturfassung in der nächsten offenen Periode, nachträgliche Beträge über Storno und Nachbeleg |
+| Lieferantensperre beendet keinen Einsatz | `blocked` verhindert neue Vorgänge; laufende Einsätze, Zeiterfassung und Abrechnung laufen weiter. Ob der Entzug der Erlaubnis einen laufenden Einsatz beendet, entscheidet 5.4 — der Übergang liegt in 4.3.1 bereit |
+| `inactive` ist reaktivierbar | einzige Ausnahme von „Endzustände sind endgültig", und zwar nur durch `MA` — so steht es in Fußnote [5] |
+| Ergebnisarten in 4.7 sind ein **Vorschlag** | Welche Prüfung sperrt und welche nur warnt, ist ein offener Punkt von M2 und wird in 5.5 bestätigt oder geändert — dort, nicht im Code |
+| 4.7 als Testvorlage | Jede der 44 Zeilen ergibt mindestens zwei Szenarien (Prüfung geht durch / spricht an), bei Sperren ein drittes für die Übersteuerung nach 5.5. Fristablauf bekommt ein eigenes Szenario mit der Erwartung „Status unverändert, Eskalation ausgelöst" |
+
+**Offen / als Nächstes**
+
+- **Neue offene Fragen 23 und 24** in `SPEC.md`:
+  - **23** — Darf der Lieferantendisponent eine Einladung selbst absagen? 3.5
+    sieht `declined`, `declineReason` und `respondedAt` vor, die Matrix 2.2
+    gibt `LD` auf der Zeile „Ausschreibung, Einladung (3.5)" aber nur `L[16]`:
+    kein `S`, kein `Ä`. Entweder erhält `LD` ein eng begrenztes Statusrecht auf
+    die **eigene** Einladung (analog [20]) oder der `MD` erfasst die Absage auf
+    Meldung. Das ist eine Entscheidung über Kapitel 2.
+  - **24** — Darf eine Abrechnungsperiode geschlossen werden, solange einzelne
+    Stundenzettel nicht entschieden sind? Die Vorbedingung in 4.5.1 verlangt
+    heute, dass alle Zettel entschieden sind — strenge Folge aus 2.4 Regel 1,
+    mit dem Preis, dass ein hängender Zettel die ganze Periode aufhält.
+- **Widersprüche und Lücken, die bei der Ausarbeitung aufgefallen sind** und
+  bewusst **nicht** stillschweigend aufgelöst wurden. Sie stehen jeweils als
+  Hinweis an der betroffenen Stelle in `SPEC.md`:
+  1. **2.2 ↔ 3.5 (Absage einer Einladung)** — siehe offene Frage 23.
+  2. **3.4 ohne Feld für den Rückweisungsgrund.** Die Rückweisung
+     `submitted` → `draft` (4.1) verlangt eine Begründung; 3.4 führt nur
+     `cancellationReason` für den Storno. Bis zur Entscheidung steht die
+     Begründung im Audit-Eintrag (`reason`, 3.12). Entweder erhält 3.4 ein
+     eigenes Feld, oder die Protokolllösung wird ausdrücklich festgeschrieben.
+  3. **3.6 `submittedAt` als unbedingte Pflicht.** Die Matrix setzt mit `X[21]`
+     („nur im Status Entwurf") einen Zustand `draft` des Profilvorschlags
+     voraus, 3.6 führt `submittedAt` aber als Pflichtfeld ohne Einschränkung.
+     Richtig wäre „Pflicht ab Status eingereicht" — eine Wortkorrektur in 3.6,
+     die diese Arbeitseinheit nicht vorgenommen hat, weil nur Kapitel 4
+     geändert werden sollte.
+  4. **2.2 ↔ offene Frage 6 (Rechnungseingang).** Reicht der Lieferant seine
+     Rechnung selbst ein (Variante B), muss er einen Beleg **anlegen** können.
+     Die Matrix gibt `LD` auf der Belegzeile nur `L[7] S[32]` — kein `A`. Mit
+     der Antwort auf Frage 6 ist in 2.2 ein `A[7]` nachzutragen und [32] um das
+     Einreichen zu erweitern.
+  5. **3.7 führt die vorzeitige Beendigung nicht als eigenen Vorgang** (anders
+     als die Verlängerung), sondern als Felder am Einsatz. Ein beantragter,
+     noch nicht entschiedener Beendigungsvorgang hat deshalb keinen eigenen
+     Zustand. Für den Prototyp genügt das; soll die Beendigung mehrstufig
+     genehmigt werden, ist in 3.7 ein Vorgang analog `assignmentExtension`
+     nachzutragen.
+- **Statusmodelle, die weiter fehlen** (aus der Übergabe von Kapitel 3):
+  Rahmenvertrag und Preisliste (3.3) brauchen ein vollständiges Modell mit
+  Übergängen und auslösender Rolle; Dokument/Nachweis (3.10) gehört mit
+  Anerkennung, Fristen und Sperrwirkung nach **5.4**; Kunde, Standort und
+  Kostenstelle (3.1) haben nur aktiv/inaktiv, die Matrix hält `S` für `MA`
+  frei. Die Ausschreibung (3.5) braucht kein eigenes Modell — der Fortschritt
+  ergibt sich aus 4.1 und den Einladungen. Alle vier Punkte stehen als Tabelle
+  in 4.0.
+- **Offene Frage 18 bleibt die wichtigste.** Die Prüfungen P1
+  (Höchstüberlassungsdauer) und P6 (Drehtür) in 4.2, 4.3 und 4.4 setzen voraus, dass
+  der Betreiber dieselbe Person über Lieferanten hinweg erkennt
+  (`workerIdentity`). Wird Frage 18 mit „nein" beantwortet, prüfen diese
+  Übergänge nur innerhalb eines Lieferanten. Die Zustände und Übergänge
+  ändern sich dadurch nicht — die Aussagekraft der Prüfungen schon.
+- **Offene Fragen 4, 5, 6, 15, 16, 20 und 21 wirken in Kapitel 4 hinein.** Das
+  Kapitel trägt beide Antworten; die Stellen sind mit *(offene Frage n)*
+  gekennzeichnet. Besonders: Frage 5 betrifft nur `assignedRoleCode` je
+  Freigabeschritt, Frage 6 nur die Spalte „Seite / Variante" in 4.5.2.
+- **Als Nächstes M2:** Kapitel 5.1, 5.2 und 5.4 ausformulieren und die
+  `.feature`-Dateien in `tests/aueg/` aus der Tabelle 4.7 ableiten. Dort ist
+  auch die Spalte „Ergebnisart" zu bestätigen — M2 nennt sie als eigene
+  Entscheidung („welche Prüfung sperrt und welche nur warnt").
+- Glossar 1.5 um die Rechenbegriffe aus Kapitel 5 und die Datenschutzbegriffe
+  aus Kapitel 6 ergänzen, dann den TODO-Marker entfernen.
+- **Hinweis zu M5 und M6.** Beide nennen „SPEC Kapitel 3.8 und 4.4" bzw.
+  „3.9 und 4.5" als ein Paket. Mit dieser Arbeitseinheit sind beide
+  Spezifikationshälften fertig; die Punkte sind in `MILESTONES.md` aber
+  **nicht** umgestellt worden, weil der Auftrag dieser Arbeitseinheit nur den
+  Punkt unter M1 nannte. Nachzuziehen, sobald es jemand bestätigt.
+
+---
+
 ## 2026-10-16 — SPEC Kapitel 3: Objekte / Datenmodell (M1)
 
 **Gemacht**

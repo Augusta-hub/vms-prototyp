@@ -22,7 +22,7 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 - ⬜ Tarifvertrag geklärt (offene Frage 3)
 - ✅ SPEC Kapitel 2 (Rollen) ausgearbeitet
 - ✅ SPEC Kapitel 3.1–3.7 (Stammdaten bis Einsatz) ausgearbeitet
-- ⬜ SPEC Kapitel 4.1–4.3 (Statusmodelle des Kernprozesses) ausgearbeitet
+- ✅ SPEC Kapitel 4.1–4.3 (Statusmodelle des Kernprozesses) ausgearbeitet
 - 🟨 Glossar DE → EN angelegt (Kapitel 2 und 3 gemappt, Kapitel 4–6 offen)
 
 ## M2 — AÜG-Regelwerk als Testbasis ⬜
