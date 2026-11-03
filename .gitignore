@@ -23,6 +23,8 @@ target/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+# Nachrichtenstrom und Bericht der AÜG-Suite (aus dem Lauf erzeugt)
+reports/
 
 # Logs / temporäre Dateien
 *.log

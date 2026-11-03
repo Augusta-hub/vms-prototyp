@@ -61,6 +61,12 @@ Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 
 ## M4 — Klickbare Demo: Besetzung ⬜
 
+Fortschrittsmesser steht: `npm run test:aueg` führt die 267 Szenarien aus und
+berichtet je Prüfung P1 bis P11. Stand 03.11.2026 sind alle ausstehend — jede
+implementierte Prüfung schlägt sich unmittelbar in der Tabelle nieder
+(siehe [tests/aueg/README.md](tests/aueg/README.md)).
+
+- ✅ Gherkin-Runner angebunden, AÜG-Suite läuft (rot, getrennt von `npm test`)
 - ⬜ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln
 - ⬜ Auswahlprozess bis Zu-/Absage
 - ⬜ Einsatz anlegen, Laufzeit, Verlängerung, Beendigung

@@ -5,6 +5,71 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-03 — Gherkin-Runner angebunden, AÜG-Suite läuft (rot)
+
+**Gemacht**
+
+- Die 254 Szenarien in `tests/aueg/` sind erstmals **ausführbar**. Der Runner
+  liegt in `tests/aueg-runner/`: `@cucumber/cucumber` über `tsx`, Konfiguration
+  in `cucumber.cjs`, Step-Definitions in `schritte.ts`, Hilfsmodule unter
+  `support/`.
+- Zwei neue Skripte, getrennt von `npm test`, damit die rote AÜG-Suite die
+  grüne Unit-Suite nicht blockiert:
+  - `npm run test:aueg` — Suite ausführen, mit Kurzbericht
+  - `npm run test:aueg:report` — Bericht neu erzeugen
+- **Lauf vom 03.11.2026: 267 Szenarien, alle 267 ausstehend.** Kein Szenario
+  ist grün. 3735 Schritte, davon 2670 bestanden (Sachverhalt aufbauen), 798
+  übersprungen, 267 ausstehend.
+- Jeder Schritt ohne Fachlogik meldet `ausstehend` mit dem Hinweis auf das
+  fehlende Modul `lib/aueg/pruefwerk` und der erwarteten Prüfung — **kein
+  Schritt wird stillschweigend als erfüllt gemeldet.** Genau das war das Ziel
+  dieser Arbeitseinheit.
+- Bericht nach Prüfung P1 bis P11 (`reports/aueg-bericht.md`, nicht im
+  Repository). Der Fortschrittsmesser für M4 und M5.
+- `tests/aueg/README.md` um Ausführung, Tag-Filter und den Stand des
+  Regelwerks ergänzt. `tests/aueg/*.feature` ist **unverändert**.
+
+**Zahlen aus dem Lauf**
+
+| Prüfung | Szenarien | | Prüfung | Szenarien |
+|---|---|---|---|---|
+| P1 | 56 | | P7 | 14 |
+| P2 | 9 | | P8 | 20 |
+| P3 | 21 | | P9 | 44 |
+| P4 | 26 | | P10 | 23 |
+| P5 | 5 | | P11 | 18 |
+| P6 | 23 | | ohne Zuordnung | 13 |
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Runner | `@cucumber/cucumber` statt eines Vitest-Adapters: deutschsprachiges Gherkin und Tag-Filter werden nativ unterstützt, und die Szenariogrundrisse expandieren ohne Zutun. Eine neue Abhängigkeit, nur als devDependency |
+| Getrennte Suiten | `test:aueg` läuft **nicht** in `npm test`. Eine dauerhaft rote Suite im Hauptlauf würde die Rückmeldung der 143 Unit-Tests entwerten |
+| Ausstehend statt rot | Fehlende Fachlogik wird als `pending` gemeldet, nicht als Fehlschlag: so unterscheidet der Bericht „noch nicht gebaut" von „gebaut und falsch". Das wird mit M4 wichtig |
+| Ansatzpunkt | Die Suite greift auf **ein** Modul zu, `lib/aueg/pruefwerk` mit `pruefe()`. Solange es fehlt, bleibt der Typecheck heil, weil die Step-Definition den Import abfängt |
+| 254 gegen 267 | Beide Zahlen bleiben stehen und sind erklärt: 254 Szenarien wie geschrieben, 267 wie ausgeführt (Grundrisse expandiert, 63+3, 49, 68+7, 69+8) |
+
+**Geprüft**
+
+- `npm run test:aueg` → 267 ausstehend, 0 grün, 0 falsch grün
+- `npm test` → 143 grün
+- `npm run typecheck` → Exit 0
+- `npm run build` → kompiliert
+
+**Offen / als Nächstes**
+
+- Die vorige Arbeitseinheit hatte PROGRESS und README nicht mehr geschrieben;
+  dieser Eintrag holt das nach. Der Code selbst war vollständig.
+- **13 Szenarien ohne Prüfungszuordnung** (nächtlicher Lauf N1–N6,
+  Fristeskalation) erscheinen im Bericht in einer Sammelzeile. Sie sind nicht
+  verloren, aber auch nicht je Prüfung messbar — beim nächsten Durchgang ist zu
+  entscheiden, ob sie eigene Kennungen bekommen.
+- M4 kann beginnen und hat jetzt einen Fortschrittsmesser: jede implementierte
+  Prüfung schlägt sich unmittelbar in der Tabelle nieder.
+
+---
+
 ## 2026-10-20 — Stammdaten, Bedarfsanfrage und Ausschreibung (M3, zweite Hälfte)
 
 **Gemacht**

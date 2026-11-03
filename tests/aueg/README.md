@@ -61,8 +61,62 @@ Szenarien werden geschrieben, **bevor** die zugehörige Logik entsteht
 (Meilenstein M2 vor M3/M4). Ein rotes Szenario ist der Normalzustand, bis die
 Implementierung nachzieht.
 
+## Ausführen
+
+```bash
+npm run test:aueg           # Suite ausführen, mit Kurzbericht
+npm run test:aueg:report    # nur den Bericht neu erzeugen
+```
+
+Der Runner liegt in [tests/aueg-runner/](../aueg-runner/): `@cucumber/cucumber`
+über `tsx`, deutschsprachiges Gherkin, Step-Definitions in `schritte.ts`. Die
+Suite läuft **getrennt** von `npm test` — die rote AÜG-Suite darf die grüne
+Unit-Suite nicht blockieren. Der ausführliche Bericht landet unter
+`reports/aueg-bericht.md` und ist nicht im Repository (`.gitignore`).
+
+Nach Tags filtern geht wie gewohnt, z. B. nur die Höchstüberlassungsdauer:
+
+```bash
+npx cucumber-js -c tests/aueg-runner/cucumber.cjs --tags @p1
+```
+
+### 254 oder 267?
+
+Die Tabelle oben zählt **254** Szenarien, so wie sie in den Dateien stehen —
+ein Szenariogrundriss ist dort eine Zeile. Der Runner führt **267** aus, weil
+jeder Grundriss in seine Beispiele expandiert (63+3, 49, 68+7, 69+8). Beide
+Zahlen sind richtig, sie zählen Verschiedenes.
+
+## Stand des Regelwerks
+
+Stand 03.11.2026: **267 Szenarien, alle 267 ausstehend.** Kein Szenario ist
+grün, und das ist der erwartete Zustand — SPEC Kapitel 5 ist spezifiziert, aber
+noch nicht implementiert. Jeder Schritt, dem die Fachlogik fehlt, meldet
+ausdrücklich `ausstehend` mit dem Hinweis auf das fehlende Modul
+`lib/aueg/pruefwerk`; **stillschweigend grün wird nichts.**
+
+| Prüfung | Szenarien | Regel |
+|---|---|---|
+| P1 | 56 | Höchstüberlassungsdauer (SPEC 5.1) |
+| P2 | 9 | Unterbrechung und Drei-Monats-Regel (5.1) |
+| P3 | 21 | Equal-Pay-Fälligkeit (5.2) |
+| P4 | 26 | Vergleichsentgelt (5.2) |
+| P5 | 5 | Branchenzuschlagsschema (5.2) |
+| P6 | 23 | Drehtürklausel (5.3) |
+| P7 | 14 | Einsatzverbot bei Arbeitskampf (5.3) |
+| P8 | 20 | Kennzeichnung und Konkretisierung (5.3) |
+| P9 | 44 | AÜG-Erlaubnis (5.4) |
+| P10 | 23 | Pflichtnachweise (5.4) |
+| P11 | 18 | Arbeitsverhältnis beim Verleiher (5.3) |
+| — | 13 | ohne Prüfungszuordnung (nächtlicher Lauf, Fristeskalation) |
+
+Diese Tabelle ist der Fortschrittsmesser für M4 und M5: sie zeigt, wie viel vom
+Regelwerk tatsächlich läuft, nicht wie viel beschrieben ist.
+
 ## Noch offen
 
-- Welcher Gherkin-Runner die Dateien ausführt, hängt am Tech-Stack
-  (offene Frage 1 in SPEC.md). Bis dahin sind die Szenarien Spezifikation in
-  ausführbarer Form, aber ohne Step-Definitions.
+- Die 13 Szenarien ohne Prüfungszuordnung sind dem Bericht nach Prüfung nicht
+  zuzuordnen (nächtlicher Lauf N1–N6, Fristeskalation). Sie sind nicht
+  vergessen, nur anders eingeordnet.
+- Das Modul `lib/aueg/pruefwerk` mit `pruefe()` ist die eine Stelle, an der die
+  Suite ansetzt. Es entsteht mit M4.
