@@ -49,7 +49,7 @@ export interface Erwartung {
 const SIGNATUREN: ReadonlyArray<readonly [Erwartungsart, RegExp]> = [
   ['uebersteuerung_zurueckgewiesen', /Übersteuerung (?:wird|zurückgewiesen)|wird die Übersteuerung zurückgewiesen|Übergang (?:wird|wegen)/],
   ['protokolleintrag', /Protokolleintrag|Protokolleinträge|wird protokolliert|protokolliert\b|Prüfhistorie/],
-  ['ergebnisart', /Ergebnis (?:der Prüfung|der Prüfungen|der Bewertung|des Prüfung)?.*(?:Information|Warnung|Sperre|Treffer)|ist eine (?:Information|Warnung|Sperre)|ist ein Treffer|ist (?:eine|das) Sperre|Einzelergebnis|Sammelergebnis|Ergebnis ist "/],
+  ['ergebnisart', /Ergebnis(?:se)? (?:der Prüfung|der Prüfungen|der Bewertung|des Prüfung)?.*(?:Information|Warnung|Sperre|Treffer)|ist eine (?:Information|Warnung|Sperre)|ist ein Treffer|ist (?:eine|das) Sperre|Einzelergebnis|Sammelergebnis|Ergebnis ist "/],
   ['kriterium', /Kriterium|Kriterien K\d/],
   ['pruefbarkeit', /nicht prüfbar|nicht ausführbar|wirkt (?:hier )?(?:nicht )?wie ein Treffer|nicht bildbar|nicht bestimmbar|wie "ja" gerechnet|wie "kein Eintrag" behandelt/],
   ['deckung', /gedeckt|deckt (?:keinen|nichts|den|mit)|umschließt/],

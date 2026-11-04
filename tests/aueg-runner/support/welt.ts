@@ -16,6 +16,7 @@
 
 import { World, type IWorldOptions } from '@cucumber/cucumber'
 import { erfasseAusloeser, type Ausloeser } from './ausloeser'
+import { werteAus } from './auswertung'
 import { erfasseErwartung, type Erwartung } from './erwartung'
 import { erfasseSachverhalt, type Sachverhalt } from './sachverhalt'
 import {
@@ -101,9 +102,11 @@ export class AuegWelt extends World {
   }
 
   /**
-   * Eine Zusicherung pruefen. Ohne Befund gibt es nichts zu pruefen; mit
-   * Befund wertet der Runner die Arten aus, die SPEC 5.5.2 strukturiert
-   * vorgibt, und meldet die fachlichen Feststellungen in Prosa als ausstehend.
+   * Eine Zusicherung pruefen. Ohne Befund gibt es nichts zu pruefen; mit Befund
+   * wertet `support/auswertung.ts` die Arten aus, die der Befund strukturiert
+   * hergibt. Was sich nicht entscheiden laesst — und jede fachliche
+   * Feststellung in Prosa — bleibt ausstehend und wird mit Grund gemeldet, nie
+   * stillschweigend als erfuellt.
    */
   private zusicherungPruefen(satz: string): void | 'pending' {
     const erwartung = erfasseErwartung(satz)
@@ -117,42 +120,20 @@ export class AuegWelt extends World {
       return 'pending'
     }
 
-    if (erwartung.art === 'ergebnisart' && erwartung.ergebnisart !== null) {
-      return this.ergebnisartPruefen(erwartung)
-    }
+    const auswertung = werteAus(erwartung, this.befunde)
 
-    // Die uebrigen Arten setzen Befundfelder voraus, die erst mit der
-    // Fachlogik entstehen. Sie werden gemeldet, nicht geschluckt.
-    this.attach(
-      `Zusicherungsart "${erwartung.art}" ist noch nicht ausgewertet: "${satz}"`,
-      'text/plain',
-    )
-    return 'pending'
-  }
-
-  private ergebnisartPruefen(erwartung: Erwartung): void | 'pending' {
-    const erwartet = erwartung.ergebnisart
-    if (erwartet === 'treffer') {
-      // Ein "Treffer" ist je Pruefung eine Warnung oder eine Sperre (SPEC 5.5.2).
-      const treffer = this.befunde.some((befund) => befund.ergebnisart !== 'information')
-      if (!treffer) {
-        throw new Error(
-          `Erwartet war ein Treffer, die Befunde sind: ${this.befundeAlsText()} — "${erwartung.satz}"`,
-        )
-      }
-      return
-    }
-
-    const passend = this.befunde.some((befund) => befund.ergebnisart === erwartet)
-    if (!passend) {
+    if (auswertung.ergebnis === 'verletzt') {
       throw new Error(
-        `Erwartete Ergebnisart "${erwartet}" kommt in den Befunden nicht vor: ` +
-          `${this.befundeAlsText()} — "${erwartung.satz}"`,
+        `Zusicherung verletzt (${erwartung.art}): ${auswertung.grund} — "${satz}"`,
       )
     }
-  }
 
-  private befundeAlsText(): string {
-    return this.befunde.map((befund) => `${befund.pruefung}=${befund.ergebnisart}`).join(', ')
+    if (auswertung.ergebnis === 'ausstehend') {
+      this.attach(
+        `Zusicherung ausstehend (${erwartung.art}): ${auswertung.grund} — "${satz}"`,
+        'text/plain',
+      )
+      return 'pending'
+    }
   }
 }

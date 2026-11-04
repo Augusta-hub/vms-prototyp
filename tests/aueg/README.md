@@ -89,11 +89,40 @@ Zahlen sind richtig, sie zählen Verschiedenes.
 
 ## Stand des Regelwerks
 
-Stand 03.11.2026: **267 Szenarien, alle 267 ausstehend.** Kein Szenario ist
-grün, und das ist der erwartete Zustand — SPEC Kapitel 5 ist spezifiziert, aber
-noch nicht implementiert. Jeder Schritt, dem die Fachlogik fehlt, meldet
-ausdrücklich `ausstehend` mit dem Hinweis auf das fehlende Modul
-`lib/aueg/pruefwerk`; **stillschweigend grün wird nichts.**
+Stand 03.11.2026: **267 Szenarien — 42 grün, 0 rot, 225 ausstehend.** Umgesetzt
+sind **P9** (AÜG-Erlaubnis, SPEC 5.4.1) und **P10** (Pflichtnachweise,
+SPEC 5.4.4) in `lib/aueg/`, beide mit ihrem nächtlichen Lauf (N1, N5) und der
+Übersteuerung nach 5.5.4. P1 bis P8 und P11 haben noch keinen Rechenweg und
+melden deshalb weiter `ausstehend`. Jeder Schritt ohne Fachlogik nennt die
+fehlende Prüfung; **stillschweigend grün wird nichts.**
+
+| Prüfung | grün | rot | ausstehend | von |
+|---|---:|---:|---:|---:|
+| P9 AÜG-Erlaubnis | **29** | 0 | 15 | 44 |
+| P10 Pflichtnachweise | **15** | 0 | 8 | 23 |
+
+Grün sind die Rechenwegszenarien beider Prüfungen, die Übergänge Q04, Q06, Q10,
+Q16, Q20, Q21, Q31, Q37, Q38, Q41, Q42, Q43 und Q44, die gestuften nächtlichen
+Läufe N1 und N5, die zurückgewiesene und die wirksame Übersteuerung.
+
+**Warum die restlichen 23 ausstehen, obwohl beide Prüfungen laufen.** Keines
+dieser Szenarien scheitert am Rechenweg — in jedem ist das Prüfergebnis selbst
+zugesichert und grün. Ausstehend bleibt jeweils ein **anderer** Satz desselben
+Szenarios, den der Runner nicht maschinell prüft:
+
+| Grund | Szenarien | Beispielsatz |
+|---|---:|---|
+| Fachliche Feststellung in Prosa (`fachaussage`, `rechtsfolge`) | 22 | „die Übersteuerung heilt die Rechtslage nicht" |
+| Satz nennt keinen vergleichbaren Wert (`berechneter_wert`) | 1 | „entfallen die Unterbrechungstage aus dem Prüfzeitraum" |
+
+Ein Teil dieser Sätze **wäre** gegen den Befund prüfbar und ist nur von der
+Signaturtabelle in `tests/aueg-runner/support/erwartung.ts` als Prosa
+eingeordnet: „deckt der Satz keinen Tag" ist eine Deckungsaussage, „die Sperre
+nennt die Nachweisart »safetyBriefing«" eine über den Meldungstext, den der
+Befund führt. Das ist die nächste Verbesserung am **Runner**, nicht an der
+Fachlogik; sie betrifft alle vier Feature-Dateien.
+
+Ein Szenario gilt erst als grün, wenn **jede** seiner Zusicherungen geprüft ist.
 
 | Prüfung | Szenarien | Regel |
 |---|---|---|

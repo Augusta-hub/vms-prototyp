@@ -5,6 +5,204 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-03 — P10 läuft: Pflichtnachweise, zweite AÜG-Prüfung
+
+**Gemacht**
+
+- **P10 (Pflichtnachweise, SPEC 5.4.4) ist umgesetzt** und als **eine Zeile**
+  in die Registry von `lib/aueg/pruefwerk.ts` eingehängt:
+  `regeln/p10Nachweise.ts` als Rechenweg, `lesen/nachweislage.ts` für den
+  Sachverhalt, der Pflichtkatalog als Konfiguration in `regelwerk.ts`, die
+  Zeilen Q10, Q21, Q37, Q42, Q43, Q44 und N5 in `querschnitt.ts`.
+- **Der gemeinsame Teil der beiden Leser liegt jetzt in
+  `lesen/vorgangslage.ts`**: Anlass, Stichtag, Status, Zeitangaben, Standorte,
+  Einladungen, Sperrvorzustand und die drei Bedingungen der Übersteuerung. P9
+  und P10 setzen nur noch ihre eigenen Objekte darauf. Die 21 Lesetests zu P9
+  waren der Beweis, dass die Umstellung nichts verschoben hat.
+- **Der gestufte Vorlauf N5** (60 / 30 / 7 Tage vor Ablauf der
+  Arbeitserlaubnis) rechnet wie N1 bei P9, mit den Werten aus 5.4.4.
+- **Die Speicherung aus 5.5.1 b wird bedient**: wird am Standort nachträglich
+  eine Unterweisung verlangt, rechnet P10 neu und meldet eine Warnung an
+  Bedarfsträger und Lieferantendisponent. Vorher lieferte P10 für diesen Anlass
+  **gar keinen** Befund — eine Lücke, die der Lauf sichtbar gemacht hat.
+- **Vier Lesefehler behoben**, alle von der Suite oder den eigenen Tests
+  aufgedeckt:
+  - Ein Standort, über dessen Unterweisungspflicht nichts gesagt war, wurde mit
+    „nein" vorbelegt. Das ist die mildere Annahme und hätte eine Sperre
+    umgangen; nach 5.4.6 wird eine **fehlende** Angabe wie „ja" gerechnet.
+  - „Am Standort wird eine Unterweisung verlangt" nennt den Standort nicht beim
+    Namen und wirkte deshalb nicht.
+  - Der **Entleiher** wurde als Lieferant mitgezählt — beide tragen eine
+    Firmenbezeichnung, sind aber verschiedene Objekte (3.1 gegen 3.2). Wer ihn
+    mitzählt, prüft am Ende die Erlaubnis des Kunden.
+  - Nennt ein Vorgang keinen Lieferanten, wurde der zuletzt erwähnte genommen.
+    Jetzt kommt nur ein Lieferant mit Erlaubnissätzen in Betracht, und nur wenn
+    es genau einer ist; sonst wird **nicht geraten**.
+- **Zwei Auswertungen im Runner ergänzt** (`support/auswertung.ts`,
+  `support/erwartung.ts`): die Prüfbarkeit („wird die fehlende Angabe wie »ja«
+  gerechnet" — verglichen wird die Pflichtangabe, die der Befund mitführt) und
+  Sätze, die **mehrere** Prüfungen nennen („die Ergebnisse der Prüfungen P9 und
+  P10 sind Informationen" — jede genannte Prüfung muss dieses Ergebnis tragen,
+  ein `some` über alle Befunde würde die eine durch die andere decken).
+- **146 neue Unit-Tests**; `tests/aueg/*.feature` ist **unverändert**.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Ergebnisart aus dem Katalog, nicht aus 4.7 | Wo 4.7 einem Übergang eine Sperre zuordnet, der Katalog in 5.4.4 der konkreten Nachweisart aber „nie Sperre" gibt (Q21 mit `qualificationCertificate`, Q42 bis Q44 mit `clearanceCertificate`), folgt die Rechnung dem **Katalog**. Das ist nicht geraten: *offene Frage 31* hält ausdrücklich fest, dass die Szenarien so rechnen. Die Zeilen in `querschnitt.ts` tragen dafür `ergebnisartAusKatalog` und behalten den Wert aus 4.7 als Vorschlag |
+| Eine nie verpflichtende Art schweigt | `qualificationCertificate` und `clearanceCertificate` sind nach dem Katalog nie Pflicht. Ihr Fehlen wird nur dann zum Befund, wenn der Vorgang es **ausdrücklich** feststellt. Sonst wäre jede nicht erwähnte Art eine Warnung, und „alle Pflichtnachweise liegen vor" könnte nie eintreten |
+| Ein Befund je Feststellung, einer für die Summe | 5.4.4 nennt als Sammelergebnis das strengste Einzelergebnis, 5.5.2 Nr. 2 verlangt, dass jede Feststellung ihre Nachweisart und ihr Bezugsobjekt nennt. Beides zusammen heißt: ein Befund je Mangel **und** einer für die Summe — ein Sammelergebnis „drei Befunde" wäre nicht abarbeitbar |
+| Ohne Stichtag nur Vorliegen und Anerkennung | 5.4.4 führt „fehlt oder nicht anerkannt" und „abgelaufen am Stichtag" in **getrennten** Spalten. Nennt ein Vorgang keinen Tag, ist das Erste geprüft und das Zweite nicht; der Befund führt das als `gueltigkeitGeprueft` mit. Ohne Tag gibt es keinen Tag, für den ein Nachweis unbrauchbar wäre (5.4.3) |
+| **P9 berichtigt:** ein ungenannter Stichtag ist kein Rechtsmangel | Bisher war ein nicht bestimmbarer Prüfzeitraum bei P9 ein Treffer. Das war falsch: der Grundsatz aus 5.0 („eine fehlende Rechengrundlage wirkt wie ein Treffer") gilt den **Eingangsdaten der Regel** — Erlaubnissatz, Anerkennung, Urkunde —, und 5.4.6 führt den Stichtag nicht unter den fehlenden Daten. Im Betrieb trägt jeder Übergang seinen Tag (5.0). P9 verhält sich jetzt wie P10: liegt ein deckungsfähiger Satz vor und nennt der Vorgang keinen Tag, sind Anerkennung und Datenstand geprüft und die Gültigkeit nicht (`deckungGeprueft = false`). Fehlt der Satz selbst oder seine Anerkennung, bleibt es ein Treffer |
+| Speicherung ist ein eigener Anlass | 5.5.1 b: „Eine Prüfung sperrt niemals das Speichern." Der Katalog trägt dafür den Schlüssel `Speicherung` mit Warnung oder Information — gesperrt werden Handlungen, nicht Feststellungen |
+
+**Geprüft**
+
+- `npm run test:aueg` → **267 Szenarien: 42 grün, 0 rot, 225 ausstehend**.
+  P9: 29 grün, 0 rot, 15 ausstehend von 44. P10: 15 grün, 0 rot, 8 ausstehend
+  von 23. Keine andere Feature-Datei ist rot geworden.
+- `npm test` → **281 grün** · `npm run typecheck` → Exit 0 ·
+  `npm run build` → kompiliert
+- Nichts committet.
+
+**Offen / als Nächstes**
+
+- **Die 23 ausstehenden Szenarien zu P9 und P10 scheitern nicht am Rechenweg.**
+  In jedem ist das Prüfergebnis selbst zugesichert und grün; ausstehend bleibt
+  ein anderer Satz desselben Szenarios — 22 Prosa, einer ohne vergleichbaren
+  Wert. Die Liste mit Grund je Szenario steht in
+  [tests/aueg/README.md](tests/aueg/README.md).
+- **Die Signaturtabelle in `support/erwartung.ts` ist der nächste Hebel.**
+  Mehrere Sätze wären gegen den Befund prüfbar und sind nur als Prosa
+  eingeordnet („deckt der Satz keinen Tag", „die Sperre nennt die Nachweisart
+  »safetyBriefing«"). Das betrifft alle vier Feature-Dateien und gehört in eine
+  eigene Arbeitseinheit am Runner.
+- **Anbindung an die Übergänge:** unverändert wie bei P9 — Q04 und Q06 sind
+  angebunden (`lib/aueg/anbindung.ts`). Für Q10 (Profilvorschlag, 3.6), Q21
+  (Einsatz, 4.3), Q37 (Stundenzettel, 4.4), Q42 bis Q44 (Lieferantenstatus,
+  4.6) gibt es **keine** Übergangsmenge in `lib/status/`; P10 rechnet diese
+  Zeilen, es hängt nur kein Übergang daran.
+- **Nicht umgesetzt und nicht angefangen:** P1 bis P8 und P11. Die Zeilen stehen
+  in `pruefwerk.ts` ohne Rechenweg und liefern **keinen** Befund.
+- **Keine neue offene Frage für SPEC Kapitel 7.** Der eine Widerspruch, den P10
+  berührt — Ergebnisart aus 4.7 gegen Katalog in 5.4.4 —, ist als *Frage 31*
+  schon erfasst und dort in der Lesart entschieden, der die Szenarien folgen.
+
+---
+
+## 2026-11-03 — P9 läuft: erste grüne AÜG-Szenarien
+
+**Gemacht**
+
+- **P9 (AÜG-Erlaubnis, SPEC 5.4.1) ist umgesetzt** in `lib/aueg/`:
+  `pruefwerk.ts` als einzige Eingangsstelle, `regeln/p9Erlaubnis.ts` als
+  Rechenweg, `lesen/erlaubnislage.ts` für den Sachverhalt, `querschnitt.ts`
+  für die Ergebnisart nach 4.7, `regelwerk.ts` für die Festwerte und
+  `kalender.ts` für die Fristenarithmetik aus 5.0.
+- **Der Runner wertet jetzt aus, statt nur zu sammeln.** Neu:
+  `tests/aueg-runner/support/auswertung.ts`. Bis hierher prüfte `welt.ts` nur
+  die Ergebnisart; jede andere Zusicherung meldete `ausstehend`, auch wenn ein
+  Befund vorlag — **kein Szenario hätte je grün werden können.** Ausgewertet
+  werden jetzt Deckung, Vorgangsstatus, Protokolleintrag, gerechnete Werte,
+  Adressierung und die zurückgewiesene Übersteuerung.
+- **Q04 und Q06 sind an die Übergänge angebunden** (`lib/aueg/anbindung.ts`):
+  `lib/status/demandRequest.ts` und `lib/status/tenderInvitation.ts` führten die
+  Vorbedingung aus 5.4 schon als Tatsache `hasAcceptedValidPermit`, ohne dass
+  jemand den Wert gerechnet hätte. Er kommt jetzt aus dem Rechenweg.
+- **91 Unit-Tests neben dem Code** (`lib/aueg/**/*.test.ts`): Fristenarithmetik
+  aus 5.0, die sechs Schritte des Rechenwegs aus 5.4.1, die Grenzfälle aus
+  5.4.5 und das Verhalten bei fehlenden Daten aus 5.4.6, die Stufenfolge des
+  nächtlichen Laufs aus 5.4.4, die Abschrift von 4.7 und die Lesarten des
+  Sachverhaltslesers. Sie sind die schnelle Rückmeldung; die Gherkin-Suite
+  bleibt der fachliche Nachweis.
+- **Zwei Lesefehler im Sachverhaltsleser behoben**, beide von der Suite
+  aufgedeckt: „Der Nachfolgesatz »EP-2« ist ab dem 02.07.2026 gültig" enthält
+  das Wort *Erlaubnis* nicht und wurde deshalb übersprungen; und „der
+  Einkaufsbeleg zur Periode Juli 2026" wird jetzt in den Kalendermonat
+  übersetzt, wenn der Vorgang keinen Leistungszeitraum nennt (3.9 führt
+  `periodFrom` / `periodTo`, die Vorrang haben).
+- **Zwei Auswertungen im Runner nachgezogen**, damit sie prüfen, was die
+  Szenarien zusichern: der Vorgangsstatus wird gegen `statusNachher` des
+  Befundes verglichen statt nur gegen „irgendein Übergang fand statt", und
+  eine Deckungszusicherung mit genanntem Tag prüft **diesen Tag** gegen die
+  Liste der ungedeckten Tage statt nur deren Anzahl.
+- **Lauf vom 03.11.2026: 27 grün, 0 rot, 240 ausstehend** (vorher 0/0/267).
+  P9 selbst: **27 grün, 0 rot, 17 ausstehend von 44.**
+- `tests/aueg/*.feature` ist **unverändert**.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Zwei Implementierungen zusammengeführt | In `lib/aueg/` lagen am Ende zwei Fassungen nebeneinander: eine schlanke von mir und die ausgebaute mit Querschnitt, Regelwerk und Kalender. Behalten wurde die **ausgebaute**; meine drei Dateien (`sachlage.ts`, `vertrag.ts`, `p9Erlaubnis.ts`) sind ersatzlos entfernt. Sie waren unreferenziert, und zwei Rechenwege für dieselbe Regel sind schlimmer als einer |
+| Rollen werden auf Kürzeln verglichen | Der Befund nennt `LA`, `LD`, `MD`, `MA` wie die Matrix in 2.1; die Szenarien schreiben die Rolle aus. Die Zuordnung liegt im Runner, nicht in der Fachlogik |
+| Übersteuerung liefert zwei Befunde | Nach 5.5.4 Invariante 5 wird die bestandene Sperre **und** der vollzogene Übergang protokolliert. Der Vorgang gilt deshalb als vollzogen, wenn **ein** Befund ihn vollzieht — nicht wenn alle es tun |
+| Je Einladung auswerten | Q04 prüft je eingeladenem Lieferanten (5.4.1). Nennt eine Zusicherung eine Firma, wird sie nur gegen deren Befund geprüft — sonst verdeckt die zulässige Einladung des einen die gesperrte des anderen |
+| Prosa bleibt ausstehend | Fachliche Feststellungen („die Übersteuerung heilt die Rechtslage nicht") werden **nicht** maschinell als erfüllt gemeldet. Lieber 18 ausstehende Szenarien als 18 falsch grüne |
+| Vorgangsstatus über `statusNachher` | „Der Status des Einsatzes ist »active«" ist eine Aussage über **diesen** Status. Geprüft wird deshalb der Zielzustand im Befund, nicht nur, dass ein Übergang stattfand — bei einer Sperre bleibt der Vorgang in seinem Zustand (4.0 Regel 5) |
+| Deckung tagesgenau zusichern | Nennt ein Szenario einen Tag („der 01.07.2026 ist nicht gedeckt"), wird dieser Tag gegen die Liste der ungedeckten Tage geprüft. Eine Zusicherung, der jede beliebige Lücke genügt, prüft weniger als das Szenario zusichert (5.4.1 Schritt 3) |
+| Ergebnisart kommt aus 4.7, nicht aus dem Rechenweg | `querschnitt.ts` ist die Abschrift der Querschnittstabelle; der Rechenweg sagt nur, *ob* ein Treffer vorliegt. Dieselbe nicht gedeckte Erlaubnis sperrt am Einsatzstart (Q20) und warnt am Einkaufsbeleg (Q38) — das steht in 4.7 und darf nicht im Rechenweg verschwinden (5.5.1 a) |
+| Fehlende Rechengrundlage vor fehlendem Zeitraum | Gibt es keinen deckungsfähigen Erlaubnissatz, entscheidet **sein** Mangel über die Meldung, nicht der Zeitraum. Nur so unterscheidet die Meldung „die Anerkennung steht aus" von „der Nachweis fehlt" — worauf 5.4.6 ausdrücklich Wert legt |
+| Vier Lesarten offengelegt | Der Sachverhaltsleser legt fest, was die SPEC nicht sagt, weil es den Vorgang betrifft und nicht die Rechtslage: neue Sätze gelten als anerkannt mit Urkunde, bis der Vorgang widerspricht; ohne Erlaubnisart folgt sie dem Enddatum; ein ungenannter Übergangstag wird **nicht geraten**; und ein Satz über die Welt außerhalb des Systems („besteht nachweislich", „ist nicht erfasst") ändert keine Daten — sonst schlösse die Übersteuerung die Lücke, die sie überbrücken soll |
+
+**Geprüft**
+
+- `npm run test:aueg` → **267 Szenarien: 27 grün, 0 rot, 240 ausstehend**;
+  P9 davon 27 grün, 0 rot, 17 ausstehend von 44. Keine andere Feature-Datei ist
+  rot geworden — P1 bis P8, P10 und P11 melden weiter `ausstehend`.
+- `npm test` → **234 grün** (143 vorher + 91 neue) · `npm run typecheck` →
+  Exit 0 · `npm run build` → kompiliert
+- Nichts committet.
+
+**Offen / als Nächstes**
+
+- **Die 17 ausstehenden P9-Szenarien scheitern nicht am Rechenweg.** In jedem
+  ist das P9-Ergebnis selbst zugesichert und grün; ausstehend bleibt ein
+  anderer Satz desselben Szenarios. 16 davon sind fachliche Feststellungen in
+  Prosa („die Übersteuerung gilt nur für diesen einen Übergang", „das System
+  beendet den Einsatz nicht"), eines nennt keinen vergleichbaren Wert
+  („entfallen die Unterbrechungstage aus dem Prüfzeitraum"). Die Liste mit
+  Grund je Szenario steht in [tests/aueg/README.md](tests/aueg/README.md).
+- **Vier dieser Sätze wären prüfbar** und sind nur von der Signaturtabelle in
+  `tests/aueg-runner/support/erwartung.ts` als Prosa eingeordnet: „deckt der
+  Satz keinen Tag" ist eine Deckungsaussage, „die Meldung nennt, dass die
+  Anerkennung aussteht" eine über den Meldungstext, den der Befund führt. Das
+  ist die nächste Verbesserung am **Runner**, nicht an der Fachlogik; sie
+  betrifft alle vier Feature-Dateien und gehört deshalb in eine eigene
+  Arbeitseinheit.
+- **Zwei Szenarien (Q43 und Q44 im Informationsfall) brauchen P10**: sie
+  sichern „die Ergebnisse der Prüfungen P9 und P10 sind Informationen" zu.
+  Sie können erst mit P10 grün werden und sind kein P9-Rest.
+- **Die Anbindung an die Übergänge ist unvollständig, und zwar absichtlich.**
+  `querschnitt.ts` trägt alle neun P9-Zeilen aus 4.7. Ein Statusmodell gibt es
+  in `lib/status/` aber nur für die Bedarfsanfrage (4.1) und die Einladung
+  (4.2.1) — also für **Q04 und Q06**, und die sind angebunden: beide
+  Statusmodelle führten die Vorbedingung schon als Tatsache
+  (`hasAcceptedValidPermit`, Kommentar „5.4, Prüfung P9"), ohne dass jemand den
+  Wert gerechnet hätte. `lib/aueg/anbindung.ts` rechnet ihn jetzt mit demselben
+  Rechenweg, den die Suite prüft — ein Boolescher Wert, den irgendwer von Hand
+  füllt, ist genau das stille Durchlassen, das 5.0 verbietet.
+  Für Q16, Q20 (Einsatz, 4.3), Q31 (Verlängerung, 4.3.2), Q38 (Beleg, 4.5) und
+  Q41, Q43, Q44 (Lieferantenstatus, 4.6) gibt es **keine** Übergangsmenge; das
+  Prüfwerk rechnet diese Zeilen, aber es hängt kein Übergang daran. Nicht
+  vorgebaut.
+- **Nicht umgesetzt und nicht angefangen:** P1 bis P8, P10 und P11. Die Zeilen
+  stehen in `pruefwerk.ts` ohne Rechenweg und liefern **keinen** Befund — eine
+  nicht umgesetzte Prüfung soll nicht wie eine erfüllte aussehen.
+- Als Nächstes liegt **P10** nahe (23 Szenarien, Pflichtnachweise): derselbe
+  Abschnitt 5.4, der Pflichtkatalog aus 5.4.4 steht, und `regelwerk.ts` führt
+  die Vorlaufstufen aller sieben Nachweisarten bereits.
+- **Keine neue offene Frage für SPEC Kapitel 7.** Die Szenarien widersprechen
+  der Spezifikation an keiner Stelle, und P9 musste nichts raten: 5.4.1 trägt
+  den Rechenweg, 5.4.5 und 5.4.6 die Grenzfälle, 4.7 und 5.5.5 die
+  Ergebnisart, 5.0 den Prüfzeitraum. Die offenen Fragen 7 (kein Register),
+  10 (Genehmigung einer Übersteuerung) und 29 (Rechtsfolge des Erlöschens)
+  berühren P9, sind aber in 5.4 und 5.5 schon so beantwortet, dass das
+  Systemverhalten jede Antwort verträgt.
+
+---
+
 ## 2026-11-03 — Gherkin-Runner angebunden, AÜG-Suite läuft (rot)
 
 **Gemacht**

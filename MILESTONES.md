@@ -62,11 +62,27 @@ Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 ## M4 — Klickbare Demo: Besetzung ⬜
 
 Fortschrittsmesser steht: `npm run test:aueg` führt die 267 Szenarien aus und
-berichtet je Prüfung P1 bis P11. Stand 03.11.2026 sind alle ausstehend — jede
-implementierte Prüfung schlägt sich unmittelbar in der Tabelle nieder
-(siehe [tests/aueg/README.md](tests/aueg/README.md)).
+berichtet je Prüfung P1 bis P11. Stand 03.11.2026: **42 grün, 0 rot, 225
+ausstehend** — jede implementierte Prüfung schlägt sich unmittelbar in der
+Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 
-- ✅ Gherkin-Runner angebunden, AÜG-Suite läuft (rot, getrennt von `npm test`)
+- ✅ Gherkin-Runner angebunden, AÜG-Suite läuft (getrennt von `npm test`)
+- 🟨 AÜG-Prüfungen umgesetzt — **zwei von elf laufen, beide aus SPEC 5.4:**
+  - **P9 AÜG-Erlaubnis** (5.4.1): 29 von 44 Szenarien grün, 0 rot. Tagesgenaue
+    Deckung, Lücken, Anerkennungsstatus, befristete gegen unbefristete
+    Erlaubnis, Datenfehler, nächtlicher Lauf N1, Übersteuerung nach 5.5.4
+  - **P10 Pflichtnachweise** (5.4.4): 15 von 23 Szenarien grün, 0 rot.
+    Pflichtkatalog als Konfiguration, Sammelergebnis als strengstes
+    Einzelergebnis, fehlende Pflichtangaben wie „ja", nächtlicher Lauf N5
+  - Die 23 ausstehenden scheitern nicht am Rechenweg, sondern an
+    Prosa-Zusicherungen, die der Runner nicht maschinell prüft
+  - P1 bis P8 und P11 stehen aus — sie stehen ohne Rechenweg in der Registry
+    und liefern deshalb **keinen** Befund
+- 🟨 Anbindung an die Übergänge — **Q04 und Q06 sind angebunden**
+  (`lib/aueg/anbindung.ts` rechnet `hasAcceptedValidPermit`, das 4.1 und 4.2.1
+  als Vorbedingung führen). Q10, Q16, Q20, Q21, Q31, Q37, Q38 und Q41 bis Q44
+  haben noch **kein** Statusmodell: sie warten auf SPEC 3.6, 3.7, 3.9 und auf
+  die Statusmodelle 4.2.3, 4.3, 4.4, 4.5 und 4.6 (Lieferantenstatus)
 - ⬜ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln
 - ⬜ Auswahlprozess bis Zu-/Absage
 - ⬜ Einsatz anlegen, Laufzeit, Verlängerung, Beendigung
