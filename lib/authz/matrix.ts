@@ -12,8 +12,8 @@
  * Zuständigkeit gehen vor und werden in lib/authz/check.ts **vor** der Matrix
  * geprüft.
  *
- * Belegt sind die Zeilen zu 3.1 bis 3.5 und die beiden Zeilen zu 3.11. Die
- * übrigen Zeilen (3.6 bis 3.10, 3.12) kommen mit ihren Fachmodulen hinzu; bis
+ * Belegt sind die Zeilen zu 3.1 bis 3.7 und die beiden Zeilen zu 3.11. Die
+ * übrigen Zeilen (3.8 bis 3.10, 3.12) kommen mit ihren Fachmodulen hinzu; bis
  * dahin verweigern sie jeden Zugriff.
  *
  * Die Zellen stehen in derselben Reihenfolge wie die Spalten in 2.2
@@ -217,6 +217,59 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
       delete: [21],
     },
     supplierAdmin: { read: [7] },
+  },
+
+  // | Kandidat / Profilvorschlag (3.6)
+  // | MA: L S X | MD: L Ä[22] S[17] | KB: L[23] S[24] | KG: – | KE: – |
+  // | LD: A L[7] Ä[7] S[20] X[21] | LA: L[7] | AN: L[4] |
+  //
+  // Kein `A` und kein `Ä` für den Betreiber an den fachlichen Angaben: der
+  // Lieferant ist Eigentümer der Personendaten; `MA` darf sperren oder
+  // stornieren, `MD` nur Pseudonymisierung und Freigabe ändern ([22], 3.6).
+  // Für `KG` und `KE` trägt die Zeile **nichts**: die Auswahl ist Sache des
+  // Bedarfsträgers, und Personendaten gehen Genehmigung und Einkauf nicht an.
+  candidate: {
+    operatorAdmin: { read: [], transition: [], delete: [] },
+    operatorCoordinator: { read: [], update: [22], transition: [17] },
+    demandOwner: { read: [23], transition: [24] },
+    supplierCoordinator: {
+      create: [],
+      read: [7],
+      update: [7],
+      transition: [20],
+      delete: [21],
+    },
+    supplierAdmin: { read: [7] },
+    temporaryWorker: { read: [4] },
+  },
+
+  // | Personenidentität (3.6)
+  // | MA: A L Ä X | MD: A L Ä[43] | KB: – | KG: – | KE: – | LD: – | LA: – |
+  // | AN: – |
+  //
+  // **Ausschließlich Betreibermandant.** Kunden und Lieferanten sehen das
+  // Objekt und seine Existenz nicht ([43], 2.3 Regel 4) — deshalb trägt die
+  // Zeile für sie keine Zelle, nicht einmal ein eingeschränktes `L`. Kein `S`:
+  // die Personenidentität hat kein Statusmodell (3.6).
+  workerIdentity: {
+    operatorAdmin: MA_WITHOUT_TRANSITION,
+    operatorCoordinator: { create: [], read: [], update: [43] },
+  },
+
+  // | Einsatz, Verlängerung, Unterbrechung (3.7)
+  // | MA: A L Ä S X | MD: A L Ä S | KB: L[2] S[25] | KG: L[2] S[26] |
+  // | KE: L[2] | LD: L[7] S[25] | LA: L[7] | AN: L[4] |
+  //
+  // Verlängerung und Unterbrechung teilen diese Zeile (2.2, Lesart; 3.7).
+  assignment: {
+    operatorAdmin: MA_FULL,
+    operatorCoordinator: { create: [], read: [], update: [], transition: [] },
+    demandOwner: { read: [2], transition: [25] },
+    approver: { read: [2], transition: [26] },
+    procurementController: { read: [2] },
+    supplierCoordinator: { read: [7], transition: [25] },
+    supplierAdmin: { read: [7] },
+    temporaryWorker: { read: [4] },
   },
 
   // | Benutzer, Rollenzuweisung, Mandantenzuordnung, Zuständigkeit (3.11)

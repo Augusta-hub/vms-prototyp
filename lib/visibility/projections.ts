@@ -14,16 +14,22 @@
  * an ihrer Fußnote in lib/authz/footnotes.ts — damit Recht und
  * Feldeinschränkung nicht auseinanderlaufen.
  *
+ * Auch die **Datenminimierung aus 6.4** läuft über diesen Weg und nicht über
+ * eine eigene Mechanik: Fußnote [23] verdeckt am Profilvorschlag die Klardaten
+ * des Kandidaten, solange die Offenlegungsstufe `pseudonymized` ist, und gibt
+ * sie nach der Zusage frei (3.6, 4.2.3). Welche Felder das sind, entscheidet
+ * die Fußnote am konkreten Vorgang; `checkPermission` legt das Ergebnis als
+ * `concealedFields` an die Entscheidung.
+ *
  * Grundsatz aus 2.3: sichtbar ist, was eine Regel ausdrücklich erlaubt. Ohne
  * erlaubte Entscheidung gibt es deshalb **keine** Fassung, auch keine leere.
  */
 import type { Decision } from '../authz/check'
-import { hiddenFields } from '../authz/footnotes'
 
 /** Die Felder, die diese Entscheidung aus einer gelesenen Fassung entfernt. */
 export function concealedFields(decision: Decision): readonly string[] {
   if (!decision.allowed) return []
-  return hiddenFields(decision.footnotes)
+  return decision.concealedFields
 }
 
 /**

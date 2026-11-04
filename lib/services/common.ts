@@ -51,10 +51,12 @@ export function asFailure(error: unknown, prefix: string): ActionResult {
  *
  * Die Fußnoten [3], [6] und [36] in 2.2 setzen voraus, dass „eine eigene
  * Beauftragung besteht". **Ein Objekt dafür führt Kapitel 3 nicht.** Der
- * Prototyp leitet die Beauftragung deshalb aus den Einladungen ab: ein
- * Lieferant, der zu einer Anfrage eines Kunden eingeladen ist, gilt für diesen
- * Kunden als beauftragt. Mit 3.7 käme der Einsatz als zweite, stärkere
- * Grundlage hinzu.
+ * Prototyp leitet die Beauftragung deshalb aus zwei Quellen ab: aus den
+ * **Einladungen** (ein Lieferant, der zu einer Anfrage eines Kunden eingeladen
+ * ist, gilt für diesen Kunden als beauftragt) und — seit 3.7 — aus den
+ * **Einsätzen**, der stärkeren Grundlage: wer eine Person an einen Standort
+ * überlässt, ist dort beauftragt, auch wenn die Einladung längst abgelaufen
+ * ist.
  *
  * Woran sich die Beauftragung fachlich bemisst, ist **offene Frage 36** — die
  * Ableitung ist hier an einer Stelle gekapselt, damit eine Antwort nur diese
@@ -82,6 +84,16 @@ export async function loadEngagements(): Promise<Engagements> {
     },
   })
 
+  // Zweite Quelle seit 3.7: der Einsatz. Er benennt Kunde, Standort und
+  // Lieferant unmittelbar und überdauert die Ausschreibung.
+  const assignments = await prisma.assignment.findMany({
+    select: {
+      siteId: true,
+      customer: { select: { tenantId: true } },
+      supplier: { select: { tenantId: true } },
+    },
+  })
+
   const byCustomer = new Map<string, string[]>()
   const bySupplier = new Map<string, string[]>()
   const bySite = new Map<string, string[]>()
@@ -91,6 +103,13 @@ export async function loadEngagements(): Promise<Engagements> {
     addOnce(byCustomer, customerTenantId, supplierTenantId)
     addOnce(bySupplier, supplierTenantId, customerTenantId)
     addOnce(bySite, invitation.tender.demandRequest.siteId, supplierTenantId)
+  }
+  for (const assignment of assignments) {
+    const customerTenantId = assignment.customer.tenantId
+    const supplierTenantId = assignment.supplier.tenantId
+    addOnce(byCustomer, customerTenantId, supplierTenantId)
+    addOnce(bySupplier, supplierTenantId, customerTenantId)
+    addOnce(bySite, assignment.siteId, supplierTenantId)
   }
   return {
     supplierTenantIdsByCustomerTenantId: byCustomer,
@@ -366,6 +385,120 @@ export function supplierOfferRef(offer: {
     // Der Kunde sieht die fachlichen Inhalte im Umfang von [18].
     disclosedToTenantIds: [offer.customerTenantId],
   }
+}
+
+// ── 3.6 und 3.7: Kandidat, Profilvorschlag, Personenidentität, Einsatz ─────
+
+/**
+ * Kandidat (3.6). Mandant ist der **Lieferant**; der Kunde sieht den
+ * Kandidaten nie unmittelbar, sondern nur über den Profilvorschlag im Umfang
+ * der Datenminimierung ([23], 6.4) — deshalb steht hier **kein**
+ * Kundenmandant in `disclosedToTenantIds`.
+ */
+export function candidateRef(candidate: {
+  readonly tenantId: string
+  readonly status: string
+}): ResourceRef {
+  return {
+    type: 'candidate',
+    tenantId: candidate.tenantId,
+    tenantType: 'supplier',
+    supplierTenantId: candidate.tenantId,
+    status: candidate.status,
+  }
+}
+
+/**
+ * Profilvorschlag (3.6). Er teilt die Matrixzeile des Kandidaten (2.2) und
+ * gehört dem Lieferantenmandanten.
+ *
+ * **Dem Kunden zugänglich erst nach der Vorlage.** 4.2.3 ist dazu eindeutig:
+ * mit `draft` → `submitted` wird der Vorschlag „für den Betreiber sichtbar, für
+ * den Kunden **nicht**"; erst `reviewed` → `releasedToCustomer` macht ihn dem
+ * Bedarfsträger zugänglich. Maßgeblich ist deshalb `releasedToCustomerAt` und
+ * nicht der Status allein — so bleibt ein später abgelehnter oder
+ * zurückgezogener Vorschlag für den Kunden sichtbar, den er entschieden hat.
+ *
+ * `disclosureLevel` trägt die Datenminimierung aus 6.4 in die Fußnote [23].
+ */
+export function candidateSubmissionRef(submission: {
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly status: string
+  readonly disclosureLevel: 'pseudonymized' | 'identified'
+  readonly releasedToCustomerAt: Date | null
+}): ResourceRef {
+  return {
+    type: 'candidate',
+    tenantId: submission.tenantId,
+    tenantType: 'supplier',
+    supplierTenantId: submission.tenantId,
+    customerTenantId: submission.customerTenantId,
+    status: submission.status,
+    disclosureLevel: submission.disclosureLevel,
+    disclosedToTenantIds:
+      submission.releasedToCustomerAt === null ? [] : [submission.customerTenantId],
+  }
+}
+
+/**
+ * Personenidentität (3.6). **Keine** Offenlegung an andere Mandanten: Kunden
+ * und Lieferanten sehen das Objekt und seine Existenz nicht ([43], 2.3
+ * Regel 4). `disclosedToTenantIds` bleibt deshalb leer — und die
+ * Mandantengrenze verweigert jeden Zugriff von außerhalb des Betreibers, noch
+ * vor der Matrix.
+ */
+export function workerIdentityRef(identity: { readonly tenantId: string }): ResourceRef {
+  return {
+    type: 'workerIdentity',
+    tenantId: identity.tenantId,
+    tenantType: 'operator',
+  }
+}
+
+/**
+ * Einsatz (3.7). Mandant ist der **Betreiber**; der Vorgang ist gleichzeitig
+ * dem Kunden und dem Lieferanten zugänglich, jedem nur im eigenen Umfang
+ * ([2], [7]).
+ */
+export function assignmentRef(assignment: {
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly supplierTenantId: string
+  readonly siteId: string
+  readonly costCenterId: string
+  readonly status: string
+}): ResourceRef {
+  return {
+    type: 'assignment',
+    tenantId: assignment.tenantId,
+    tenantType: 'operator',
+    customerTenantId: assignment.customerTenantId,
+    supplierTenantId: assignment.supplierTenantId,
+    siteId: assignment.siteId,
+    costCenterId: assignment.costCenterId,
+    status: assignment.status,
+    disclosedToTenantIds: [assignment.customerTenantId, assignment.supplierTenantId],
+  }
+}
+
+/**
+ * Verlängerung und Unterbrechung (3.7) teilen die Matrixzeile des Einsatzes
+ * (2.2, Lesart) und dessen Mandanten. `status` ist der Status **des
+ * Unterobjekts**, damit die Fußnoten [25] und [26] den Zielstatus des
+ * Verlängerungsvorgangs sehen und nicht den des Einsatzes.
+ */
+export function assignmentSubObjectRef(
+  assignment: {
+    readonly tenantId: string
+    readonly customerTenantId: string
+    readonly supplierTenantId: string
+    readonly siteId: string
+    readonly costCenterId: string
+  },
+  status: string,
+): ResourceRef {
+  return { ...assignmentRef({ ...assignment, status }), status }
 }
 
 /** Mandantentyp eines Mandanten, für die Bauer oben. */

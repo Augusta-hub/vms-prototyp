@@ -5,6 +5,215 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-04 — M4: die Besetzung von der Kandidatenvorlage bis zum Einsatz
+
+**Gemacht**
+
+- **Datenmodell zu SPEC 3.6 und 3.7** (`prisma/schema.prisma`, Migration
+  `20261104083158_besetzung_kandidat_profilvorschlag_einsatz`): Kandidat mit
+  Qualifikationen, Profilvorschlag, Personenidentität mit Verknüpfung und
+  Verknüpfungshistorie, Einsatz, Verlängerung und Unterbrechung — je mit den
+  Standardfeldern aus 3.0. Elf neue Enums für die Wertebereiche, darunter die
+  Zustände aus 4.2.3, 4.3.1 und 4.3.2.
+- **Die Personenidentität ist nach der Entscheidung zu Frage 18 gebaut, nicht
+  danebengebaut.** Der Stand der Verknüpfung steht am Satz
+  (`proposed` / `confirmed` / `detached`), und `Candidate.workerIdentityId` ist
+  **nur** bei bestätigter Verknüpfung gesetzt. Ein maschineller Treffer bleibt
+  damit folgenlos: er steht in `WorkerIdentityLink` und nirgends sonst. Der
+  Abgleich selbst (`lib/workerIdentity/matching.ts`) ist eine reine Funktion,
+  die **vorschlägt** und nichts schreibt; der Merkmalssatz im Typ ist
+  abschließend (Name, Geburtsdatum, Geburtsort).
+- **Statusmodelle 4.2.3 und 4.3 als geschlossene Übergangsmenge**
+  (`lib/status/candidateSubmission.ts`, `assignment.ts`,
+  `assignmentExtension.ts`), nach dem Muster der vorhandenen Modelle: je
+  Übergang `from`, `to`, auslösende Rollen, Vorbedingungen und Kapitelverweis.
+  Die drei Festlegungen aus Kapitel 4 sind umgesetzt und je mit einem Test
+  belegt: „verlängert" ist **kein** Zustand des Einsatzes (die wirksame
+  Verlängerung verschiebt `plannedEndDate` und lässt ihn `active`), der
+  beantragte Beendigungsvorgang hat **keinen** Zustand, und die Rücknahme vor
+  Beginn läuft über `terminatedEarly` (kein `planned` → `completed`).
+- **Drei neue Matrixzeilen aus 2.2** (`lib/authz/matrix.ts`): Kandidat /
+  Profilvorschlag, Personenidentität, Einsatz. Dazu die Fußnoten [22], [23],
+  [24], [25], [26] und [43]. Belegt sind damit die Zeilen zu 3.1 bis 3.7.
+- **Die Datenminimierung aus 6.4 läuft über die bestehende Projektion.**
+  Fußnote [23] trägt jetzt eine **vom Vorgang abhängige** Feldliste: solange
+  die Offenlegungsstufe `pseudonymized` ist, verdeckt sie am Profilvorschlag
+  die Klardaten; mit der Zusage gibt sie sie frei. Dafür war eine Erweiterung
+  nötig — `fieldScope.hidden` darf eine Funktion über denselben
+  `ConstraintContext` sein, und `checkPermission` legt das Ergebnis als
+  `concealedFields` an die Entscheidung. Eine zweite Mechanik für 6.4 gibt es
+  nicht.
+- **Fachdienste** `lib/services/staffing.ts` (Kandidat, Profilvorschlag,
+  Einsatz, Verlängerung, Unterbrechung) und `lib/services/workerIdentity.ts`
+  (vorschlagen, bestätigen, trennen, Identität für einen Einzelsatz anlegen).
+  Muster unverändert: laden → `checkPermission` je Zeile → `project` → Übergang
+  über das Modell → schreiben.
+- **Die vier Zählungen, die M3b offen gelassen hat, sind gefüllt**
+  (`lib/services/demand.ts`): `releasedSubmissionCount`, `openSubmissionCount`,
+  `effectiveAssignmentCount` und `acceptedSubmissionCount`. Damit sind die
+  Übergänge `tendered` → `inSelection`, `inSelection` → `tendered` / `filled`
+  (4.1) und `reviewed` → `accepted` (4.2.2) erreichbar, statt an einer
+  Vorbedingung zu scheitern, die niemand erhoben hat. Die **Beauftragung** aus
+  den Fußnoten [3], [6] und [36] wird jetzt zusätzlich aus den **Einsätzen**
+  abgeleitet — der stärkeren Grundlage (offene Frage 36).
+- **Oberfläche**: `/besetzung` (Kandidat anlegen, Profilvorschlag einreichen,
+  sichten, freigeben, Interview, Zu- und Absage, Zurückziehen), `/einsaetze`
+  (Einsatz anlegen, Beginn bestätigen, unterbrechen, fortsetzen, beenden,
+  vorzeitig beenden, Verlängerung beantragen, genehmigen, ablehnen, wirksam
+  setzen) und `/identitaeten` (nur Betreiber: Abgleich, Bestätigung, Trennung,
+  Historie). Kein Feld wird in der Seite gefiltert — was eine Rolle nicht sehen
+  darf, steht als „nicht sichtbar" da.
+- **Seed erweitert**: 7 Kandidaten bei beiden Lieferanten, 4
+  Personenidentitäten mit 5 bestätigten und 1 nur vorgeschlagenen Verknüpfung,
+  11 Historieneinträge, 8 Profilvorschläge (je ein Zustand aus 4.2.3), 5
+  Einsätze (je ein Zustand aus 4.3.1, einer mit laufender Unterbrechung), 5
+  Verlängerungen (je ein Zustand aus 4.3.2), 2 Unterbrechungen. Unter den
+  Anfragen in `inSelection` und `filled` liegen jetzt die Objekte, die 4.1
+  dafür verlangt — zwei neue Ausschreibungen mit Einladungen und Angeboten.
+- **124 neue Unit-Tests** neben dem Code: die drei Übergangsmengen (je
+  erlaubter, abgelehnter, an der Rolle gescheiterter Übergang und die
+  Mandantengrenze), die Sichtbarkeit in der Besetzung einschließlich 6.4 vor
+  und nach der Zusage, und der Identitätsabgleich.
+- **Durchgeklickt, nicht nur gebaut.** Der Ablauf ist im Browser geprüft: Der
+  Kunde sieht am vorgelegten Profil Pseudonym und Qualifikationen und
+  **keine** Klardaten; nach seiner Zusage sieht er Name und Geburtsdatum, die
+  Lieferanten- und die Personenidentität weiterhin nicht. Der Einsatz zu einem
+  Kandidaten mit **nur vorgeschlagener** Verknüpfung wurde abgewiesen
+  („Ein nur vorgeschlagener Treffer genügt nicht"); nach der Bestätigung der
+  Verknüpfung ließ er sich anlegen. Eine wirksame Verlängerung verschob das
+  geplante Ende von 2027-03-31 auf 2027-09-30, **ohne** den Zustand des
+  Einsatzes zu ändern (er blieb `interrupted`). Ein Antrag der Kundenseite ohne
+  Genehmigung wurde abgewiesen, mit Genehmigung angenommen — und der Einsatz
+  lief danach unverändert weiter, bis die Beendigung wirksam gesetzt wurde.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Verknüpfung als eigenes Objekt | 3.6 führt `linkedCandidates` als Liste und `confirmedAt` an der Identität. Weil eine Identität gleichzeitig eine **bestätigte** und eine **nur vorgeschlagene** Verknüpfung tragen kann (genau der Fall, den der Seed zeigt), braucht der Stand einen Platz **je Verknüpfung**: `WorkerIdentityLink`. `Candidate.workerIdentityId` bleibt das Feld aus 3.6 und ist nur bei bestätigter Verknüpfung gesetzt — so ist „zählt für 5.1" eine Eigenschaft des Kandidatensatzes und keine Abfrage über drei Tabellen |
+| Historie zusätzlich zum Stand | `mergeHistory` ist ein eigenes, fortschreibendes Objekt, obwohl die Verknüpfung Zeitstempel trägt. 3.6 verlangt, dass eine falsche Verknüpfung rückholbar ist, **ohne die Historie zu verlieren** — eine getrennte und erneut bestätigte Verknüpfung hätte sonst ihre Vorgeschichte überschrieben |
+| Kein unscharfer Abgleich | Verglichen wird nach Normalisierung von Leerraum und Schreibweise auf **Gleichheit**. Eine Ähnlichkeitsrechnung erzeugt Treffer, die eine Person beim Betreiber nicht nachprüfen kann; ein unbestätigter Treffer hat ohnehin keine Wirkung. Ein Tippfehler im Namen ist deshalb kein Treffer, sondern ein Fall für die manuelle Zusammenführung |
+| Abgleich nur lieferantenübergreifend | 3.6 begründet das Objekt mit Sätzen „verschiedener Lieferanten". Zwei Sätze **desselben** Lieferanten sind eine Doppelerfassung in seinen Daten; der Betreiber würde sie sonst für ihn bereinigen und dabei Daten zusammenführen, die er nicht pflegt |
+| Identität auch für Einzelsätze | 3.7 macht `workerIdentityRef` ab `planned` zur Pflicht, und 5.1 zählt darüber. Ein Kandidat ohne zweiten Satz braucht die Identität also trotzdem; 3.6 lässt das zu (`linkedCandidates`: „mindestens einer"). Sie wird von einer Person beim Betreiber angelegt und ist von Anfang an bestätigt — der Seed führt zwei solche Fälle, und die Oberfläche hat dafür eine eigene Handlung |
+| Ablehnung des Profilvorschlags als **zwei** Übergänge | 4.2.3 führt sie in einer Zeile, weist sie aber rollenabhängig zu (`MD` vor der Vorlage, `KB` danach) — und die Zustandsmengen sind verschieden. Eine Vorbedingung sieht die auslösende Rolle nicht, also sind zwei Namen (`rejectByOperator`, `rejectByCustomer`) die einzige Form, in der eine geschlossene Übergangsmenge das ausdrückt. Das Zustandsdiagramm in 4.2.3 trennt sie ebenso |
+| Keine Zusage durch den Betreiber | 4.2.3 nennt bei `accepted` „`KB` entscheidet, wirksam gegenüber dem Lieferanten durch `MD`". Der Übergang trägt deshalb **nur** `KB`; die Wirksamkeit gegenüber dem Lieferanten ist Statusführung und Benachrichtigung, kein zweiter Übergang. Dass der Betreiber nicht zusagt, ist in 4.2.3 ausdrücklich ausgeschlossen und als Test belegt |
+| Fußnote [17] gilt in **zwei** Zeilen verschieden | „Annehmen, ablehnen oder zur Auswahl an den Kunden weiterleiten" trifft am Angebot (4.2.2) auf `reviewed`, `accepted`, `rejected`, am Profilvorschlag (4.2.3) auf `reviewed`, `releasedToCustomer`, `rejected`. Die Fußnote lässt deshalb alle vier Zielzustände zu; **welchen** Übergang eine Rolle wann auslöst, entscheidet ohnehin Kapitel 4 |
+| `operation` am Übergang | Der Antrag auf Verlängerung ist in 2.2 ein `S[25]` für `KB` und `LD` und ausdrücklich **kein** `A`. Die Vorbelegung des Prüfwerks („`from: []` heißt `create`") passt dort nicht. Statt die Matrix um ein `A` zu erweitern, das 2.2 nicht vorsieht, nennt der Übergang die Operation selbst (`operation: 'transition'`) — ablesbar an der Stelle, an der die Abweichung herkommt |
+| Antragstellende Seite wird **abgeleitet** | 3.7 führt mit `terminationRequestedBy` einen Verweis auf den Benutzer; ob der Antrag der Kundenseite zuzurechnen ist, sagt dessen Mandant (3.11). Ein zweites Feld dafür könnte dem ersten widersprechen |
+| Feldsichtbarkeit am Einsatz hängt an [2] und [7] | Die Zeile zu 3.7 ist die einzige, die beide Seiten zugleich zugänglich macht, und ihre Zellen tragen je **eine** Fußnote. Die Felder, die 3.7 und 3.3 ausdrücklich ausnehmen, hängen deshalb dort, beschränkt auf diese Zeile: der Lieferant sieht Kostenstelle und Kundenpreisposition nicht ([14], [42]), der Kunde die Einkaufsseite nicht ([41]) und die Lieferantenidentität nicht (Frage 11), und **keine** der beiden Seiten die Personenidentität ([43]) |
+| Prüfergebnisse als benannte Tatsachen | Die Vorbedingungen aus 4.2.3 und 4.3 nennen die Ergebnisse von P1, P4, P6 bis P11. Dieses Modul rechnet keine davon: `RULE_CHECKS_PENDING` in `lib/services/staffing.ts` ist die **eine** Stelle, an der sie bis zur Anbindung herkommen, mit dem nicht sperrenden Wert — dieselbe Lösung, mit der 4.1 und 4.2.1 vor P9 gearbeitet haben. Zwei Tatsachen sind davon ausgenommen, weil sie reine Feldabfragen aus 3.6 sind und keine Regel: das **Vorliegen** der Erklärung zur Vorbeschäftigung und das Bestehen des Arbeitsverhältnisses am ersten Überlassungstag. Beides ist nicht P6 bzw. P11 — Fenster, Konzernbezug, Entgeltfolge, Ergebnisart und die Behandlung fehlender Daten stehen aus |
+| Seed-Zustände bleiben Daten | Wie bei den Bedarfsanfragen legt der Seed Profilvorschläge und Einsätze **in** dem Zustand an, den Kapitel 4 beschreibt. Er ist kein Weg um Kapitel 4 herum: die Übergangsmengen in `lib/status/` bleiben die einzige Stelle, an der ein Zustand **wechselt** |
+
+**Daten, die jetzt für P1, P6 und P11 bereitstehen**
+
+Das Regelwerk ist **nicht** Teil dieser Arbeitseinheit; `lib/aueg/` und
+`tests/aueg/` sind unberührt. Was die drei Prüfungen brauchen, liegt jetzt vor:
+
+- **P1 (Höchstüberlassungsdauer, 5.1)** braucht die Überlassungskette derselben
+  Person bei demselben Entleiher. Vorhanden: `Assignment` mit `customerId`,
+  `plannedStartDate` / `plannedEndDate`, `actualStartDate` / `actualEndDate` und
+  `status`, die `AssignmentInterruption` mit Zeitraum und dem abgeleiteten Feld
+  `countsAsReset` (P2), die Verlängerungen mit `newEndDate` und Wirksamkeit,
+  und als Schlüssel über Lieferanten und Kunden hinweg
+  `Assignment.workerIdentityId`. **Entscheidend:** dieses Feld trägt nur eine
+  **bestätigte** Identität; `isSamePerson` in
+  `lib/workerIdentity/matching.ts` ist die Frage, die 5.1 stellt. Der Seed
+  führt beide Fälle — eine Person mit zwei bestätigten Sätzen (PI-0001, zählt
+  zusammen) und eine mit einem bestätigten und einem nur vorgeschlagenen
+  (PI-0002, zählt **nicht** zusammen). Die abgeleiteten Felder
+  `maxDurationEndDate` und `countedDurationDays` sind angelegt und leer.
+- **P6 (Drehtürklausel, 5.3.1)** braucht die Erklärung des Kandidaten.
+  Vorhanden als die vier Felder, die 5.3.1 abschließend nennt:
+  `previousEmploymentDeclaredAt`, `previousEmploymentExisted`,
+  `previousEmploymentEndedOn`, `previousEmploymentEmployer` — dazu der Stichtag
+  aus `assignment.plannedStartDate` bzw. `candidateSubmission.availableFrom`
+  und die Konzernzugehörigkeit aus `customer.corporateGroup` (3.1, schon da).
+  Der Seed führt einen Treffer (Henrik Saalfeld, Austritt bei Nordwerk Metall
+  zum 31.08.2026) und einen Fall ohne Erklärung (Tomáš Kříž).
+- **P11 (Arbeitsverhältnis beim Verleiher, 5.3.4)** braucht
+  `candidate.employmentStatusWithSupplier` und `candidate.employedSince` gegen
+  den ersten Überlassungstag. Beides vorhanden; der Seed führt einen Bewerber
+  ohne Arbeitsverhältnis.
+- **Die Übergänge warten an benannten Stellen.** Jede Vorbedingung, die ein
+  Prüfergebnis braucht, trägt dessen Namen im `Facts`-Typ des Modells
+  (`maxDurationExceeded`, `hasPreviousEmploymentDeclaration`,
+  `employmentRelationshipOnFirstDay`, `concretizationComplete`,
+  `noIndustrialActionAtSite`, `mandatoryDocumentsPresent`,
+  `hasAcceptedValidPermit`, `equalPayDueFromFirstDay`, `comparableWagePresent`,
+  `newEndWithinMaxDuration`, `hasAcceptedValidPermitForNewPeriod`). Anzubinden
+  ist **eine** Datei: `RULE_CHECKS_PENDING` in `lib/services/staffing.ts`.
+
+**Geprüft**
+
+- `npm test` → **408 grün** (vorher 281; 124 neue, 3 bestehende Dateien
+  erweitert) · `npm run typecheck` → Exit 0 · `npm run build` → kompiliert
+- `npm run test:aueg` → **267 Szenarien: 42 grün, 0 rot, 225 ausstehend** —
+  unverändert gegenüber dem Stand vom 03.11.2026, keine Verschlechterung.
+  P9: 29 von 44 grün, P10: 15 von 23 grün. `tests/aueg/` und `lib/aueg/` sind
+  **unberührt**.
+- Migration und Seed sind **gegen die lokale Datenbank gelaufen**:
+  `prisma migrate dev` hat `20261104083158_besetzung_kandidat_profilvorschlag_einsatz`
+  angelegt und angewendet, `prisma db seed` danach zweimal fehlerfrei (einmal
+  nach dem Durchklicken, um die Demo-Daten zurückzusetzen).
+- Ein bestehender Test in `lib/authz/check.test.ts` war anzupassen: er belegte
+  „eine Zeile ohne Eintrag in der Matrix verweigert jeden Zugriff" am
+  Kandidaten — die Zeile ist jetzt belegt. Er steht nun auf der Zeile zu 3.8.
+- **Gegengeprüft durch Durchklicken** (alle Zahlen eigenhändig nachgemessen,
+  nicht übernommen): `prisma migrate status` meldet „Database schema is up to
+  date!" bei drei Migrationen. Fußnote [23] greift wirklich — der Bedarfsträger
+  bei Südharz sieht zu PV-2026-0004/0005/0006 „nicht sichtbar" statt Vorname,
+  Name, Geburtsdatum und Kontakt, zu PV-2026-0008 (zugesagt) dagegen die
+  Klardaten; Fußnote [43] hält `workerIdentity` in **beiden** Fällen verdeckt.
+  Der Lieferantendisponent bei Rheinpersonal sieht nur die eigenen vier
+  Kandidaten und vier Profilvorschläge — die des zweiten Lieferanten nicht —,
+  und `/identitaeten` sagt ihm, dass er die Personenidentität nicht sieht, ohne
+  Datensätze zu nennen. Keine Konsolenfehler.
+- **Zwei Korrekturen danach**: Der Einstiegstext und die Matrixnotiz auf `/`
+  nannten Kandidat (3.6) und Einsatz (3.7) weiter als „noch nicht umgesetzt" —
+  jetzt richtiggestellt, mit P9 und P10 als dem, was aus Kapitel 5 läuft. Im
+  Seed war der nur vorgeschlagene Treffer zu PI-0002 auf den **2026-12-02**
+  datiert, einen Monat in der Zukunft; steht jetzt auf 2026-10-20. Seed danach
+  erneut gegen die Datenbank gelaufen, `typecheck` und `build` erneut Exit 0.
+- Nichts committet.
+
+**Offen / als Nächstes**
+
+- **Drei neue offene Fragen in SPEC Kapitel 7** (39 bis 41), keine davon im
+  Code beantwortet:
+  - **39** ist eine echte Lücke in 2.2 und 3.7, die 4.3.2 selbst benennt: für
+    den **Antrag** auf vorzeitige Beendigung gibt es weder einen Übergang noch
+    ein Änderungsrecht der antragstellenden Rolle, und für die Genehmigung des
+    Genehmigers führt 3.7 kein Feld. Der Prototyp lässt den Antrag über den
+    Betreiber laufen und trägt `terminationApprovedAt` /
+    `terminationApprovedById` **über 3.7 hinaus** nach — sonst wäre die
+    Vorbedingung aus 4.3.1 nicht prüfbar. Das ist die einzige Stelle, an der
+    das Schema über Kapitel 3 hinausgeht; sie ist im Schema kommentiert.
+  - **40**: Kapitel 6.4 ist noch nicht ausgearbeitet. Die **Mechanik** der
+    Datenminimierung steht in 3.6 und 4.2.3 und ist umgesetzt; die **Feldliste**
+    ist eine Auslegung und steht an Fußnote [23].
+  - **41**: zählt ein unterbrochener Einsatz als „wirksamer Einsatz" (4.1)? Die
+    Umsetzung zählt ihn mit.
+- **Nicht umgesetzt, bewusst:** die AÜG-Prüfungen P1, P6 und P11 (eigene
+  Arbeitseinheit, siehe oben), der Lieferantenstatus als Übergangsmenge (4.6),
+  das Dokument / der Nachweis als Objekt (3.10), das Protokoll (3.12) und damit
+  der Audit-Eintrag zu jedem Übergang (4.0, Regel 3), die Benachrichtigungen
+  und der Fristenlauf aus Kapitel 4. Jede dieser Nebenwirkungen ist an ihrer
+  Stelle im Code als Kommentar benannt.
+- **Zwei Felder verweisen auf noch nicht modellierte Objekte** und sind als
+  benannte Skalare geführt: `CandidateQualification.documentRef` (3.10) und
+  `Assignment.shiftModel` (Katalogwert, 3.7).
+- **Der Abgleich läuft nicht von selbst.** Im Betrieb gehörte er in den
+  nächtlichen Lauf (5.5.1); im Prototyp startet ihn der Betreiber auf
+  `/identitaeten`. Beim Anlegen eines Kandidaten läuft er **nicht** mit — das
+  ist im Dienst kommentiert.
+- **Das Zusammenführen zweier bestehender Identitäten** schlägt der Abgleich
+  nicht vor: er überspringt Treffer, deren Sätze schon zu verschiedenen
+  bestätigten Identitäten gehören, und sagt das im Ergebnis. Diese Handlung
+  bleibt einer Person beim Betreiber vorbehalten und hat noch keine
+  Oberfläche.
+
+---
+
 ## 2026-11-03 — P10 läuft: Pflichtnachweise, zweite AÜG-Prüfung
 
 **Gemacht**

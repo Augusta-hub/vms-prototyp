@@ -59,7 +59,7 @@ Noch **nicht** Teil von M3 und bewusst offen: der Lieferantenstatus als
 Übergangsmenge (4.6), die Nebenwirkungen aus Kapitel 4 (Benachrichtigung,
 Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 
-## M4 — Klickbare Demo: Besetzung ⬜
+## M4 — Klickbare Demo: Besetzung 🟨
 
 Fortschrittsmesser steht: `npm run test:aueg` führt die 267 Szenarien aus und
 berichtet je Prüfung P1 bis P11. Stand 03.11.2026: **42 grün, 0 rot, 225
@@ -80,14 +80,33 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     und liefern deshalb **keinen** Befund
 - 🟨 Anbindung an die Übergänge — **Q04 und Q06 sind angebunden**
   (`lib/aueg/anbindung.ts` rechnet `hasAcceptedValidPermit`, das 4.1 und 4.2.1
-  als Vorbedingung führen). Q10, Q16, Q20, Q21, Q31, Q37, Q38 und Q41 bis Q44
-  haben noch **kein** Statusmodell: sie warten auf SPEC 3.6, 3.7, 3.9 und auf
-  die Statusmodelle 4.2.3, 4.3, 4.4, 4.5 und 4.6 (Lieferantenstatus)
-- ⬜ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln
-- ⬜ Auswahlprozess bis Zu-/Absage
-- ⬜ Einsatz anlegen, Laufzeit, Verlängerung, Beendigung
-- ⬜ AÜG-Prüfungen aus M2 greifen beim Anlegen und Verlängern
-- ⬜ **Demo-Stand vorführbar**
+  als Vorbedingung führen). Mit 3.6 und 3.7 haben **Q08, Q10 bis Q12
+  (Profilvorschlag, 4.2.3) und Q13 bis Q26 (Einsatz und Verlängerung, 4.3)
+  jetzt ein Statusmodell**: die Vorbedingungen nennen die Prüfergebnisse als
+  benannte Tatsachen, und `RULE_CHECKS_PENDING` in `lib/services/staffing.ts`
+  ist die eine Stelle, an der sie bis zur Anbindung herkommen. Ohne
+  Statusmodell bleiben Q31, Q37, Q38 und Q41 bis Q44 — sie warten auf SPEC 3.9
+  und die Statusmodelle 4.4, 4.5 und 4.6 (Lieferantenstatus)
+- ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
+  Kandidat, Profilvorschlag und Personenidentität (SPEC 3.6) mit dem
+  Statusmodell 4.2.3; die Datenminimierung aus 6.4 über die Offenlegungsstufe
+  und Fußnote [23] (pseudonymisiertes Profil, Klardaten erst nach Zusage)
+- ✅ Auswahlprozess bis Zu-/Absage — einreichen, sichten, dem Kunden vorlegen,
+  Interview, Zusage, Absage, Zurückziehen; die Zusage trifft ausschließlich der
+  Bedarfsträger (4.2.3, Fußnote [24])
+- ✅ Einsatz anlegen, Laufzeit, Verlängerung, Beendigung — Einsatz (SPEC 3.7)
+  mit den Statusmodellen 4.3.1 und 4.3.2, Unterbrechung als eigener Vorgang,
+  Verlängerung mit Antrag, Genehmigung und Wirksamkeit
+- ⬜ **AÜG-Prüfungen aus M2 greifen beim Anlegen und Verlängern** — **offen.**
+  P1 (Höchstüberlassungsdauer), P6 (Drehtürklausel) und P11 (Arbeitsverhältnis
+  beim Verleiher) sind **nicht** umgesetzt; das Datenmodell dafür steht
+  (Personenidentität mit bestätigter Verknüpfung, Erklärung zur
+  Vorbeschäftigung, Beschäftigungsverhältnis mit Datum, Einsätze mit
+  Unterbrechungen). Eigene Arbeitseinheit am Regelwerk
+- 🟨 **Demo-Stand vorführbar** — der Prozess ist durchklickbar (Stammdaten →
+  Bedarf → Ausschreibung → Profilvorschlag → Einsatz mit Verlängerung,
+  Unterbrechung und Beendigung); was fehlt, sind die AÜG-Prüfungen an den
+  Übergängen
 
 ## M5 — Zeiterfassung und Freigabe ⬜
 

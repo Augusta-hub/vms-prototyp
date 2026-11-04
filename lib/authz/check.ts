@@ -20,7 +20,12 @@
  * nur, dass die Rolle überhaupt Status wechseln darf. Welchen Übergang wann,
  * steht in Kapitel 4 und gehört in das jeweilige Statusmodell.
  */
-import { FOOTNOTES, type ConstraintContext, type FootnoteNumber } from './footnotes'
+import {
+  FOOTNOTES,
+  hiddenFields,
+  type ConstraintContext,
+  type FootnoteNumber,
+} from './footnotes'
 import { grantedFootnotes } from './matrix'
 import type { Operation } from './operations'
 import type { ResourceType } from './resources'
@@ -97,6 +102,12 @@ export interface ResourceRef {
   /** Zugriff aus der Entscheidung über einen konkreten Vorgang heraus — [8]. */
   readonly inApprovalContext?: boolean
   /**
+   * Offenlegungsstufe eines Profilvorschlags (3.6) — Grundlage der
+   * Datenminimierung aus 6.4 und damit von [23]. Ohne Angabe gilt die
+   * strengere Stufe `pseudonymized`.
+   */
+  readonly disclosureLevel?: 'pseudonymized' | 'identified'
+  /**
    * Mandanten, denen Kapitel 2 und 3 **ausdrücklich** Zugang zu diesem Objekt
    * eines anderen Mandanten gewähren.
    *
@@ -139,6 +150,14 @@ export type Decision =
       /** Das Recht, auf dem die Entscheidung beruht. */
       readonly grant: Grant
       readonly footnotes: readonly FootnoteNumber[]
+      /**
+       * Felder, die die Fußnoten dieser Zelle an **diesem** Vorgang nicht
+       * zeigen (2.2, 2.3). Hier gerechnet, weil nur hier der Kontext der
+       * Fußnoten vorliegt — die Datenminimierung aus 6.4 hängt am Vorgang
+       * (Offenlegungsstufe, [23]), nicht allein an der Zelle. Ausgewertet wird
+       * die Liste in lib/visibility/projections.ts.
+       */
+      readonly concealedFields: readonly string[]
       /**
        * Lesender oder schreibender Zugriff über die Mandantengrenze hinweg.
        * Er ist nach 2.3 als Audit-Eintrag zu erfassen (3.12, noch nicht
@@ -312,6 +331,9 @@ export function checkPermission(
         ...(resource.inApprovalContext !== undefined
           ? { inApprovalContext: resource.inApprovalContext }
           : {}),
+        ...(resource.disclosureLevel !== undefined
+          ? { disclosureLevel: resource.disclosureLevel }
+          : {}),
       },
     }
 
@@ -341,6 +363,7 @@ export function checkPermission(
       allowed: true,
       grant,
       footnotes,
+      concealedFields: hiddenFields(footnotes, ctx),
       crossTenant,
       ...(grant.viaDelegation !== undefined
         ? {

@@ -1,15 +1,17 @@
-// Datenmodell zu SPEC Kapitel 3.1 bis 3.5 und 3.11.
+// Datenmodell zu SPEC Kapitel 3.1 bis 3.7 und 3.11.
 //
 // Umfang: Mandant, Benutzer, Rollenzuweisung, Zuständigkeit,
 // Betreuungszuordnung und Vertretung (3.11) sowie Kunde, Standort,
 // Kostenstelle (3.1), Lieferant und AÜG-Erlaubnis (3.2), Rahmenvertrag,
-// Preisliste, Tarifzuordnung, Vergleichsentgelt (3.3), Bedarfsanfrage (3.4)
-// und Ausschreibung, Einladung, Lieferantenangebot (3.5).
+// Preisliste, Tarifzuordnung, Vergleichsentgelt (3.3), Bedarfsanfrage (3.4),
+// Ausschreibung, Einladung, Lieferantenangebot (3.5), Kandidat,
+// Profilvorschlag und Personenidentität (3.6) sowie Einsatz, Verlängerung und
+// Unterbrechung (3.7).
 //
-// Noch nicht modelliert: Kandidat und Profilvorschlag (3.6), Einsatz (3.7),
-// Zeiten (3.8), Abrechnung (3.9), Dokument / Nachweis (3.10) und der
-// Audit-Eintrag (3.12). Verweise dorthin sind als benannte Skalare geführt
-// und im jeweiligen Modell kommentiert — nicht stillschweigend weggelassen.
+// Noch nicht modelliert: Zeiten (3.8), Abrechnung (3.9), Dokument / Nachweis
+// (3.10) und der Audit-Eintrag (3.12). Verweise dorthin sind als benannte
+// Skalare geführt und im jeweiligen Modell kommentiert — nicht
+// stillschweigend weggelassen.
 //
 // Jedes Modell trägt die Standardfelder aus SPEC 3.0:
 //   id, tenantId (bei mandantengebundenen Objekten), createdAt/createdById,
@@ -113,6 +115,14 @@ model Tenant {
   tenders                        Tender[]
   tenderInvitations              TenderInvitation[]
   supplierOffers                 SupplierOffer[]
+
+  // Fachmodule 3.6 und 3.7. Die Personenidentität hängt **ausschließlich** am
+  // Betreibermandanten ([43], 3.6), der Einsatz ebenfalls (3.7); Kandidat und
+  // Profilvorschlag am Lieferantenmandanten.
+  candidates           Candidate[]
+  candidateSubmissions CandidateSubmission[]
+  workerIdentities     WorkerIdentity[]
+  assignments          Assignment[]
 
   @@index([tenantType])
 }
@@ -231,6 +241,44 @@ model User {
   createdOfferItems               SupplierOfferItem[]             @relation("OfferItemCreatedBy")
   updatedOfferItems               SupplierOfferItem[]             @relation("OfferItemUpdatedBy")
   deactivatedOfferItems           SupplierOfferItem[]             @relation("OfferItemDeactivatedBy")
+
+  // Protokoll- und Fachfelder der Module 3.6 und 3.7.
+  createdCandidates               Candidate[]                @relation("CandidateCreatedBy")
+  updatedCandidates               Candidate[]                @relation("CandidateUpdatedBy")
+  deactivatedCandidates           Candidate[]                @relation("CandidateDeactivatedBy")
+  createdCandidateQualifications  CandidateQualification[]   @relation("CandidateQualificationCreatedBy")
+  updatedCandidateQualifications  CandidateQualification[]   @relation("CandidateQualificationUpdatedBy")
+  deactivatedCandidateQuals       CandidateQualification[]   @relation("CandidateQualificationDeactivatedBy")
+  createdSubmissions              CandidateSubmission[]      @relation("SubmissionCreatedBy")
+  updatedSubmissions              CandidateSubmission[]      @relation("SubmissionUpdatedBy")
+  deactivatedSubmissions          CandidateSubmission[]      @relation("SubmissionDeactivatedBy")
+  decidedSubmissions              CandidateSubmission[]      @relation("SubmissionDecidedBy")
+  createdIdentities               WorkerIdentity[]           @relation("IdentityCreatedBy")
+  updatedIdentities               WorkerIdentity[]           @relation("IdentityUpdatedBy")
+  deactivatedIdentities           WorkerIdentity[]           @relation("IdentityDeactivatedBy")
+  confirmedIdentities             WorkerIdentity[]           @relation("IdentityConfirmedBy")
+  createdIdentityLinks            WorkerIdentityLink[]       @relation("LinkCreatedBy")
+  updatedIdentityLinks            WorkerIdentityLink[]       @relation("LinkUpdatedBy")
+  deactivatedIdentityLinks        WorkerIdentityLink[]       @relation("LinkDeactivatedBy")
+  confirmedIdentityLinks          WorkerIdentityLink[]       @relation("LinkConfirmedBy")
+  detachedIdentityLinks           WorkerIdentityLink[]       @relation("LinkDetachedBy")
+  createdMergeEntries             WorkerIdentityMergeEntry[] @relation("MergeEntryCreatedBy")
+  updatedMergeEntries             WorkerIdentityMergeEntry[] @relation("MergeEntryUpdatedBy")
+  actedMergeEntries               WorkerIdentityMergeEntry[] @relation("MergeEntryActedBy")
+  createdAssignments              Assignment[]               @relation("AssignmentCreatedBy")
+  updatedAssignments              Assignment[]               @relation("AssignmentUpdatedBy")
+  deactivatedAssignments          Assignment[]               @relation("AssignmentDeactivatedBy")
+  terminationRequestedAssignments Assignment[]               @relation("AssignmentTerminationRequestedBy")
+  terminationApprovedAssignments  Assignment[]               @relation("AssignmentTerminationApprovedBy")
+  createdExtensions               AssignmentExtension[]      @relation("ExtensionCreatedBy")
+  updatedExtensions               AssignmentExtension[]      @relation("ExtensionUpdatedBy")
+  deactivatedExtensions           AssignmentExtension[]      @relation("ExtensionDeactivatedBy")
+  requestedExtensions             AssignmentExtension[]      @relation("ExtensionRequestedBy")
+  approvedExtensions              AssignmentExtension[]      @relation("ExtensionApprovedBy")
+  effectiveExtensions             AssignmentExtension[]      @relation("ExtensionEffectiveBy")
+  createdInterruptions            AssignmentInterruption[]   @relation("InterruptionCreatedBy")
+  updatedInterruptions            AssignmentInterruption[]   @relation("InterruptionUpdatedBy")
+  deactivatedInterruptions        AssignmentInterruption[]   @relation("InterruptionDeactivatedBy")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -506,6 +554,100 @@ enum InvitationStatus {
   expired
 }
 
+/// Beschäftigungsverhältnis des Kandidaten beim Verleiher (3.6). Die
+/// Überlassung setzt ein Arbeitsverhältnis beim Verleiher voraus; geprüft wird
+/// das in 5.3.4 (P11), nicht hier.
+enum EmploymentStatusWithSupplier {
+  employed
+  applicant
+}
+
+/// Kandidatenstatus (3.6). Kapitel 4 führt dafür **kein** Modell — der
+/// Vorgangsstatus hängt am Profilvorschlag (4.2.3) und am Einsatz (4.3).
+enum CandidateStatus {
+  active
+  inactive
+}
+
+/// Offenlegungsstufe eines Profilvorschlags (3.6) — die technische Umsetzung
+/// der Datenminimierung: der Kunde sieht ein pseudonymisiertes Profil,
+/// Klardaten erst nach Zusage ([23], 6.4).
+enum DisclosureLevel {
+  pseudonymized
+  identified
+}
+
+/// Zustände des Profilvorschlags (3.6, Statusmodell 4.2.3).
+enum CandidateSubmissionStatus {
+  draft
+  submitted
+  reviewed
+  releasedToCustomer
+  interviewScheduled
+  accepted
+  rejected
+  withdrawn
+}
+
+/// Fachliche Entscheidung am Profilvorschlag (3.6) — sie trifft der
+/// Bedarfsträger ([24]), nicht der Betreiber.
+enum SubmissionDecision {
+  accepted
+  rejected
+}
+
+/// Stand einer Verknüpfung von Kandidatensatz und Personenidentität (3.6,
+/// Entscheidung zu vormals offener Frage 18): der Abgleich **schlägt vor**, er
+/// verknüpft nicht selbst. Ein nur vorgeschlagener Treffer gilt nicht als
+/// Identität und löst keine AÜG-Prüfung aus (4.2.3, „Grundlage von P1 und P6").
+enum IdentityLinkStatus {
+  proposed
+  confirmed
+  detached
+}
+
+/// Handlung der Verknüpfungshistorie (`mergeHistory`, 3.6). Zusammenführen und
+/// Trennen bleiben nachvollziehbar; eine falsche Verknüpfung muss rückholbar
+/// sein, ohne die Historie zu verlieren.
+enum IdentityMergeAction {
+  proposed
+  confirmed
+  detached
+}
+
+/// Zustände des Einsatzes (3.7, Statusmodell 4.3.1).
+///
+/// „Verlängert" ist **kein** Zustand: eine wirksame Verlängerung verschiebt
+/// `plannedEndDate` und lässt den Einsatz in `planned` bzw. `active` (4.3.1).
+/// Ein beantragter Beendigungsvorgang hat ebenfalls keinen Zustand.
+enum AssignmentStatus {
+  planned
+  active
+  interrupted
+  completed
+  terminatedEarly
+}
+
+/// Zustände der Verlängerung (3.7, Statusmodell 4.3.2).
+enum AssignmentExtensionStatus {
+  requested
+  approved
+  rejected
+  effective
+  withdrawn
+}
+
+/// Ergebnisart einer AÜG-Prüfung (5.5.2), als *abgeleitetes* Feld am Vorgang
+/// geführt (`ruleCheckResult`, 3.7). Die Werte entsprechen `Ergebnisart` in
+/// `lib/aueg/typen.ts` (`information`, `warnung`, `sperre`); die Bezeichner
+/// sind hier englisch (CLAUDE.md, Sprache). Gerechnet wird der Wert in
+/// Kapitel 5 — dieses Feld hält nur das Ergebnis.
+enum RuleCheckResult {
+  information
+  warning
+  block
+}
+
 /// Zustände des Lieferantenangebots (3.5, Statusmodell 4.2.2).
 enum SupplierOfferStatus {
   draft
@@ -566,6 +708,7 @@ model Customer {
   masterAgreements               MasterAgreement[]               @relation("CustomerMasterAgreements")
   demandRequests                 DemandRequest[]
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("CustomerCollectiveAgreementTarget")
+  assignments                    Assignment[]
 }
 
 /// Ansprechpartner (3.1, 3.2) — personenbezogene Kontaktangabe zu einem
@@ -651,6 +794,7 @@ model Site {
   rateCardItems                  RateCardItem[]
   comparableWageEntries          ComparableWageEntry[]
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("SiteCollectiveAgreementTarget")
+  assignments                    Assignment[]
 
   // Fachliche Kennung, eindeutig je Kunde (3.1).
   @@unique([customerId, siteNumber])
@@ -693,6 +837,7 @@ model CostCenter {
   deactivatedBy   User?     @relation("CostCenterDeactivatedBy", fields: [deactivatedById], references: [id])
 
   demandRequests DemandRequest[]
+  assignments    Assignment[]
 
   @@unique([customerId, costCenterNumber])
   @@index([tenantId])
@@ -748,6 +893,8 @@ model Supplier {
   invitations                    TenderInvitation[]
   offers                         SupplierOffer[]
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("SupplierCollectiveAgreementTarget")
+  candidates                     Candidate[]
+  assignments                    Assignment[]
 }
 
 /// AÜG-Erlaubnis (`supplierPermit`, SPEC 3.2) — der Nachweis, dass ein
@@ -922,7 +1069,11 @@ model RateCardItem {
   deactivatedById String?
   deactivatedBy   User?     @relation("RateCardItemDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  offerItems SupplierOfferItem[]
+  offerItems          SupplierOfferItem[]
+  // Einkaufs- und Verkaufsseite eines Einsatzes (3.7): beide Verweise zeigen
+  // auf eine Preisposition, deshalb zwei benannte Beziehungen.
+  agreedAssignments   Assignment[]        @relation("AssignmentAgreedRate")
+  customerAssignments Assignment[]        @relation("AssignmentCustomerRate")
 
   @@index([rateCardId])
 }
@@ -1090,6 +1241,8 @@ model DemandRequest {
 
   qualificationRequirements DemandRequestQualification[]
   tenders                   Tender[]
+  candidateSubmissions      CandidateSubmission[]
+  assignments               Assignment[]
 
   // Fachliche Kennung, eindeutig je Kunde (3.4).
   @@unique([customerId, requestNumber])
@@ -1260,7 +1413,8 @@ model SupplierOffer {
   deactivatedById String?
   deactivatedBy   User?     @relation("OfferDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  items SupplierOfferItem[]
+  items       SupplierOfferItem[]
+  submissions CandidateSubmission[]
 
   // Fachliche Kennung, eindeutig je Lieferant (3.5).
   @@unique([supplierId, offerNumber])
@@ -1302,4 +1456,553 @@ model SupplierOfferItem {
   deactivatedBy   User?     @relation("OfferItemDeactivatedBy", fields: [deactivatedById], references: [id])
 
   @@index([supplierOfferId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Fachmodule 3.6 und 3.7 — Besetzung
+//
+// Dieselben Konventionen wie oben (3.0): Standardfelder auf jedem Objekt,
+// `tenantId` nur beim mandantengebundenen Hauptobjekt, Unterobjekte ohne
+// eigenen Mandanten, Geldbeträge als Dezimalwert mit Währung, `status` nur, wo
+// Kapitel 4 ein Modell führt.
+//
+// Noch nicht modelliert und deshalb als **benannter Skalar** geführt: der
+// Nachweis zu einer Qualifikation (`documentRef`, 3.10) und das Schichtmodell
+// als Katalogwert (3.7).
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Kandidat (`candidate`, SPEC 3.6) — eine Person, die ein Lieferant für
+/// Überlassungen führt.
+///
+/// Mandant ist der **Lieferant**; er ist Eigentümer der Personendaten. Der
+/// Betreiber darf die fachlichen Angaben **nicht** ändern, sondern nur
+/// Pseudonymisierung und Sichtbarkeitsfreigabe ([22]). Der Kunde sieht den
+/// Kandidaten nur im Umfang der Datenminimierung ([23], 6.4) — abgebildet über
+/// die Offenlegungsstufe am Profilvorschlag, nicht über ein Feld hier.
+///
+/// **Keine besonderen Kategorien nach Art. 9 DSGVO** (3.6, Festlegung):
+/// arbeitsmedizinische Eignung und Ähnliches werden ausschließlich als
+/// *Vorliegen und Gültigkeit* geführt (3.10), nicht inhaltlich.
+///
+/// Statusmodell: keines in Kapitel 4; `status` ist aktiv/inaktiv (3.6).
+model Candidate {
+  id                           String                       @id @default(cuid())
+  tenantId                     String
+  tenant                       Tenant                       @relation(fields: [tenantId], references: [id])
+  candidateNumber              String
+  supplierId                   String
+  supplier                     Supplier                     @relation(fields: [supplierId], references: [id])
+  /// Klardaten; ihre Sichtbarkeit gegenüber dem Kunden regelt 6.4 über die
+  /// Offenlegungsstufe des Profilvorschlags.
+  givenName                    String
+  familyName                   String
+  /// Nötig für den Identitätsabgleich (3.6) und die Drehtürprüfung (5.3).
+  dateOfBirth                  DateTime
+  /// Dritter Merkmalssatz des Abgleichs (3.6, abschließend). Am Kandidaten
+  /// optional, weil 3.6 ihn in der Attributtabelle nicht als Pflicht führt;
+  /// ohne ihn bleibt der Abgleich auf Name und Geburtsdatum beschränkt.
+  placeOfBirth                 String?
+  /// Für den Kunden erst nach Zusage ([23]).
+  contactEmail                 String?
+  contactPhone                 String?
+  /// Anzeigeform für das pseudonymisierte Profil (6.4) — Pflicht.
+  pseudonym                    String
+  employmentStatusWithSupplier EmploymentStatusWithSupplier
+  /// Pflicht bei `employed` (3.6); Grundlage von P11 (5.3.4).
+  employedSince                DateTime?
+  workPermitRequired           Boolean
+  /// Erklärung zur Vorbeschäftigung (3.6). Herkunft und Form sind in 5.3.1
+  /// **abschließend** festgelegt: Erklärung des Kandidaten, vom Verleiher
+  /// eingeholt, mit der Angabe, ob in den letzten sechs Monaten ein
+  /// Arbeitsverhältnis beim Entleiher oder im Konzern bestand, dem Ende dieses
+  /// Verhältnisses und dem Datum der Erklärung. Die vier Felder sind genau
+  /// dieser Inhalt — nicht mehr.
+  previousEmploymentDeclaredAt DateTime?
+  previousEmploymentExisted    Boolean?
+  previousEmploymentEndedOn    DateTime?
+  /// Früherer Arbeitgeber, bezogen auf den Entleiher oder dessen Konzern
+  /// (5.3.1, Schritt 4).
+  previousEmploymentEmployer   String?
+  /// Nur beim Betreiber sichtbar (3.6, [43]). Gesetzt **ausschließlich** bei
+  /// bestätigter Verknüpfung: ein nur vorgeschlagener Treffer gilt nicht als
+  /// Identität (Entscheidung zu Frage 18) und steht allein in
+  /// `WorkerIdentityLink` mit `linkStatus = proposed`.
+  workerIdentityId             String?
+  workerIdentity               WorkerIdentity?              @relation(fields: [workerIdentityId], references: [id])
+  status                       CandidateStatus
+  externalReference            String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("CandidateCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("CandidateUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("CandidateDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  qualifications CandidateQualification[]
+  submissions    CandidateSubmission[]
+  assignments    Assignment[]
+  identityLinks  WorkerIdentityLink[]
+  mergeEntries   WorkerIdentityMergeEntry[]
+
+  // Fachliche Kennung, eindeutig je Lieferant (3.6).
+  @@unique([supplierId, candidateNumber])
+  @@index([tenantId])
+  @@index([workerIdentityId])
+  // Der Abgleich sucht über den abschließenden Merkmalssatz (3.6).
+  @@index([familyName, dateOfBirth])
+}
+
+/// Qualifikation eines Kandidaten (3.6) — „Liste (Qualifikation, Nachweis)".
+///
+/// Unterobjekt des Kandidaten: teilt dessen Mandanten und Matrixzeile. Der
+/// Nachweis ist ein Dokument nach 3.10 und dort noch nicht modelliert; bis
+/// dahin ein benannter Skalar.
+model CandidateQualification {
+  id                String    @id @default(cuid())
+  candidateId       String
+  candidate         Candidate @relation(fields: [candidateId], references: [id])
+  qualification     String
+  documentRef       String?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("CandidateQualificationCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("CandidateQualificationUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("CandidateQualificationDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([candidateId])
+}
+
+/// Profilvorschlag (`candidateSubmission`, SPEC 3.6) — das Vorlegen eines
+/// Kandidaten auf eine konkrete Anfrage.
+///
+/// Mandant ist der **Lieferant** (der Vorschlag ist seine Handlung), mit
+/// Statusführung gegenüber dem Kunden durch den `MD` ([17]) und fachlicher
+/// Entscheidung durch den `KB` ([24]).
+///
+/// Derselbe Kandidat darf auf mehrere Anfragen vorgeschlagen werden; jeder
+/// Vorschlag hat **seinen eigenen** Status und seine eigene Offenlegungsstufe
+/// (3.6, 3.13).
+///
+/// Statusmodell 4.2.3, umgesetzt als geschlossene Übergangsmenge in
+/// lib/status/candidateSubmission.ts.
+model CandidateSubmission {
+  id                   String                    @id @default(cuid())
+  tenantId             String
+  tenant               Tenant                    @relation(fields: [tenantId], references: [id])
+  submissionNumber     String
+  candidateId          String
+  candidate            Candidate                 @relation(fields: [candidateId], references: [id])
+  /// Bestimmt Einladung, Ausschreibung und Anfrage (3.6).
+  supplierOfferId      String
+  supplierOffer        SupplierOffer             @relation(fields: [supplierOfferId], references: [id])
+  /// *Abgeleitet* aus dem Angebot, zur Prüfung der Sichtbarkeit mitgeführt.
+  demandRequestId      String
+  demandRequest        DemandRequest             @relation(fields: [demandRequestId], references: [id])
+  /// Pflicht ab Status `submitted`; im Entwurf leer (3.6, 4.2.3).
+  submittedAt          DateTime?
+  availableFrom        DateTime
+  /// Abweichender Satz, wenn er von der Angebotsposition abweicht — *offene
+  /// Frage 17*.
+  offeredHourlyRate    Decimal?                  @db.Decimal(12, 4)
+  currency             String?
+  /// Klardaten erst nach Zusage ([23], 6.4). Der Übergang nach
+  /// `releasedToCustomer` **ist** die Umsetzung der Datenminimierung; eine
+  /// Vorlage mit Klardaten ist unzulässig (4.2.3, Ausgeschlossen).
+  disclosureLevel      DisclosureLevel
+  /// Freigabe durch `MD` ([22]).
+  releasedToCustomerAt DateTime?
+  interviewScheduledAt DateTime?
+  /// Fachlich durch `KB` ([24]).
+  decision             SubmissionDecision?
+  /// Pflicht bei `rejected`; enthält **nie** Bezug auf ein fremdes Angebot
+  /// (2.3, Regel 3).
+  decisionReason       String?
+  decidedAt            DateTime?
+  decidedById          String?
+  decidedBy            User?                     @relation("SubmissionDecidedBy", fields: [decidedById], references: [id])
+  /// Durch `LD` ([20]).
+  withdrawnAt          DateTime?
+  status               CandidateSubmissionStatus
+  externalReference    String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("SubmissionCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("SubmissionUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("SubmissionDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  assignment Assignment?
+
+  // Fachliche Kennung, eindeutig je Mandant (3.0).
+  @@unique([tenantId, submissionNumber])
+  @@index([candidateId])
+  @@index([supplierOfferId])
+  @@index([demandRequestId])
+  @@index([status])
+}
+
+/// Personenidentität (`workerIdentity`, SPEC 3.6) — die betreiberseitige
+/// Information, dass Kandidatensätze verschiedener Lieferanten **dieselbe
+/// Person** betreffen.
+///
+/// **Ausschließlich Betreibermandant.** Kunden und Lieferanten sehen das Objekt
+/// nicht und erfahren auch nicht, dass es existiert ([43], 2.3 Regel 4).
+/// Ergebnisse daraus erreichen sie nur als Information oder Sperre zum eigenen
+/// Vorgang — nie als Historie.
+///
+/// Der Merkmalssatz ist **abschließend** (Entscheidung zu vormals offener
+/// Frage 18): Name, Geburtsdatum, Geburtsort. Keine Sozialversicherungs-,
+/// Steuer- oder Ausweisnummer. Die Rechtsgrundlage ist **offene Frage 25**.
+///
+/// Statusmodell: keines.
+model WorkerIdentity {
+  id                String    @id @default(cuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  /// Betreiberweit eindeutig; nie an Kunden oder Lieferanten weitergegeben.
+  identityNumber    String    @unique
+  /// Abgleichmerkmale — der abschließende Merkmalssatz aus 3.6.
+  matchGivenName    String
+  matchFamilyName   String
+  matchDateOfBirth  DateTime
+  matchPlaceOfBirth String?
+  /// Pflicht bei bestätigter Verknüpfung (3.6): maschinelle Vorschläge werden
+  /// manuell bestätigt. Hier der Zeitpunkt der **ersten** Bestätigung; je
+  /// Verknüpfung steht er an `WorkerIdentityLink`.
+  confirmedAt       DateTime?
+  confirmedById     String?
+  confirmedBy       User?     @relation("IdentityConfirmedBy", fields: [confirmedById], references: [id])
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("IdentityCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("IdentityUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("IdentityDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  /// `linkedCandidates` aus 3.6 — mindestens einer, lieferantenübergreifend.
+  links        WorkerIdentityLink[]
+  /// `mergeHistory` aus 3.6 — fortschreibend, nie überschrieben.
+  mergeHistory WorkerIdentityMergeEntry[]
+  candidates   Candidate[]
+  assignments  Assignment[]
+
+  @@index([tenantId])
+  @@index([matchFamilyName, matchDateOfBirth])
+}
+
+/// Eine Verknüpfung zwischen Personenidentität und Kandidatensatz (3.6,
+/// `linkedCandidates`).
+///
+/// Sie trägt den Stand der Verknüpfung, weil der Abgleich **vorschlägt** und
+/// nicht selbst verknüpft: ein Satz in `proposed` ist ein maschineller Treffer
+/// ohne Wirkung, erst `confirmed` macht die Identität aus (Entscheidung zu
+/// Frage 18, 4.2.3 „Grundlage von P1 und P6"). `detached` bleibt stehen, damit
+/// eine zurückgenommene Verknüpfung nachvollziehbar ist.
+///
+/// Unterobjekt der Personenidentität: Betreibermandant, keine eigene
+/// Matrixzeile.
+model WorkerIdentityLink {
+  id                String             @id @default(cuid())
+  workerIdentityId  String
+  workerIdentity    WorkerIdentity     @relation(fields: [workerIdentityId], references: [id])
+  candidateId       String
+  candidate         Candidate          @relation(fields: [candidateId], references: [id])
+  linkStatus        IdentityLinkStatus
+  /// Übereinstimmende Merkmale des Vorschlags, in Worten (3.6) — die
+  /// Begründung, die der Betreiber bei der Bestätigung vor sich hat.
+  proposalBasis     String
+  proposedAt        DateTime
+  confirmedAt       DateTime?
+  confirmedById     String?
+  confirmedBy       User?              @relation("LinkConfirmedBy", fields: [confirmedById], references: [id])
+  detachedAt        DateTime?
+  detachedById      String?
+  detachedBy        User?              @relation("LinkDetachedBy", fields: [detachedById], references: [id])
+  /// Begründung der letzten Handlung; bei `detached` Pflicht (3.6).
+  reason            String?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("LinkCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("LinkUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("LinkDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  // Je Identität und Kandidat genau eine Verknüpfung; ihr Stand ändert sich,
+  // die Historie steht in `WorkerIdentityMergeEntry`.
+  @@unique([workerIdentityId, candidateId])
+  @@index([candidateId])
+  @@index([linkStatus])
+}
+
+/// Verknüpfungshistorie (`mergeHistory`, SPEC 3.6) — Liste aus Zeitpunkt,
+/// Handlung und Begründung.
+///
+/// Fortschreibend und nie überschrieben: „Zusammenführen und Trennen bleiben
+/// nachvollziehbar; eine falsche Verknüpfung muss rückholbar sein, ohne die
+/// Historie zu verlieren" (3.6). Deshalb ein eigener Satz je Handlung und
+/// nicht nur Zeitstempel an der Verknüpfung.
+model WorkerIdentityMergeEntry {
+  id                String              @id @default(cuid())
+  workerIdentityId  String
+  workerIdentity    WorkerIdentity      @relation(fields: [workerIdentityId], references: [id])
+  /// Betroffener Kandidatensatz; leer bei einer Handlung an der Identität
+  /// selbst.
+  candidateId       String?
+  candidate         Candidate?          @relation(fields: [candidateId], references: [id])
+  occurredAt        DateTime
+  action            IdentityMergeAction
+  reason            String
+  /// Handelnde Person beim Betreiber; leer beim maschinellen Vorschlag (der
+  /// Abgleich ist eine Systemhandlung, 4.0 Regel 10).
+  actedById         String?
+  actedBy           User?               @relation("MergeEntryActedBy", fields: [actedById], references: [id])
+  externalReference String?
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("MergeEntryCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+  updatedById String?
+  updatedBy   User?     @relation("MergeEntryUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([workerIdentityId])
+  @@index([candidateId])
+}
+
+/// Einsatz (`assignment`, SPEC 3.7) — die konkrete Überlassung einer Person an
+/// einen Kunden für einen Zeitraum.
+///
+/// **Eine** Person bei **einem** Kunden an **einem** Standort; mehrere Köpfe
+/// einer Anfrage ergeben mehrere Einsätze. Mehrere **gleichzeitige** Einsätze
+/// derselben Person beim selben Kunden sind zulässig (Entscheidung zu Frage 19);
+/// für die Höchstüberlassungsdauer zählt 5.1 Kalendertage, überlappende Tage
+/// genau einmal.
+///
+/// Mandant ist der **Betreiber**: der Einsatz ist das Objekt an der Nahtstelle
+/// und gleichzeitig dem Kunden und dem Lieferanten zugänglich, jedem nur im
+/// eigenen Umfang ([2], [7]). Anlegen, verlängern und beenden führt der `MD`
+/// aus; Kunde und Lieferant beantragen ([25]), der Kunde genehmigt ([26]).
+///
+/// Statusmodell 4.3.1, umgesetzt in lib/status/assignment.ts.
+model Assignment {
+  id                            String               @id @default(cuid())
+  tenantId                      String
+  tenant                        Tenant               @relation(fields: [tenantId], references: [id])
+  /// Betreiberweit eindeutig (3.7).
+  assignmentNumber              String               @unique
+  /// Bezugspunkt der Höchstüberlassungsdauer (5.1) — je Kunde, nicht je
+  /// Standort und nicht je Kostenstelle.
+  customerId                    String
+  customer                      Customer             @relation(fields: [customerId], references: [id])
+  siteId                        String
+  site                          Site                 @relation(fields: [siteId], references: [id])
+  /// Für Lieferanten **nicht** sichtbar (3.7, [14]).
+  costCenterId                  String
+  costCenter                    CostCenter           @relation(fields: [costCenterId], references: [id])
+  /// Anzeige gegenüber dem Kunden nach *offener Frage 11*.
+  supplierId                    String
+  supplier                      Supplier             @relation(fields: [supplierId], references: [id])
+  candidateId                   String
+  candidate                     Candidate            @relation(fields: [candidateId], references: [id])
+  /// Pflicht ab Status `planned` (3.7); nur Betreibersicht, Grundlage der
+  /// Zählung nach 5.1. Gesetzt wird **nur** eine bestätigte Identität.
+  workerIdentityId              String?
+  workerIdentity                WorkerIdentity?      @relation(fields: [workerIdentityId], references: [id])
+  /// Leer bei Einsatz ohne vorangegangene Anfrage (3.7).
+  demandRequestId               String?
+  demandRequest                 DemandRequest?       @relation(fields: [demandRequestId], references: [id])
+  /// 1 Einsatz : 0..1 Profilvorschlag (3.6, 3.7).
+  candidateSubmissionId         String?              @unique
+  candidateSubmission           CandidateSubmission? @relation(fields: [candidateSubmissionId], references: [id])
+  /// Konkretisierungspflicht (5.3.3): **nicht** nur ein Verweis auf die
+  /// Anfrage.
+  activityDescription           String
+  plannedStartDate              DateTime
+  plannedEndDate                DateTime?
+  actualStartDate               DateTime?
+  actualEndDate                 DateTime?
+  weeklyHours                   Decimal              @db.Decimal(5, 2)
+  /// Katalogwert (3.7); der Katalog ist Konfiguration und noch nicht als
+  /// Objekt geführt — bis dahin ein benannter Skalar.
+  shiftModel                    String?
+  /// Einkaufsseite (3.3).
+  agreedRateCardItemId          String
+  agreedRateCardItem            RateCardItem         @relation("AssignmentAgreedRate", fields: [agreedRateCardItemId], references: [id])
+  /// Abweichender Satz und Begründung — *offene Frage 17*.
+  agreedHourlyRate              Decimal?             @db.Decimal(12, 4)
+  currency                      String?
+  rateDeviationReason           String?
+  /// Verkaufsseite; für Lieferanten **nie** sichtbar ([42], 3.3).
+  customerRateCardItemId        String
+  customerRateCardItem          RateCardItem         @relation("AssignmentCustomerRate", fields: [customerRateCardItemId], references: [id])
+  /// Pflicht ab `equalPayDueDate` (3.7). Erbt beim Anlegen aus dem
+  /// Vergleichsentgelt des Standorts zur Tätigkeit (3.3); eine Abweichung ist
+  /// mit Begründung möglich und wird protokolliert.
+  comparableWage                Decimal?             @db.Decimal(12, 4)
+  comparableWageCurrency        String?
+  comparableWageDeviationReason String?
+  /// *Abgeleitet* — Ergebnis aus 5.2. Wird in Kapitel 5 gerechnet, nicht hier.
+  equalPayDueDate               DateTime?
+  /// *Abgeleitet* — Ergebnis aus 5.1.
+  maxDurationEndDate            DateTime?
+  /// *Abgeleitet*, einschließlich Vorläufern derselben Person beim selben
+  /// Kunden (5.1).
+  countedDurationDays           Int?
+  /// Pflicht bei vorzeitiger Beendigung (3.7, 4.3.1).
+  terminationReason             String?
+  /// Pflicht bei Antrag (3.7): `KB` ([25]), `LD` ([25]) oder `MD`. Ein
+  /// beantragter, noch nicht wirksamer Beendigungsvorgang hat **keinen**
+  /// eigenen Zustand (4.3.1) — er ist nur über dieses Feld sichtbar.
+  terminationRequestedById      String?
+  terminationRequestedBy        User?                @relation("AssignmentTerminationRequestedBy", fields: [terminationRequestedById], references: [id])
+  terminationRequestedAt        DateTime?
+  /// Genehmigung der Kundenseite, **nur** bei Antrag der Kundenseite
+  /// (4.3.1, Zuweisung der Genehmigung; [26]).
+  ///
+  /// **Über 3.7 hinaus.** Die Attributtabelle in 3.7 führt für diese
+  /// Genehmigung kein Feld — 4.3.1 macht sie aber zur Vorbedingung des
+  /// Übergangs nach `terminatedEarly`. Ohne ein Feld wäre die Vorbedingung
+  /// nicht prüfbar. Die Lücke ist dieselbe, die 4.3.2 am Ende benennt, und
+  /// steht als *offene Frage 39* in Kapitel 7.
+  terminationApprovedAt         DateTime?
+  terminationApprovedById       String?
+  terminationApprovedBy         User?                @relation("AssignmentTerminationApprovedBy", fields: [terminationApprovedById], references: [id])
+  status                        AssignmentStatus
+  externalReference             String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("AssignmentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("AssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  extensions    AssignmentExtension[]
+  interruptions AssignmentInterruption[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([candidateId])
+  @@index([workerIdentityId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+/// Verlängerung (`assignmentExtension`, SPEC 3.7) — die Verschiebung des
+/// Einsatzendes nach hinten, als eigener, protokollierter Vorgang.
+///
+/// **Keine stille Änderung** von `plannedEndDate`: jede Verlängerung ist ein
+/// Satz mit Antrag, Genehmigung und Wirksamkeit (3.7, 4.3.2). Sie teilt die
+/// Matrixzeile des Einsatzes (2.2, Lesart) und dessen Mandanten und trägt
+/// deshalb keine eigene `tenantId`.
+///
+/// Statusmodell 4.3.2, umgesetzt in lib/status/assignmentExtension.ts.
+model AssignmentExtension {
+  id                String                    @id @default(cuid())
+  assignmentId      String
+  assignment        Assignment                @relation(fields: [assignmentId], references: [id])
+  /// Muss nach dem bisherigen Ende liegen (3.7).
+  newEndDate        DateTime
+  reason            String
+  requestedAt       DateTime
+  requestedById     String
+  requestedBy       User                      @relation("ExtensionRequestedBy", fields: [requestedById], references: [id])
+  /// Pflicht ab Genehmigung: `KG`, soweit 4.3 sie der Kundenseite zuweist
+  /// ([26]) — und das tut 4.3.2 für die Verlängerung **immer**.
+  approvedAt        DateTime?
+  approvedById      String?
+  approvedBy        User?                     @relation("ExtensionApprovedBy", fields: [approvedById], references: [id])
+  /// Pflicht ab Wirksamkeit: `MD` ([25]).
+  effectiveAt       DateTime?
+  effectiveById     String?
+  effectiveBy       User?                     @relation("ExtensionEffectiveBy", fields: [effectiveById], references: [id])
+  /// Begründung der Ablehnung (4.3.2, `requested` → `rejected`).
+  rejectionReason   String?
+  withdrawnAt       DateTime?
+  /// *Abgeleitet* — Ergebnis der AÜG-Prüfung (5.1, 5.5). Gerechnet in
+  /// Kapitel 5; dieses Feld hält nur das Ergebnis am Vorgang.
+  ruleCheckResult   RuleCheckResult?
+  status            AssignmentExtensionStatus
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("ExtensionCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("ExtensionUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("ExtensionDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([assignmentId])
+  @@index([status])
+}
+
+/// Unterbrechung (`assignmentInterruption`, SPEC 3.7) — eine dokumentierte
+/// Unterbrechung der Überlassung.
+///
+/// Fachlich notwendig, weil eine Unterbrechung von mehr als drei Monaten die
+/// Zählung der Höchstüberlassungsdauer zurücksetzt (5.1.4). Erfasst werden
+/// **dokumentierte** Unterbrechungen **innerhalb** eines laufenden Einsatzes;
+/// die Lücke **zwischen** zwei Einsätzen braucht kein eigenes Objekt — sie
+/// ergibt sich aus den Einsatzdaten (5.1.4).
+///
+/// Statusmodell: keines; relevant ist der Zeitraum. Der Einsatzstatus
+/// `interrupted` steht in 4.3.1.
+model AssignmentInterruption {
+  id                String     @id @default(cuid())
+  assignmentId      String
+  assignment        Assignment @relation(fields: [assignmentId], references: [id])
+  interruptionFrom  DateTime
+  /// Leer = läuft noch (3.7).
+  interruptionTo    DateTime?
+  /// Katalogwert + Text (3.7). Der Katalog ist Konfiguration, deshalb ein
+  /// Textfeld. **Hinweis zur Datenkategorie:** der Grund kann auf
+  /// Abwesenheitsgründe und damit auf Gesundheitsdaten hinauslaufen — siehe
+  /// *offene Frage 21*; im Prototyp werden nur neutrale Gründe geführt.
+  reasonCategory    String
+  reasonText        String?
+  /// *Abgeleitet* — Ergebnis der Rechenvorschrift aus 5.1 (Prüfung P2).
+  countsAsReset     Boolean?
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("InterruptionCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("InterruptionUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("InterruptionDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([assignmentId])
 }

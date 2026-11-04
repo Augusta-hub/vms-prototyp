@@ -1,5 +1,5 @@
 /**
- * Synthetische Demo-Daten — SPEC 3.1 bis 3.5 und 3.11.
+ * Synthetische Demo-Daten — SPEC 3.1 bis 3.7 und 3.11.
  *
  * Alle Organisationen und Personen sind **erfunden** (CLAUDE.md, Regel 3).
  * Die Firmennamen sind dieselben wie in den Szenarien in tests/aueg/, damit
@@ -12,18 +12,17 @@
  *
  * Bestand: ein Betreiber, zwei Kunden mit Standorten und Kostenstellen, zwei
  * Lieferanten mit anerkannter, gültiger AÜG-Erlaubnis, Rahmenverträge und
- * Preislisten **beider** Seiten, Tarifzuordnungen, Vergleichsentgelte und je
- * eine Bedarfsanfrage pro Zustand aus 4.1.
+ * Preislisten **beider** Seiten, Tarifzuordnungen, Vergleichsentgelte, je eine
+ * Bedarfsanfrage pro Zustand aus 4.1, Kandidaten bei **beiden** Lieferanten mit
+ * Personenidentitäten (3.6), je ein Profilvorschlag pro Zustand aus 4.2.3, je
+ * ein Einsatz pro Zustand aus 4.3.1 — einer mit laufender Unterbrechung — und
+ * je eine Verlängerung pro Zustand aus 4.3.2.
  *
- * **Zu den Zuständen:** `draft`, `submitted`, `approved`, `tendered`,
- * `cancelled` und `expired` entstehen hier als Daten in genau dem Zustand, den
- * 4.1 beschreibt. `inSelection` und `filled` setzen den Profilvorschlag (3.6)
- * und den Einsatz (3.7) voraus; beide Objekte sind noch nicht modelliert. Die
- * beiden Anfragen tragen den Zustand deshalb **als Seed-Datum**, nicht über
- * einen Übergang — über die Oberfläche sind sie bis 3.6/3.7 nicht erreichbar.
- * Der Seed legt Daten an und ist kein Weg um Kapitel 4 herum: die
- * Statusmodelle in lib/status/ bleiben die einzige Stelle, an der ein Zustand
- * **wechselt**.
+ * **Zu den Zuständen:** Der Seed legt **Daten** in genau dem Zustand an, den
+ * Kapitel 4 beschreibt. Er ist kein Weg um Kapitel 4 herum: die Statusmodelle
+ * in lib/status/ bleiben die einzige Stelle, an der ein Zustand **wechselt**.
+ * Mit 3.6 und 3.7 liegen unter `inSelection` und `filled` jetzt die Objekte,
+ * die 4.1 dafür verlangt — vorgelegte Profilvorschläge und ein Einsatz.
  */
 import { PrismaClient, type RoleCode, type TenantType } from '@prisma/client'
 import {
@@ -206,6 +205,18 @@ async function main(): Promise<void> {
 
   // Leeren in umgekehrter Abhängigkeitsreihenfolge, damit der Seed
   // wiederholbar bleibt. Nur Entwicklungsdaten, nie Echtdaten (CLAUDE.md).
+  // 3.6 und 3.7 zuerst: Einsatz, Verlängerung und Unterbrechung hängen an
+  // Kandidat, Profilvorschlag und Personenidentität.
+  await prisma.assignmentExtension.deleteMany()
+  await prisma.assignmentInterruption.deleteMany()
+  await prisma.assignment.deleteMany()
+  await prisma.workerIdentityMergeEntry.deleteMany()
+  await prisma.workerIdentityLink.deleteMany()
+  await prisma.candidate.updateMany({ data: { workerIdentityId: null } })
+  await prisma.workerIdentity.deleteMany()
+  await prisma.candidateSubmission.deleteMany()
+  await prisma.candidateQualification.deleteMany()
+  await prisma.candidate.deleteMany()
   await prisma.supplierOfferItem.deleteMany()
   await prisma.supplierOffer.deleteMany()
   await prisma.tenderInvitation.deleteMany()
@@ -1251,6 +1262,1136 @@ async function main(): Promise<void> {
     },
   })
 
+  // ── Kandidaten und Personenidentität (3.6) ───────────────────────────────
+  //
+  // Vier Kandidaten bei Lieferant 1, drei bei Lieferant 2 — alle erfunden
+  // (CLAUDE.md, Regel 3). Zwei Personen sind **bei beiden Lieferanten**
+  // geführt; das ist der Fall, für den 3.6 die Personenidentität einführt und
+  // den 5.1 braucht, um über Lieferanten hinweg zu zählen:
+  //
+  //  - **Marek Dvořák** ist bei beiden Lieferanten geführt, und **beide**
+  //    Verknüpfungen sind bestätigt. Erst dadurch zählen die Einsätze der
+  //    Person zusammen (P1).
+  //  - **Ilona Brandt** ist ebenfalls bei beiden geführt, aber nur die
+  //    Verknüpfung bei Lieferant 1 ist **bestätigt**; die bei Lieferant 2 ist
+  //    **nur vorgeschlagen**. Nach 3.6 und 4.2.3 zählt dieser Satz deshalb als
+  //    eigene Person — ein maschineller Treffer allein löst keine Prüfung aus.
+  //    `Candidate.workerIdentityId` bleibt dort leer, der Vorschlag steht
+  //    allein in `WorkerIdentityLink`.
+  interface CandidateSeed {
+    readonly key: string
+    readonly supplierId: string
+    readonly tenantId: string
+    readonly candidateNumber: string
+    readonly givenName: string
+    readonly familyName: string
+    readonly dateOfBirth: Date
+    readonly placeOfBirth: string | null
+    readonly pseudonym: string
+    readonly qualification: string
+    readonly employmentStatusWithSupplier: 'employed' | 'applicant'
+    readonly employedSince: Date | null
+    readonly workPermitRequired: boolean
+    readonly previousEmploymentDeclaredAt: Date | null
+    readonly previousEmploymentExisted: boolean | null
+    readonly previousEmploymentEndedOn: Date | null
+    readonly previousEmploymentEmployer: string | null
+    readonly createdBy: string
+  }
+
+  const candidateSeeds: readonly CandidateSeed[] = [
+    {
+      key: 'marek-s1',
+      supplierId: supplier1.id,
+      tenantId: supplier1.tenantId,
+      candidateNumber: 'K-L-2001-1',
+      givenName: 'Marek',
+      familyName: 'Dvořák',
+      dateOfBirth: day('1989-04-12'),
+      placeOfBirth: 'Pilsen',
+      pseudonym: 'Profil M.D. (Montage)',
+      qualification: 'Erfahrung Metallmontage',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2024-03-01'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-09-20'),
+      previousEmploymentExisted: false,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator1'),
+    },
+    {
+      key: 'ilona-s1',
+      supplierId: supplier1.id,
+      tenantId: supplier1.tenantId,
+      candidateNumber: 'K-L-2001-2',
+      givenName: 'Ilona',
+      familyName: 'Brandt',
+      dateOfBirth: day('1992-09-30'),
+      placeOfBirth: 'Erfurt',
+      pseudonym: 'Profil I.B. (Lager)',
+      qualification: 'Staplerschein',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2025-01-15'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-08-11'),
+      previousEmploymentExisted: false,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator1'),
+    },
+    {
+      // Erklärung „ja" mit Austritt beim Entleiher: der Fall, den die
+      // Drehtürklausel trifft (5.3.1). Gerechnet wird er mit P6 — hier stehen
+      // nur die Daten.
+      key: 'henrik-s1',
+      supplierId: supplier1.id,
+      tenantId: supplier1.tenantId,
+      candidateNumber: 'K-L-2001-3',
+      givenName: 'Henrik',
+      familyName: 'Saalfeld',
+      dateOfBirth: day('1985-02-03'),
+      placeOfBirth: 'Kassel',
+      pseudonym: 'Profil H.S. (CNC)',
+      qualification: 'CNC-Erfahrung',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2026-10-01'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-09-28'),
+      previousEmploymentExisted: true,
+      previousEmploymentEndedOn: day('2026-08-31'),
+      previousEmploymentEmployer: 'Nordwerk Metall GmbH',
+      createdBy: userId('supplierCoordinator1'),
+    },
+    {
+      // Bewerber **ohne** Arbeitsverhältnis und **ohne** Erklärung: zwei
+      // Vorbedingungen fehlen zugleich (P11 in 5.3.4, P6 in 5.3.1). Der Fall
+      // belegt, dass die Zusage und der Einsatz daran scheitern.
+      key: 'tomas-s1',
+      supplierId: supplier1.id,
+      tenantId: supplier1.tenantId,
+      candidateNumber: 'K-L-2001-4',
+      givenName: 'Tomáš',
+      familyName: 'Kříž',
+      dateOfBirth: day('1998-07-22'),
+      placeOfBirth: 'Brünn',
+      pseudonym: 'Profil T.K. (Helfer)',
+      qualification: 'keine besondere',
+      employmentStatusWithSupplier: 'applicant',
+      employedSince: null,
+      workPermitRequired: true,
+      previousEmploymentDeclaredAt: null,
+      previousEmploymentExisted: null,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator1'),
+    },
+    {
+      key: 'marek-s2',
+      supplierId: supplier2.id,
+      tenantId: supplier2.tenantId,
+      candidateNumber: 'K-L-2002-1',
+      givenName: 'Marek',
+      familyName: 'Dvořák',
+      dateOfBirth: day('1989-04-12'),
+      placeOfBirth: 'Pilsen',
+      pseudonym: 'Kandidat 7781',
+      qualification: 'Erfahrung Metallmontage',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2026-11-01'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-10-25'),
+      previousEmploymentExisted: false,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator2'),
+    },
+    {
+      key: 'ilona-s2',
+      supplierId: supplier2.id,
+      tenantId: supplier2.tenantId,
+      candidateNumber: 'K-L-2002-2',
+      givenName: 'Ilona',
+      familyName: 'Brandt',
+      dateOfBirth: day('1992-09-30'),
+      placeOfBirth: 'Erfurt',
+      pseudonym: 'Kandidat 7782',
+      qualification: 'Staplerschein',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2026-12-01'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-11-20'),
+      previousEmploymentExisted: false,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator2'),
+    },
+    {
+      key: 'ruth-s2',
+      supplierId: supplier2.id,
+      tenantId: supplier2.tenantId,
+      candidateNumber: 'K-L-2002-3',
+      givenName: 'Ruth',
+      familyName: 'Delfs',
+      dateOfBirth: day('1990-11-05'),
+      placeOfBirth: 'Rostock',
+      pseudonym: 'Kandidat 7783',
+      qualification: 'Fachkraft Lager',
+      employmentStatusWithSupplier: 'employed',
+      employedSince: day('2024-09-01'),
+      workPermitRequired: false,
+      previousEmploymentDeclaredAt: day('2026-07-02'),
+      previousEmploymentExisted: false,
+      previousEmploymentEndedOn: null,
+      previousEmploymentEmployer: null,
+      createdBy: userId('supplierCoordinator2'),
+    },
+  ]
+
+  const candidateIds = new Map<string, string>()
+  for (const candidate of candidateSeeds) {
+    const created = await prisma.candidate.create({
+      data: {
+        tenantId: candidate.tenantId,
+        candidateNumber: candidate.candidateNumber,
+        supplierId: candidate.supplierId,
+        givenName: candidate.givenName,
+        familyName: candidate.familyName,
+        dateOfBirth: candidate.dateOfBirth,
+        placeOfBirth: candidate.placeOfBirth,
+        pseudonym: candidate.pseudonym,
+        employmentStatusWithSupplier: candidate.employmentStatusWithSupplier,
+        employedSince: candidate.employedSince,
+        workPermitRequired: candidate.workPermitRequired,
+        previousEmploymentDeclaredAt: candidate.previousEmploymentDeclaredAt,
+        previousEmploymentExisted: candidate.previousEmploymentExisted,
+        previousEmploymentEndedOn: candidate.previousEmploymentEndedOn,
+        previousEmploymentEmployer: candidate.previousEmploymentEmployer,
+        status: 'active',
+        createdById: candidate.createdBy,
+        createdAt: SEED_DATE,
+        qualifications: {
+          create: [{ qualification: candidate.qualification, createdById: candidate.createdBy }],
+        },
+      },
+    })
+    candidateIds.set(candidate.key, created.id)
+  }
+
+  const candidateId = (key: string): string => {
+    const id = candidateIds.get(key)
+    if (id === undefined) throw new Error(`Kandidat ${key} fehlt`)
+    return id
+  }
+
+  /**
+   * Legt eine Personenidentität mit ihren Verknüpfungen und der Historie an
+   * (3.6). `confirmed` bestätigt die Verknüpfung und setzt
+   * `Candidate.workerIdentityId`; `proposed` tut genau das **nicht**.
+   */
+  async function seedIdentity(input: {
+    readonly identityNumber: string
+    readonly givenName: string
+    readonly familyName: string
+    readonly dateOfBirth: Date
+    readonly placeOfBirth: string
+    readonly links: readonly {
+      readonly candidateKey: string
+      readonly linkStatus: 'confirmed' | 'proposed'
+      readonly basis: string
+      readonly reason: string
+      readonly at: Date
+    }[]
+  }): Promise<void> {
+    const confirmed = input.links.filter((link) => link.linkStatus === 'confirmed')
+    const firstConfirmed = confirmed[0]
+    const identity = await prisma.workerIdentity.create({
+      data: {
+        tenantId: tenantId('operator'),
+        identityNumber: input.identityNumber,
+        matchGivenName: input.givenName,
+        matchFamilyName: input.familyName,
+        matchDateOfBirth: input.dateOfBirth,
+        matchPlaceOfBirth: input.placeOfBirth,
+        confirmedAt: firstConfirmed?.at ?? null,
+        confirmedById: firstConfirmed === undefined ? null : userId('operatorCoordinator'),
+        createdById: userId('operatorCoordinator'),
+        createdAt: SEED_DATE,
+      },
+    })
+    for (const link of input.links) {
+      await prisma.workerIdentityLink.create({
+        data: {
+          workerIdentityId: identity.id,
+          candidateId: candidateId(link.candidateKey),
+          linkStatus: link.linkStatus,
+          proposalBasis: link.basis,
+          proposedAt: link.at,
+          confirmedAt: link.linkStatus === 'confirmed' ? link.at : null,
+          confirmedById:
+            link.linkStatus === 'confirmed' ? userId('operatorCoordinator') : null,
+          reason: link.reason,
+          createdById: userId('operatorCoordinator'),
+          createdAt: SEED_DATE,
+        },
+      })
+      // Der Vorschlag ist eine Systemhandlung und trägt keine Person
+      // (4.0, Regel 10); die Bestätigung trägt sie (3.6).
+      await prisma.workerIdentityMergeEntry.create({
+        data: {
+          workerIdentityId: identity.id,
+          candidateId: candidateId(link.candidateKey),
+          occurredAt: link.at,
+          action: 'proposed',
+          reason: link.basis,
+          createdById: userId('operatorCoordinator'),
+          createdAt: SEED_DATE,
+        },
+      })
+      if (link.linkStatus === 'confirmed') {
+        await prisma.workerIdentityMergeEntry.create({
+          data: {
+            workerIdentityId: identity.id,
+            candidateId: candidateId(link.candidateKey),
+            occurredAt: link.at,
+            action: 'confirmed',
+            reason: link.reason,
+            actedById: userId('operatorCoordinator'),
+            createdById: userId('operatorCoordinator'),
+            createdAt: SEED_DATE,
+          },
+        })
+        await prisma.candidate.update({
+          where: { id: candidateId(link.candidateKey) },
+          data: { workerIdentityId: identity.id },
+        })
+      }
+    }
+  }
+
+  await seedIdentity({
+    identityNumber: 'PI-0001',
+    givenName: 'Marek',
+    familyName: 'Dvořák',
+    dateOfBirth: day('1989-04-12'),
+    placeOfBirth: 'Pilsen',
+    links: [
+      {
+        candidateKey: 'marek-s1',
+        linkStatus: 'confirmed',
+        basis: 'Name, Geburtsdatum und Geburtsort stimmen überein.',
+        reason: 'Beim Betreiber geprüft und bestätigt; Ausweisdaten lagen beim Lieferanten vor.',
+        at: day('2026-11-02'),
+      },
+      {
+        candidateKey: 'marek-s2',
+        linkStatus: 'confirmed',
+        basis: 'Name, Geburtsdatum und Geburtsort stimmen überein.',
+        reason:
+          'Zweiter Kandidatensatz derselben Person bei einem anderen Lieferanten; bestätigt, ' +
+          'damit 5.1 die Überlassungstage zusammenzählt.',
+        at: day('2026-11-03'),
+      },
+    ],
+  })
+
+  await seedIdentity({
+    identityNumber: 'PI-0002',
+    givenName: 'Ilona',
+    familyName: 'Brandt',
+    dateOfBirth: day('1992-09-30'),
+    placeOfBirth: 'Erfurt',
+    links: [
+      {
+        candidateKey: 'ilona-s1',
+        linkStatus: 'confirmed',
+        basis: 'Name, Geburtsdatum und Geburtsort stimmen überein.',
+        reason: 'Beim Betreiber geprüft und bestätigt.',
+        at: day('2026-10-14'),
+      },
+      {
+        // **Nur vorgeschlagen.** Bis zur Bestätigung zählt dieser
+        // Kandidatensatz als eigene Person (3.6, 4.2.3).
+        candidateKey: 'ilona-s2',
+        linkStatus: 'proposed',
+        basis: 'Name, Geburtsdatum und Geburtsort stimmen überein.',
+        reason: 'Vorschlag des Abgleichs, noch nicht bestätigt.',
+        at: day('2026-10-20'),
+      },
+    ],
+  })
+
+  // Einzelsätze brauchen die Identität trotzdem: 3.7 macht
+  // `assignment.workerIdentityRef` ab `planned` zur Pflicht, und 5.1 zählt
+  // darüber. 3.6 lässt das zu — `linkedCandidates` verlangt „mindestens einen".
+  await seedIdentity({
+    identityNumber: 'PI-0003',
+    givenName: 'Henrik',
+    familyName: 'Saalfeld',
+    dateOfBirth: day('1985-02-03'),
+    placeOfBirth: 'Kassel',
+    links: [
+      {
+        candidateKey: 'henrik-s1',
+        linkStatus: 'confirmed',
+        basis: 'Von einer Person beim Betreiber angelegt, nicht maschinell gefunden.',
+        reason: 'Einzelner Kandidatensatz; Identität für die Zählung nach 5.1 angelegt.',
+        at: day('2026-10-02'),
+      },
+    ],
+  })
+
+  await seedIdentity({
+    identityNumber: 'PI-0004',
+    givenName: 'Ruth',
+    familyName: 'Delfs',
+    dateOfBirth: day('1990-11-05'),
+    placeOfBirth: 'Rostock',
+    links: [
+      {
+        candidateKey: 'ruth-s2',
+        linkStatus: 'confirmed',
+        basis: 'Von einer Person beim Betreiber angelegt, nicht maschinell gefunden.',
+        reason: 'Einzelner Kandidatensatz; Identität für die Zählung nach 5.1 angelegt.',
+        at: day('2026-08-20'),
+      },
+    ],
+  })
+
+  // ── Ausschreibungen zu BA-2026-0005 und BA-2026-0006 (3.5) ───────────────
+  //
+  // Die beiden Anfragen trugen ihren Zustand bisher **nur** als Seed-Datum,
+  // weil Profilvorschlag und Einsatz fehlten. Jetzt liegen die Objekte darunter:
+  // `inSelection` hat vorgelegte Vorschläge, `filled` hat einen Einsatz.
+  const selectionDemandId = demandIds.get('BA-2026-0005')
+  const filledDemandId = demandIds.get('BA-2026-0006')
+  if (selectionDemandId === undefined || filledDemandId === undefined) {
+    throw new Error('Anfragen zu Auswahl und Besetzung fehlen')
+  }
+
+  const selectionTender = await prisma.tender.create({
+    data: {
+      tenantId: tenantId('operator'),
+      tenderNumber: 'BA-2026-0005-R1',
+      demandRequestId: selectionDemandId,
+      tenderRound: 1,
+      distributionMode: 'simultaneous',
+      publishedAt: day('2026-09-20'),
+      publishedById: userId('operatorCoordinator'),
+      offerDeadline: hour('2026-12-01T12:00'),
+      createdById: userId('operatorCoordinator'),
+      createdAt: SEED_DATE,
+    },
+  })
+
+  const selectionOffers = new Map<string, string>()
+  for (const entry of [
+    { key: 'supplier1', supplierId: supplier1.id, tenantId: supplier1.tenantId, offerNumber: 'A-L-2001-2', user: 'supplierCoordinator1', rate: 19.8 },
+    { key: 'supplier2', supplierId: supplier2.id, tenantId: supplier2.tenantId, offerNumber: 'A-L-2002-1', user: 'supplierCoordinator2', rate: 21.4 },
+  ]) {
+    const invitation = await prisma.tenderInvitation.create({
+      data: {
+        tenantId: tenantId('operator'),
+        tenderId: selectionTender.id,
+        supplierId: entry.supplierId,
+        invitedAt: day('2026-09-20'),
+        viewedAt: day('2026-09-21'),
+        respondedAt: day('2026-09-25'),
+        invitationStatus: 'offerSubmitted',
+        createdById: userId('operatorCoordinator'),
+        createdAt: SEED_DATE,
+      },
+    })
+    const offer = await prisma.supplierOffer.create({
+      data: {
+        tenantId: entry.tenantId,
+        offerNumber: entry.offerNumber,
+        tenderInvitationId: invitation.id,
+        supplierId: entry.supplierId,
+        availableFrom: day('2027-02-15'),
+        offeredHeadcount: 2,
+        offerValidUntil: hour('2026-12-20T12:00'),
+        submittedAt: day('2026-09-25'),
+        reviewedAt: day('2026-09-28'),
+        status: 'reviewed',
+        createdById: userId(entry.user),
+        createdAt: SEED_DATE,
+        items: {
+          create: [
+            {
+              qualificationLevel: 'Fachkraft Lager',
+              headcount: 2,
+              hourlyRate: entry.rate,
+              currency: 'EUR',
+              createdById: userId(entry.user),
+            },
+          ],
+        },
+      },
+    })
+    selectionOffers.set(entry.key, offer.id)
+  }
+
+  const filledInvitation = await prisma.tenderInvitation.create({
+    data: {
+      tenantId: tenantId('operator'),
+      tenderId: (
+        await prisma.tender.create({
+          data: {
+            tenantId: tenantId('operator'),
+            tenderNumber: 'BA-2026-0006-R1',
+            demandRequestId: filledDemandId,
+            tenderRound: 1,
+            distributionMode: 'simultaneous',
+            publishedAt: day('2026-07-05'),
+            publishedById: userId('operatorCoordinator'),
+            offerDeadline: hour('2026-08-01T12:00'),
+            createdById: userId('operatorCoordinator'),
+            createdAt: SEED_DATE,
+          },
+        })
+      ).id,
+      supplierId: supplier2.id,
+      invitedAt: day('2026-07-05'),
+      viewedAt: day('2026-07-06'),
+      respondedAt: day('2026-07-10'),
+      invitationStatus: 'offerSubmitted',
+      createdById: userId('operatorCoordinator'),
+      createdAt: SEED_DATE,
+    },
+  })
+
+  const filledOffer = await prisma.supplierOffer.create({
+    data: {
+      tenantId: supplier2.tenantId,
+      offerNumber: 'A-L-2002-2',
+      tenderInvitationId: filledInvitation.id,
+      supplierId: supplier2.id,
+      availableFrom: day('2026-09-01'),
+      offeredHeadcount: 1,
+      submittedAt: day('2026-07-10'),
+      reviewedAt: day('2026-07-12'),
+      status: 'accepted',
+      createdById: userId('supplierCoordinator2'),
+      createdAt: SEED_DATE,
+      items: {
+        create: [
+          {
+            qualificationLevel: 'Fachkraft Lager',
+            headcount: 1,
+            hourlyRate: 21.4,
+            currency: 'EUR',
+            createdById: userId('supplierCoordinator2'),
+          },
+        ],
+      },
+    },
+  })
+
+  // ── Profilvorschläge: je ein Zustand aus 4.2.3 ───────────────────────────
+  //
+  // Wie bei den Bedarfsanfragen gilt: der Seed legt **Daten** in dem Zustand
+  // an, den 4.2.3 beschreibt. Er ist kein Weg um Kapitel 4 herum — die
+  // Übergangsmenge in lib/status/candidateSubmission.ts bleibt die einzige
+  // Stelle, an der ein Zustand **wechselt**.
+  //
+  // Die Offenlegungsstufe folgt 6.4: `pseudonymized` in jedem Zustand außer
+  // `accepted`. Mit der Zusage wechselt sie auf `identified` — vorher sieht der
+  // Kunde kein Klardatum ([23]).
+  interface SubmissionSeed {
+    readonly submissionNumber: string
+    readonly offerKey: 'selection-supplier1' | 'selection-supplier2' | 'filled'
+    readonly candidateKey: string
+    readonly status:
+      | 'draft'
+      | 'submitted'
+      | 'reviewed'
+      | 'releasedToCustomer'
+      | 'interviewScheduled'
+      | 'accepted'
+      | 'rejected'
+      | 'withdrawn'
+    readonly availableFrom: Date
+    readonly submittedAt: Date | null
+    readonly releasedToCustomerAt: Date | null
+    readonly interviewScheduledAt: Date | null
+    readonly decision: 'accepted' | 'rejected' | null
+    readonly decisionReason: string | null
+    readonly decidedAt: Date | null
+    readonly decidedByKey: string | null
+    readonly withdrawnAt: Date | null
+    readonly createdByKey: string
+  }
+
+  const submissionSeeds: readonly SubmissionSeed[] = [
+    {
+      submissionNumber: 'PV-2026-0001',
+      offerKey: 'selection-supplier1',
+      candidateKey: 'tomas-s1',
+      status: 'draft',
+      availableFrom: day('2027-02-15'),
+      submittedAt: null,
+      releasedToCustomerAt: null,
+      interviewScheduledAt: null,
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator1',
+    },
+    {
+      submissionNumber: 'PV-2026-0002',
+      offerKey: 'selection-supplier1',
+      candidateKey: 'ilona-s1',
+      status: 'submitted',
+      availableFrom: day('2027-02-15'),
+      submittedAt: day('2026-10-05'),
+      releasedToCustomerAt: null,
+      interviewScheduledAt: null,
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator1',
+    },
+    {
+      submissionNumber: 'PV-2026-0003',
+      offerKey: 'selection-supplier2',
+      candidateKey: 'ruth-s2',
+      status: 'reviewed',
+      availableFrom: day('2027-02-15'),
+      submittedAt: day('2026-10-06'),
+      releasedToCustomerAt: null,
+      interviewScheduledAt: null,
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator2',
+    },
+    {
+      submissionNumber: 'PV-2026-0004',
+      offerKey: 'selection-supplier1',
+      candidateKey: 'marek-s1',
+      status: 'releasedToCustomer',
+      availableFrom: day('2027-02-15'),
+      submittedAt: day('2026-10-07'),
+      releasedToCustomerAt: day('2026-10-09'),
+      interviewScheduledAt: null,
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator1',
+    },
+    {
+      submissionNumber: 'PV-2026-0005',
+      offerKey: 'selection-supplier2',
+      // Derselbe Mensch wie `ilona-s1`, aber **nur vorgeschlagen** verknüpft:
+      // der Betreiber sieht den Doppelvorschlag, keiner der beiden Lieferanten
+      // erfährt davon (2.3, Regel 4).
+      candidateKey: 'ilona-s2',
+      status: 'interviewScheduled',
+      availableFrom: day('2027-03-01'),
+      submittedAt: day('2026-10-08'),
+      releasedToCustomerAt: day('2026-10-10'),
+      interviewScheduledAt: hour('2026-10-20T09:00'),
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator2',
+    },
+    {
+      submissionNumber: 'PV-2026-0006',
+      offerKey: 'selection-supplier1',
+      candidateKey: 'henrik-s1',
+      status: 'rejected',
+      availableFrom: day('2027-02-15'),
+      submittedAt: day('2026-10-05'),
+      releasedToCustomerAt: day('2026-10-09'),
+      interviewScheduledAt: null,
+      decision: 'rejected',
+      // **Ohne** Bezug auf ein fremdes Angebot (2.3, Regel 3).
+      decisionReason: 'Qualifikationsprofil passt nicht zur ausgeschriebenen Tätigkeit',
+      decidedAt: day('2026-10-12'),
+      decidedByKey: 'demandOwner2',
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator1',
+    },
+    {
+      submissionNumber: 'PV-2026-0007',
+      offerKey: 'selection-supplier2',
+      candidateKey: 'marek-s2',
+      status: 'withdrawn',
+      availableFrom: day('2027-02-15'),
+      submittedAt: day('2026-10-06'),
+      releasedToCustomerAt: null,
+      interviewScheduledAt: null,
+      decision: null,
+      decisionReason: null,
+      decidedAt: null,
+      decidedByKey: null,
+      withdrawnAt: day('2026-10-11'),
+      createdByKey: 'supplierCoordinator2',
+    },
+    {
+      submissionNumber: 'PV-2026-0008',
+      offerKey: 'filled',
+      candidateKey: 'ruth-s2',
+      status: 'accepted',
+      availableFrom: day('2026-09-01'),
+      submittedAt: day('2026-07-14'),
+      releasedToCustomerAt: day('2026-07-16'),
+      interviewScheduledAt: hour('2026-07-20T10:00'),
+      decision: 'accepted',
+      decisionReason: null,
+      decidedAt: day('2026-07-22'),
+      decidedByKey: 'demandOwner2',
+      withdrawnAt: null,
+      createdByKey: 'supplierCoordinator2',
+    },
+  ]
+
+  const offerIdByKey = (key: SubmissionSeed['offerKey']): string => {
+    if (key === 'filled') return filledOffer.id
+    const id = selectionOffers.get(key === 'selection-supplier1' ? 'supplier1' : 'supplier2')
+    if (id === undefined) throw new Error(`Angebot ${key} fehlt`)
+    return id
+  }
+
+  const submissionIds = new Map<string, string>()
+  for (const submission of submissionSeeds) {
+    const offerId = offerIdByKey(submission.offerKey)
+    const offer = await prisma.supplierOffer.findUniqueOrThrow({
+      where: { id: offerId },
+      include: { tenderInvitation: { include: { tender: true } } },
+    })
+    const created = await prisma.candidateSubmission.create({
+      data: {
+        tenantId: offer.tenantId,
+        submissionNumber: submission.submissionNumber,
+        candidateId: candidateId(submission.candidateKey),
+        supplierOfferId: offerId,
+        demandRequestId: offer.tenderInvitation.tender.demandRequestId,
+        submittedAt: submission.submittedAt,
+        availableFrom: submission.availableFrom,
+        // Klardaten erst nach Zusage (6.4): nur der zugesagte Vorschlag steht
+        // auf `identified`.
+        disclosureLevel: submission.status === 'accepted' ? 'identified' : 'pseudonymized',
+        releasedToCustomerAt: submission.releasedToCustomerAt,
+        interviewScheduledAt: submission.interviewScheduledAt,
+        decision: submission.decision,
+        decisionReason: submission.decisionReason,
+        decidedAt: submission.decidedAt,
+        decidedById:
+          submission.decidedByKey === null ? null : userId(submission.decidedByKey),
+        withdrawnAt: submission.withdrawnAt,
+        status: submission.status,
+        createdById: userId(submission.createdByKey),
+        createdAt: SEED_DATE,
+      },
+    })
+    submissionIds.set(submission.submissionNumber, created.id)
+  }
+
+  // ── Einsätze: je ein Zustand aus 4.3.1, einer mit Unterbrechung ──────────
+  //
+  // „Verlängert" ist **kein** Zustand (4.3.1): die Verlängerungen unten haben
+  // ihren eigenen Lebenszyklus, und ihre Wirksamkeit zeigt sich am
+  // verschobenen `plannedEndDate` des Einsatzes, nicht an seinem Status.
+  //
+  // Die abgeleiteten Felder `maxDurationEndDate`, `equalPayDueDate` und
+  // `countedDurationDays` bleiben **leer**: sie sind Ergebnisse aus 5.1 und
+  // 5.2 (3.0, Festlegung 3) und werden nicht als Seed-Datum erfunden.
+  const rateCardItemByQualification = async (
+    rateCardNumber: string,
+    qualificationLevel: string,
+  ): Promise<string> =>
+    (
+      await prisma.rateCardItem.findFirstOrThrow({
+        where: { rateCard: { rateCardNumber }, qualificationLevel },
+      })
+    ).id
+
+  const purchaseLagerS2 = await rateCardItemByQualification('PL-L-2002-2026', 'Fachkraft Lager')
+  const purchaseHelferS1 = await rateCardItemByQualification('PL-L-2001-2026', 'Helfer')
+  const purchaseMetallS1 = await rateCardItemByQualification('PL-L-2001-2026', 'Fachkraft Metall')
+  const salesLagerK2 = await rateCardItemByQualification('PL-K-1002-2026', 'Fachkraft Lager')
+  const salesHelferK1 = await rateCardItemByQualification('PL-K-1001-2026', 'Helfer')
+  const salesMetallK1 = await rateCardItemByQualification('PL-K-1001-2026', 'Fachkraft Metall')
+
+  interface AssignmentSeed {
+    readonly assignmentNumber: string
+    readonly status: 'planned' | 'active' | 'interrupted' | 'completed' | 'terminatedEarly'
+    readonly customerId: string
+    readonly siteId: string
+    readonly costCenterId: string
+    readonly supplierId: string
+    readonly candidateKey: string
+    readonly submissionNumber: string | null
+    readonly demandRequestNumber: string | null
+    readonly activityDescription: string
+    readonly plannedStartDate: Date
+    readonly plannedEndDate: Date | null
+    readonly actualStartDate: Date | null
+    readonly actualEndDate: Date | null
+    readonly weeklyHours: number
+    readonly shiftModel: string | null
+    readonly agreedRateCardItemId: string
+    readonly customerRateCardItemId: string
+    readonly comparableWage: number | null
+    readonly terminationReason: string | null
+    readonly terminationRequestedByKey: string | null
+    readonly terminationApprovedByKey: string | null
+  }
+
+  const assignmentSeeds: readonly AssignmentSeed[] = [
+    {
+      // Aus dem zugesagten Profilvorschlag der besetzten Anfrage.
+      assignmentNumber: 'E-2026-0001',
+      status: 'active',
+      customerId: customer2.id,
+      siteId: site3.id,
+      costCenterId: costCenter3.id,
+      supplierId: supplier2.id,
+      candidateKey: 'ruth-s2',
+      submissionNumber: 'PV-2026-0008',
+      demandRequestNumber: 'BA-2026-0006',
+      activityDescription:
+        'Innerbetrieblicher Transport mit Frontstapler in der Nachtschicht, Zentrallager ' +
+        'Herzberg, Tore 4 bis 9',
+      plannedStartDate: day('2026-09-01'),
+      plannedEndDate: day('2027-02-28'),
+      actualStartDate: day('2026-09-01'),
+      actualEndDate: null,
+      weeklyHours: 40,
+      shiftModel: 'Nachtschicht',
+      agreedRateCardItemId: purchaseLagerS2,
+      customerRateCardItemId: salesLagerK2,
+      comparableWage: 17.85,
+      terminationReason: null,
+      terminationRequestedByKey: null,
+      terminationApprovedByKey: null,
+    },
+    {
+      // Zusage liegt vor, die Überlassung hat noch nicht begonnen.
+      assignmentNumber: 'E-2026-0002',
+      status: 'planned',
+      customerId: customer2.id,
+      siteId: site3.id,
+      costCenterId: costCenter3.id,
+      supplierId: supplier1.id,
+      candidateKey: 'ilona-s1',
+      submissionNumber: null,
+      demandRequestNumber: 'BA-2026-0005',
+      activityDescription:
+        'Kommissionierung im Wareneingang mit Handscanner, Zentrallager Herzberg, Zone B',
+      plannedStartDate: day('2027-02-15'),
+      plannedEndDate: day('2027-08-31'),
+      actualStartDate: null,
+      actualEndDate: null,
+      weeklyHours: 40,
+      shiftModel: null,
+      agreedRateCardItemId: purchaseHelferS1,
+      customerRateCardItemId: salesLagerK2,
+      comparableWage: 17.85,
+      terminationReason: null,
+      terminationRequestedByKey: null,
+      terminationApprovedByKey: null,
+    },
+    {
+      // Einsatz **ohne** vorangegangene Anfrage (3.7) — und mit laufender
+      // Unterbrechung (4.3.1, `active` → `interrupted`).
+      assignmentNumber: 'E-2026-0003',
+      status: 'interrupted',
+      customerId: customer1.id,
+      siteId: site1.id,
+      costCenterId: costCenter1.id,
+      supplierId: supplier1.id,
+      candidateKey: 'marek-s1',
+      submissionNumber: null,
+      demandRequestNumber: null,
+      activityDescription:
+        'Vormontage von Baugruppen an Station 7, Halle 2, Zweischichtbetrieb',
+      plannedStartDate: day('2026-04-01'),
+      plannedEndDate: day('2027-03-31'),
+      actualStartDate: day('2026-04-01'),
+      actualEndDate: null,
+      weeklyHours: 38.5,
+      shiftModel: 'Zweischicht',
+      agreedRateCardItemId: purchaseHelferS1,
+      customerRateCardItemId: salesHelferK1,
+      comparableWage: 19.42,
+      terminationReason: null,
+      terminationRequestedByKey: null,
+      terminationApprovedByKey: null,
+    },
+    {
+      assignmentNumber: 'E-2026-0004',
+      status: 'completed',
+      customerId: customer1.id,
+      siteId: site1.id,
+      costCenterId: costCenter1.id,
+      supplierId: supplier2.id,
+      candidateKey: 'marek-s2',
+      submissionNumber: null,
+      demandRequestNumber: null,
+      activityDescription: 'Zuführung von Material an die Montagelinie, Halle 2',
+      plannedStartDate: day('2025-09-01'),
+      plannedEndDate: day('2026-02-28'),
+      actualStartDate: day('2025-09-01'),
+      actualEndDate: day('2026-02-28'),
+      weeklyHours: 38.5,
+      shiftModel: null,
+      agreedRateCardItemId: purchaseMetallS1,
+      customerRateCardItemId: salesMetallK1,
+      comparableWage: 19.42,
+      terminationReason: null,
+      terminationRequestedByKey: null,
+      terminationApprovedByKey: null,
+    },
+    {
+      // Vorzeitig beendet auf Antrag der **Kundenseite**, mit Genehmigung des
+      // Genehmigers ([26], 4.3.1).
+      assignmentNumber: 'E-2026-0005',
+      status: 'terminatedEarly',
+      customerId: customer1.id,
+      siteId: site1.id,
+      costCenterId: costCenter1.id,
+      supplierId: supplier1.id,
+      candidateKey: 'henrik-s1',
+      submissionNumber: null,
+      demandRequestNumber: null,
+      activityDescription: 'Bedienung der CNC-Maschinen 3 und 4 in der Nachtschicht, Halle 2',
+      plannedStartDate: day('2026-10-05'),
+      plannedEndDate: day('2027-04-30'),
+      actualStartDate: day('2026-10-05'),
+      actualEndDate: day('2026-11-28'),
+      weeklyHours: 38.5,
+      shiftModel: 'Nachtschicht',
+      agreedRateCardItemId: purchaseMetallS1,
+      customerRateCardItemId: salesMetallK1,
+      comparableWage: 19.42,
+      terminationReason: 'Auftragsrückgang in der Nachtschicht; Bedarf entfallen',
+      terminationRequestedByKey: 'demandOwner1',
+      terminationApprovedByKey: 'approver1',
+    },
+  ]
+
+  const assignmentIds = new Map<string, string>()
+  for (const assignment of assignmentSeeds) {
+    const candidate = await prisma.candidate.findUniqueOrThrow({
+      where: { id: candidateId(assignment.candidateKey) },
+    })
+    const created = await prisma.assignment.create({
+      data: {
+        tenantId: tenantId('operator'),
+        assignmentNumber: assignment.assignmentNumber,
+        customerId: assignment.customerId,
+        siteId: assignment.siteId,
+        costCenterId: assignment.costCenterId,
+        supplierId: assignment.supplierId,
+        candidateId: candidate.id,
+        // Pflicht ab `planned` (3.7) — und nur eine **bestätigte** Identität.
+        workerIdentityId: candidate.workerIdentityId,
+        demandRequestId:
+          assignment.demandRequestNumber === null
+            ? null
+            : (demandIds.get(assignment.demandRequestNumber) ?? null),
+        candidateSubmissionId:
+          assignment.submissionNumber === null
+            ? null
+            : (submissionIds.get(assignment.submissionNumber) ?? null),
+        activityDescription: assignment.activityDescription,
+        plannedStartDate: assignment.plannedStartDate,
+        plannedEndDate: assignment.plannedEndDate,
+        actualStartDate: assignment.actualStartDate,
+        actualEndDate: assignment.actualEndDate,
+        weeklyHours: assignment.weeklyHours,
+        shiftModel: assignment.shiftModel,
+        agreedRateCardItemId: assignment.agreedRateCardItemId,
+        customerRateCardItemId: assignment.customerRateCardItemId,
+        currency: 'EUR',
+        comparableWage: assignment.comparableWage,
+        comparableWageCurrency: assignment.comparableWage === null ? null : 'EUR',
+        terminationReason: assignment.terminationReason,
+        terminationRequestedById:
+          assignment.terminationRequestedByKey === null
+            ? null
+            : userId(assignment.terminationRequestedByKey),
+        terminationRequestedAt:
+          assignment.terminationRequestedByKey === null ? null : day('2026-11-10'),
+        terminationApprovedById:
+          assignment.terminationApprovedByKey === null
+            ? null
+            : userId(assignment.terminationApprovedByKey),
+        terminationApprovedAt:
+          assignment.terminationApprovedByKey === null ? null : day('2026-11-12'),
+        status: assignment.status,
+        createdById: userId('operatorCoordinator'),
+        createdAt: SEED_DATE,
+      },
+    })
+    assignmentIds.set(assignment.assignmentNumber, created.id)
+  }
+
+  const assignmentId = (number: string): string => {
+    const id = assignmentIds.get(number)
+    if (id === undefined) throw new Error(`Einsatz ${number} fehlt`)
+    return id
+  }
+
+  // Unterbrechungen (3.7). Eine läuft noch — sie trägt den Einsatz in
+  // `interrupted` —, eine ist beendet und zeigt die Rückkehr nach `active`.
+  // `countsAsReset` bleibt **leer**: das rechnet P2 in 5.1 (3.0, Festlegung 3).
+  await prisma.assignmentInterruption.create({
+    data: {
+      assignmentId: assignmentId('E-2026-0003'),
+      interruptionFrom: day('2026-12-01'),
+      reasonCategory: 'Betriebsruhe beim Entleiher',
+      reasonText: 'Jahreswechselstillstand Halle 2, Wiederaufnahme angekündigt',
+      createdById: userId('operatorCoordinator'),
+      createdAt: SEED_DATE,
+    },
+  })
+
+  await prisma.assignmentInterruption.create({
+    data: {
+      assignmentId: assignmentId('E-2026-0003'),
+      interruptionFrom: day('2026-07-01'),
+      interruptionTo: day('2026-07-21'),
+      reasonCategory: 'Betriebsruhe beim Entleiher',
+      reasonText: 'Werksferien; danach fortgesetzt',
+      createdById: userId('operatorCoordinator'),
+      createdAt: SEED_DATE,
+    },
+  })
+
+  // ── Verlängerungen: je ein Zustand aus 4.3.2 ─────────────────────────────
+  //
+  // Die wirksame Verlängerung hat `plannedEndDate` des Einsatzes E-2026-0001
+  // schon verschoben — das ist ihre Wirkung, und der Einsatz bleibt dabei
+  // `active` (4.3.1).
+  interface ExtensionSeed {
+    readonly assignmentNumber: string
+    readonly status: 'requested' | 'approved' | 'rejected' | 'effective' | 'withdrawn'
+    readonly newEndDate: Date
+    readonly reason: string
+    readonly requestedByKey: string
+    readonly requestedAt: Date
+    readonly approvedByKey: string | null
+    readonly approvedAt: Date | null
+    readonly effectiveByKey: string | null
+    readonly effectiveAt: Date | null
+    readonly rejectionReason: string | null
+    readonly withdrawnAt: Date | null
+  }
+
+  const extensionSeeds: readonly ExtensionSeed[] = [
+    {
+      assignmentNumber: 'E-2026-0001',
+      status: 'effective',
+      newEndDate: day('2027-02-28'),
+      reason: 'Nachtschicht bleibt bis Ende Februar besetzt',
+      requestedByKey: 'demandOwner2',
+      requestedAt: day('2026-10-01'),
+      approvedByKey: 'approver2',
+      approvedAt: day('2026-10-03'),
+      effectiveByKey: 'operatorCoordinator',
+      effectiveAt: day('2026-10-04'),
+      rejectionReason: null,
+      withdrawnAt: null,
+    },
+    {
+      assignmentNumber: 'E-2026-0001',
+      status: 'requested',
+      newEndDate: day('2027-06-30'),
+      reason: 'Anschlussbedarf im Zentrallager absehbar',
+      requestedByKey: 'supplierCoordinator2',
+      requestedAt: day('2026-12-20'),
+      approvedByKey: null,
+      approvedAt: null,
+      effectiveByKey: null,
+      effectiveAt: null,
+      rejectionReason: null,
+      withdrawnAt: null,
+    },
+    {
+      // Genehmigt, aber noch nicht wirksam — und genau das ist ein eigener
+      // Zustand: ohne `MD` verschiebt sich nichts (4.3.2).
+      assignmentNumber: 'E-2026-0003',
+      status: 'approved',
+      newEndDate: day('2027-09-30'),
+      reason: 'Montagelinie läuft länger als geplant',
+      requestedByKey: 'demandOwner1',
+      requestedAt: day('2026-11-15'),
+      approvedByKey: 'approver1',
+      approvedAt: day('2026-11-18'),
+      effectiveByKey: null,
+      effectiveAt: null,
+      rejectionReason: null,
+      withdrawnAt: null,
+    },
+    {
+      assignmentNumber: 'E-2026-0003',
+      status: 'rejected',
+      newEndDate: day('2028-03-31'),
+      reason: 'Langfristige Verlängerung angefragt',
+      requestedByKey: 'supplierCoordinator1',
+      requestedAt: day('2026-10-20'),
+      approvedByKey: null,
+      approvedAt: null,
+      effectiveByKey: null,
+      effectiveAt: null,
+      rejectionReason:
+        'Laufzeit über die geplante Linienumstellung hinaus; Bedarf dann nicht gesichert',
+      withdrawnAt: null,
+    },
+    {
+      assignmentNumber: 'E-2026-0002',
+      status: 'withdrawn',
+      newEndDate: day('2027-12-31'),
+      reason: 'Verlängerung vorsorglich beantragt',
+      requestedByKey: 'demandOwner2',
+      requestedAt: day('2026-12-05'),
+      approvedByKey: null,
+      approvedAt: null,
+      effectiveByKey: null,
+      effectiveAt: null,
+      rejectionReason: null,
+      withdrawnAt: day('2026-12-08'),
+    },
+  ]
+
+  for (const extension of extensionSeeds) {
+    await prisma.assignmentExtension.create({
+      data: {
+        assignmentId: assignmentId(extension.assignmentNumber),
+        newEndDate: extension.newEndDate,
+        reason: extension.reason,
+        requestedAt: extension.requestedAt,
+        requestedById: userId(extension.requestedByKey),
+        approvedAt: extension.approvedAt,
+        approvedById:
+          extension.approvedByKey === null ? null : userId(extension.approvedByKey),
+        effectiveAt: extension.effectiveAt,
+        effectiveById:
+          extension.effectiveByKey === null ? null : userId(extension.effectiveByKey),
+        rejectionReason: extension.rejectionReason,
+        withdrawnAt: extension.withdrawnAt,
+        status: extension.status,
+        createdById: userId(extension.requestedByKey),
+        createdAt: SEED_DATE,
+      },
+    })
+  }
+
   // ── Mandantenverweis nachtragen und prüfen (3.11) ────────────────────────
   //
   // `organizationRef` ist Pflicht außer beim Betreiber. Der Verweis ist
@@ -1301,6 +2442,19 @@ async function main(): Promise<void> {
     Ausschreibungen: await prisma.tender.count(),
     Einladungen: await prisma.tenderInvitation.count(),
     Lieferantenangebote: await prisma.supplierOffer.count(),
+    Kandidaten: await prisma.candidate.count(),
+    Personenidentitäten: await prisma.workerIdentity.count(),
+    'Verknüpfungen (bestätigt)': await prisma.workerIdentityLink.count({
+      where: { linkStatus: 'confirmed' },
+    }),
+    'Verknüpfungen (nur vorgeschlagen)': await prisma.workerIdentityLink.count({
+      where: { linkStatus: 'proposed' },
+    }),
+    Verknüpfungshistorie: await prisma.workerIdentityMergeEntry.count(),
+    Profilvorschläge: await prisma.candidateSubmission.count(),
+    Einsätze: await prisma.assignment.count(),
+    Verlängerungen: await prisma.assignmentExtension.count(),
+    Unterbrechungen: await prisma.assignmentInterruption.count(),
   }
   console.log('Synthetische Demo-Daten angelegt:', counts)
 }

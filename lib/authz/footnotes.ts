@@ -9,12 +9,20 @@
  *
  * **Zwei Arten von Einschränkung.** Die meisten Fußnoten entscheiden über den
  * Zugriff als Ganzes; einige beschränken die **Felder**, die eine Rolle sieht
- * oder ändern darf ([1], [14], [18], [36], [41] …). Letztere tragen zusätzlich
- * einen `fieldScope`: `hidden` nennt die Felder, die aus einer gelesenen
- * Fassung zu entfernen sind (ausgewertet in lib/visibility/projections.ts),
- * `writable` die Felder, die eine Änderung überhaupt berühren darf. Fehlt das
- * Prädikat eine Angabe, verweigert es — Sichtbarkeit ist positiv festgelegt
- * (2.3).
+ * oder ändern darf ([1], [14], [18], [23], [36], [41] …). Letztere tragen
+ * zusätzlich einen `fieldScope`: `hidden` nennt die Felder, die aus einer
+ * gelesenen Fassung zu entfernen sind (ausgewertet in
+ * lib/visibility/projections.ts), `writable` die Felder, die eine Änderung
+ * überhaupt berühren darf. Fehlt das Prädikat eine Angabe, verweigert es —
+ * Sichtbarkeit ist positiv festgelegt (2.3).
+ *
+ * **`hidden` darf vom Vorgang abhängen.** Die Datenminimierung aus 6.4 ist
+ * keine feste Feldliste: der Kunde sieht am Profilvorschlag ein
+ * pseudonymisiertes Profil und die Klardaten **erst nach Zusage** ([23], 3.6).
+ * Dieselbe Zelle verdeckt damit je Offenlegungsstufe andere Felder. Deshalb ist
+ * `hidden` entweder eine Liste oder eine Funktion über denselben
+ * `ConstraintContext`, mit dem auch `isSatisfied` arbeitet — eine zweite
+ * Mechanik für 6.4 gibt es nicht.
  *
  * Hinterlegt sind alle Fußnoten der belegten Zeilen: 3.11 ([2], [7], [38],
  * [45]) und die Zeilen zu 3.1 bis 3.5. Die Fußnoten der noch unbelegten Zeilen
@@ -85,6 +93,13 @@ export interface ConstraintContext {
      * Fußnote [8].
      */
     readonly inApprovalContext?: boolean
+    /**
+     * Offenlegungsstufe des Profilvorschlags (3.6) — Grundlage der
+     * Datenminimierung aus 6.4 und damit von Fußnote [23]. Fehlt die Angabe,
+     * gilt die strengere Stufe `pseudonymized`: ohne ausdrückliche Zusage keine
+     * Klardaten (2.3, positive Festlegung).
+     */
+    readonly disclosureLevel?: 'pseudonymized' | 'identified'
   }
 }
 
@@ -97,9 +112,10 @@ export interface Footnote {
   /**
    * Feldbezogene Einschränkung derselben Fußnote. `hidden` wird beim Lesen
    * entfernt, `writable` begrenzt eine Änderung auf die genannten Felder.
+   * `hidden` darf vom Vorgang abhängen (siehe Kopfkommentar, Fußnote [23]).
    */
   readonly fieldScope?: {
-    readonly hidden?: readonly string[]
+    readonly hidden?: readonly string[] | ((ctx: ConstraintContext) => readonly string[])
     readonly writable?: readonly string[]
   }
 }
@@ -155,6 +171,37 @@ export const FOOTNOTES = {
     number: 2,
     text: 'Nur die eigene Organisation bzw. der eigene Kunde (Mandantengrenze, Kapitel 2.3).',
     isSatisfied: ownOrganizationOrOwnCustomer,
+    fieldScope: {
+      // An der Zeile „Einsatz, Verlängerung, Unterbrechung (3.7)" ist [2] die
+      // **einzige** Fußnote der Kundenzellen; die Felder, die 3.7 und 3.3
+      // Kundenrollen nicht zeigen, hängen deshalb hier:
+      //
+      //  - die **Einkaufsseite** (`agreedRateCardItemRef`, `agreedHourlyRate`):
+      //    die Differenz zur Kundenpreisliste ist die Marge des Betreibers und
+      //    für Kundenrollen nicht sichtbar ([41], 3.3) — ebenso wie am Angebot
+      //    ([18]).
+      //  - die **Lieferantenidentität**: 3.7 stellt ihre Anzeige gegenüber dem
+      //    Kunden ausdrücklich unter *offene Frage 11*. Solange die offen ist,
+      //    bleibt sie verdeckt (wie bei [15] und [23]).
+      //  - die **Personenidentität**: sie sieht ausschließlich der Betreiber
+      //    ([43], 2.3 Regel 4).
+      //
+      // Andere Zeilen tragen diese Felder nicht; dort wirkt die Liste nicht.
+      hidden: (ctx) =>
+        ctx.resource.type === 'assignment'
+          ? [
+              'agreedHourlyRate',
+              'agreedRateCardItemId',
+              'agreedRateCardItem',
+              'rateDeviationReason',
+              'supplier',
+              'supplierId',
+              'supplierTenantId',
+              'workerIdentityId',
+              'workerIdentity',
+            ]
+          : [],
+    },
   },
   3: {
     number: 3,
@@ -192,6 +239,26 @@ export const FOOTNOTES = {
     number: 7,
     text: 'Nur die eigene Lieferantenorganisation.',
     isSatisfied: ownSupplierOrganization,
+    fieldScope: {
+      // Wie bei [2]: an der Zeile zu 3.7 ist [7] die einzige Fußnote der
+      // Lieferantenzellen. 3.7 nennt zwei Felder ausdrücklich — die
+      // **Kostenstelle** („für Lieferanten nicht sichtbar", auch [14]) und die
+      // **kundenseitige Preisposition** („für Lieferanten nie sichtbar",
+      // [42]) —, dazu kommt die Personenidentität ([43]).
+      hidden: (ctx) =>
+        ctx.resource.type === 'assignment'
+          ? [
+              'costCenterId',
+              'costCenter',
+              'costCenterNumber',
+              'customerRateCardItemId',
+              'customerRateCardItem',
+              'customerHourlyRate',
+              'workerIdentityId',
+              'workerIdentity',
+            ]
+          : [],
+    },
   },
   8: {
     number: 8,
@@ -275,7 +342,21 @@ export const FOOTNOTES = {
   17: {
     number: 17,
     text: 'Annehmen, ablehnen oder zur Auswahl an den Kunden weiterleiten.',
-    isSatisfied: (ctx) => targetStatusIn(ctx, ['reviewed', 'accepted', 'rejected']),
+    // Die Fußnote steht an **zwei** Zeilen, und die drei Verben treffen in
+    // beiden auf andere Zielzustände:
+    //
+    //  - Lieferantenangebot (4.2.2): sichten (`reviewed`), Zuschlag
+    //    (`accepted`), ablehnen (`rejected`).
+    //  - Kandidat / Profilvorschlag (4.2.3): sichten (`reviewed`), „zur
+    //    Auswahl an den Kunden weiterleiten" ist der Übergang nach
+    //    `releasedToCustomer`, ablehnen (`rejected`) vor der Vorlage beim
+    //    Kunden. **Nicht** `accepted`: die Zusage trifft der Kunde ([24]), und
+    //    4.2.3 schließt eine Zusage durch den Betreiber ausdrücklich aus.
+    //    Welchen Übergang die Rolle wann auslöst, entscheidet ohnehin
+    //    Kapitel 4 — die Fußnote sagt nur, welche Zielzustände die Zelle
+    //    überhaupt trägt.
+    isSatisfied: (ctx) =>
+      targetStatusIn(ctx, ['reviewed', 'releasedToCustomer', 'accepted', 'rejected']),
   },
   18: {
     number: 18,
@@ -304,6 +385,104 @@ export const FOOTNOTES = {
     number: 21,
     text: 'Nur im Status Entwurf.',
     isSatisfied: (ctx) => ownSupplierOrganization(ctx) && ctx.resource.status === 'draft',
+  },
+  22: {
+    number: 22,
+    text:
+      'Nur Pseudonymisierung und Freigabe der Sichtbarkeit (Kapitel 6.4), nicht die fachlichen ' +
+      'Angaben des Lieferanten.',
+    // Die Einschränkung betrifft die Felder, nicht den Zugriff: der Betreiber
+    // führt den Vorgang und die Offenlegung, der Lieferant bleibt Eigentümer
+    // der Personendaten (3.6).
+    isSatisfied: () => true,
+    fieldScope: {
+      writable: ['pseudonym', 'disclosureLevel', 'releasedToCustomerAt'],
+    },
+  },
+  23: {
+    number: 23,
+    text:
+      'Im Umfang der Datenminimierung (Kapitel 6.4): pseudonymisiertes Profil, Klardaten erst ' +
+      'nach Zusage.',
+    isSatisfied: (ctx) => ctx.resource.customerTenantId === ctx.subject.tenantId,
+    fieldScope: {
+      // 6.4 ist in Kapitel 6 noch nicht ausgearbeitet; die Regel steht
+      // ausdrücklich in 3.6 (Offenlegungsstufe), in 4.2.3 (der Übergang nach
+      // `releasedToCustomer` **ist** ihre Umsetzung) und in dieser Fußnote.
+      // Verdeckt werden deshalb genau die Klardaten des Kandidaten, solange die
+      // Stufe `pseudonymized` ist. Ohne Angabe gilt die strengere Stufe.
+      hidden: (ctx) => {
+        const identified = ctx.resource.disclosureLevel === 'identified'
+        const alwaysHidden = [
+          // Lieferantenidentität gegenüber dem Kunden: **offene Frage 11**,
+          // verdeckt wie am Fortschritt der Ausschreibung ([15]). Sie hängt
+          // nicht an der Zusage und bleibt deshalb auf beiden Stufen verdeckt.
+          'supplier',
+          'supplierId',
+          'supplierTenantId',
+          'candidateNumber',
+          // Die Personenidentität sehen Kunden **nie** — und erfahren auch
+          // nicht, dass sie existiert ([43], 2.3 Regel 4). Sie hängt nicht an
+          // der Offenlegungsstufe: die Zusage gibt die Klardaten frei, nicht
+          // die mandantenübergreifende Zuordnung.
+          'workerIdentityId',
+          'workerIdentity',
+        ]
+        if (identified) return alwaysHidden
+        return [
+          ...alwaysHidden,
+          'givenName',
+          'familyName',
+          'name',
+          'dateOfBirth',
+          'placeOfBirth',
+          'contactEmail',
+          'contactPhone',
+          'contactData',
+          'previousEmploymentDeclaredAt',
+          'previousEmploymentExisted',
+          'previousEmploymentEndedOn',
+          'previousEmploymentEmployer',
+        ]
+      },
+    },
+  },
+  24: {
+    number: 24,
+    text:
+      'Fachliche Auswahlentscheidung (Interview, Zusage, Ablehnung); die Statusführung gegenüber ' +
+      'dem Lieferanten übernimmt MD.',
+    isSatisfied: (ctx) =>
+      ctx.resource.customerTenantId === ctx.subject.tenantId &&
+      targetStatusIn(ctx, ['interviewScheduled', 'accepted', 'rejected']),
+  },
+  25: {
+    number: 25,
+    text:
+      'Antrag auf Verlängerung oder vorzeitige Beendigung; wirksam wird der Übergang durch MD ' +
+      '(Kapitel 4.3).',
+    // Zustände hat nur die Verlängerung (4.3.2): `requested` beim Antrag,
+    // `withdrawn` beim Zurückziehen des eigenen Antrags. Die vorzeitige
+    // Beendigung hat **keinen** Zustand (4.3.1) — ihr Antrag ist ein Feldsatz
+    // am Einsatz, und die Matrix gibt KB und LD dafür kein `Ä`. Das ist die
+    // Lücke, die 4.3.2 am Ende benennt; sie steht als *offene Frage 39* in
+    // SPEC Kapitel 7, und der Prototyp lässt den Antrag deshalb über den
+    // Betreiber laufen.
+    isSatisfied: (ctx) =>
+      ownOrganizationOrOwnCustomer(ctx) || ownSupplierOrganization(ctx)
+        ? targetStatusIn(ctx, ['requested', 'withdrawn'])
+        : false,
+  },
+  26: {
+    number: 26,
+    text:
+      'Genehmigung von Verlängerung und vorzeitiger Beendigung, soweit Kapitel 4.3 sie der ' +
+      'Kundenseite zuweist.',
+    // 4.3 weist der Kundenseite zu: die Verlängerung **immer** (`approved`,
+    // `rejected`), die vorzeitige Beendigung nur auf Antrag der Kundenseite —
+    // und die hat keinen eigenen Zustand (4.3.1).
+    isSatisfied: (ctx) =>
+      ownOrganizationOrOwnCustomer(ctx) && targetStatusIn(ctx, ['approved', 'rejected']),
   },
   34: {
     number: 34,
@@ -374,6 +553,21 @@ export const FOOTNOTES = {
     isSatisfied: (ctx) =>
       ctx.resource.rateCardScope === 'supplierRateCard' && ownSupplierOrganization(ctx),
   },
+  43: {
+    number: 43,
+    text:
+      'Zusammenführen und Trennen von Kandidatensätzen derselben Person. Das Objekt ist ' +
+      'ausschließlich beim Betreiber geführt; Kunden und Lieferanten sehen es und seine ' +
+      'Existenz nicht (Kapitel 2.3, Regel 4).',
+    // Die Zeile in 2.2 gibt nur `MA` und `MD` Rechte; die Fußnote verkleinert
+    // das `Ä` des `MD` auf die Verknüpfung. Der Merkmalssatz selbst (Name,
+    // Geburtsdatum, Geburtsort) ist in 3.6 abschließend und wird vom `MA`
+    // gepflegt.
+    isSatisfied: (ctx) => ctx.subject.tenantType === 'operator',
+    fieldScope: {
+      writable: ['links', 'linkedCandidates', 'mergeHistory', 'confirmedAt', 'confirmedById'],
+    },
+  },
   45: {
     number: 45,
     text:
@@ -417,11 +611,19 @@ export function footnoteText(number: FootnoteNumber): string {
  * Felder, die aus einer gelesenen Fassung zu entfernen sind, weil eine Fußnote
  * sie der Rolle nicht zeigt (2.2, 2.3). Vereinigung über alle Fußnoten der
  * Zelle: jede verkleinert, keine vergrößert.
+ *
+ * Der Kontext ist derselbe, mit dem `isSatisfied` arbeitet: Fußnoten, deren
+ * Feldliste vom Vorgang abhängt ([23], Datenminimierung aus 6.4), brauchen ihn.
  */
-export function hiddenFields(footnotes: readonly FootnoteNumber[]): readonly string[] {
+export function hiddenFields(
+  footnotes: readonly FootnoteNumber[],
+  ctx: ConstraintContext,
+): readonly string[] {
   const hidden = new Set<string>()
   for (const number of footnotes) {
-    for (const field of FOOTNOTES_AS_CONTRACT[number].fieldScope?.hidden ?? []) hidden.add(field)
+    const scope = FOOTNOTES_AS_CONTRACT[number].fieldScope?.hidden
+    if (scope === undefined) continue
+    for (const field of typeof scope === 'function' ? scope(ctx) : scope) hidden.add(field)
   }
   return [...hidden]
 }

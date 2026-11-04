@@ -57,6 +57,22 @@ export interface TransitionDefinition<TState extends string, TFacts> {
   readonly roles: readonly RoleCode[]
   readonly specReference: string
   readonly preconditions: readonly Precondition<TFacts>[]
+  /**
+   * Die Operation der Matrix 2.2, die dieser Übergang braucht.
+   *
+   * Vorbelegung: `create` bei der Anlage (`from: []`), sonst `transition` —
+   * das ist die Lesart von 2.2 („`S` meint nur die Übergänge, die Kapitel 4
+   * der Rolle zuweist") und trifft auf die Vorgänge aus 3.4 und 3.5 zu.
+   *
+   * **Eine Ausnahme nennt die Matrix selbst.** Bei der Verlängerung (3.7) ist
+   * der Antrag in 2.2 ein `S[25]` für `KB` und `LD` und ausdrücklich **kein**
+   * `A`: der Vorgang entsteht mit dem Antrag, und die Zeile gibt den beiden
+   * Rollen kein Anlegerecht am Einsatz. Dort trägt der Übergang deshalb
+   * `operation: 'transition'`. Die Angabe ist hier ablesbar, statt die Lücke
+   * durch ein zusätzliches `A` in der Matrix zu schließen, das 2.2 nicht
+   * vorsieht.
+   */
+  readonly operation?: 'create' | 'transition'
 }
 
 export interface StatusModel<
@@ -193,8 +209,10 @@ export function attemptTransition<
     // Die Anlage ist in 2.2 die Operation `A`, nicht `S`: „— → draft" in
     // Kapitel 4 ist das Anlegen des Vorgangs, kein Statuswechsel. Alles
     // andere ist `S` (2.2, Lesart: „`S` meint nur die Übergänge, die
-    // Kapitel 4 der Rolle zuweist").
-    const operation = definition.from.length === 0 ? 'create' : 'transition'
+    // Kapitel 4 der Rolle zuweist"). Wo die Matrix es anders zuweist, sagt der
+    // Übergang es selbst (`operation`, siehe `TransitionDefinition`).
+    const operation =
+      definition.operation ?? (definition.from.length === 0 ? 'create' : 'transition')
     decision = checkPermission({ ...request.subject, grants: triggeringGrants }, operation, {
       ...request.resource,
       targetStatus: definition.to,

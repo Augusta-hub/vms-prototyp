@@ -161,12 +161,15 @@ const DEMAND_REQUEST_INCLUDE = {
   requestedBy: true,
   approvedBy: true,
   qualificationRequirements: true,
+  // Seit 3.6 und 3.7: die Zählungen, die 4.1 in seinen Vorbedingungen nennt.
+  candidateSubmissions: true,
+  assignments: true,
   tenders: {
     include: {
       invitations: {
         include: {
           supplier: true,
-          offer: { include: { items: true } },
+          offer: { include: { items: true, submissions: true } },
         },
       },
     },
@@ -392,7 +395,12 @@ function visibleOffer(
     reviewedAt: offer.reviewedAt,
     rejectionReason: offer.rejectionReason,
     offerValidUntil: offer.offerValidUntil,
-    acceptedSubmissionCount: 0,
+    // Seit 3.6 ein echter Wert: 4.2.2 lässt den Zuschlag nur, wenn mindestens
+    // ein Profilvorschlag dieses Angebots zugesagt ist. Die Zusage trifft der
+    // Kunde (4.2.3), den Zuschlag erteilt `MD` — zwei Handlungen, zwei Rollen.
+    acceptedSubmissionCount: offer.submissions.filter(
+      (submission) => submission.status === 'accepted',
+    ).length,
     evaluationDate,
   }
 
@@ -447,14 +455,45 @@ function factsFromRequest(
     rejectionReason: request.rejectionReason,
     invitedSuppliers: [],
     previousTenderClosed: request.tenders.every((tender) => tender.closedAt !== null),
-    // Profilvorschlag (3.6) und Einsatz (3.7) sind noch nicht modelliert; die
-    // Zählungen bleiben 0, und die davon abhängigen Übergänge scheitern an
-    // ihrer Vorbedingung statt zu fehlen.
-    releasedSubmissionCount: 0,
-    openSubmissionCount: 0,
-    effectiveAssignmentCount: 0,
+    ...submissionAndAssignmentCounts(request),
     evaluationDate,
     ...overrides,
+  }
+}
+
+/**
+ * Die drei Zählungen, die 4.1 aus 3.6 und 3.7 braucht — seit dieser
+ * Arbeitseinheit echte Werte statt `0`.
+ *
+ * `effectiveAssignmentCount` zählt `planned`, `active` **und** `interrupted`.
+ * 4.1 schreibt bei `inSelection` → `filled` „in `planned` oder `active`"; ein
+ * unterbrochener Einsatz ist aber ein laufender Einsatz, in dem nur keine
+ * Arbeitsleistung erbracht wird (4.3.1). Zählte er nicht mit, ließe sich eine
+ * Anfrage mit laufendem Einsatz noch stornieren („kein wirksamer Einsatz",
+ * 4.1 → `cancelled`) — und das wäre das Gegenteil dessen, was die Vorbedingung
+ * schützt.
+ */
+function submissionAndAssignmentCounts(request: LoadedDemandRequest): {
+  readonly releasedSubmissionCount: number
+  readonly openSubmissionCount: number
+  readonly effectiveAssignmentCount: number
+} {
+  return {
+    releasedSubmissionCount: request.candidateSubmissions.filter(
+      (submission) => submission.status === 'releasedToCustomer',
+    ).length,
+    // „Offen" heißt: noch nicht abgelehnt und nicht zurückgezogen (4.1,
+    // `inSelection` → `tendered`). Ein zugesagter Vorschlag ist damit auch
+    // nicht „offen" — aber er verhindert den Rückfall, weil er zählt.
+    openSubmissionCount: request.candidateSubmissions.filter(
+      (submission) => submission.status !== 'rejected' && submission.status !== 'withdrawn',
+    ).length,
+    effectiveAssignmentCount: request.assignments.filter(
+      (assignment) =>
+        assignment.status === 'planned' ||
+        assignment.status === 'active' ||
+        assignment.status === 'interrupted',
+    ).length,
   }
 }
 
@@ -527,6 +566,8 @@ export async function createDemandRequest(
       rejectionReason: null,
       invitedSuppliers: [],
       previousTenderClosed: true,
+      // Eine neue Anfrage hat noch keinen Profilvorschlag und keinen Einsatz —
+      // hier ist die Null die Tatsache, nicht eine offene Stelle.
       releasedSubmissionCount: 0,
       openSubmissionCount: 0,
       effectiveAssignmentCount: 0,
@@ -839,7 +880,7 @@ export async function loadInvitations(
   const invitations = await prisma.tenderInvitation.findMany({
     include: {
       supplier: true,
-      offer: { include: { items: true } },
+      offer: { include: { items: true, submissions: true } },
       tender: { include: { demandRequest: { include: DEMAND_REQUEST_INCLUDE } } },
     },
     orderBy: { invitedAt: 'asc' },
@@ -1179,6 +1220,7 @@ export async function transitionOffer(
     where: { id: input.offerId },
     include: {
       items: true,
+      submissions: true,
       tenderInvitation: { include: { tender: { include: { demandRequest: true } } } },
     },
   })
@@ -1203,7 +1245,11 @@ export async function transitionOffer(
       reviewedAt: offer.reviewedAt,
       rejectionReason: reason,
       offerValidUntil: offer.offerValidUntil,
-      acceptedSubmissionCount: 0,
+      // 4.2.2: der Zuschlag setzt einen zugesagten Profilvorschlag voraus
+      // (4.2.3). Seit 3.6 ein echter Wert.
+      acceptedSubmissionCount: offer.submissions.filter(
+        (submission) => submission.status === 'accepted',
+      ).length,
       evaluationDate,
     },
   })
@@ -1326,9 +1372,7 @@ export async function runSystemDeadlineRun(
         rejectionReason: request.rejectionReason,
         invitedSuppliers: [],
         previousTenderClosed: true,
-        releasedSubmissionCount: 0,
-        openSubmissionCount: 0,
-        effectiveAssignmentCount: 0,
+        ...submissionAndAssignmentCounts(request),
         evaluationDate,
       },
     })

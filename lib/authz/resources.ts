@@ -8,7 +8,7 @@
  *
  * Alle 24 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
  * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind die Zeilen zu
- * 3.1 bis 3.5 und die beiden Zeilen zu 3.11; jede unbelegte Zeile verweigert
+ * 3.1 bis 3.7 und die beiden Zeilen zu 3.11; jede unbelegte Zeile verweigert
  * jeden Zugriff, weil Sichtbarkeit positiv festgelegt ist (2.3).
  */
 export type ResourceType =
@@ -127,6 +127,21 @@ export const MATRIX_ROW_BY_OBJECT = {
   tenderInvitation: 'tender',
   supplierOffer: 'supplierOffer',
   supplierOfferItem: 'supplierOffer',
+  // 3.6: der Profilvorschlag teilt die Zeile des Kandidaten („Kandidat /
+  // Profilvorschlag"), die Qualifikation als Unterobjekt ebenfalls. Die
+  // Personenidentität hat ihre **eigene** Zeile, weil 2.2 sie getrennt führt;
+  // Verknüpfung und Verknüpfungshistorie sind ihre Unterobjekte.
+  candidate: 'candidate',
+  candidateQualification: 'candidate',
+  candidateSubmission: 'candidate',
+  workerIdentity: 'workerIdentity',
+  workerIdentityLink: 'workerIdentity',
+  workerIdentityMergeEntry: 'workerIdentity',
+  // 3.7: Verlängerung und Unterbrechung teilen die Zeile des Einsatzes (2.2,
+  // Lesart).
+  assignment: 'assignment',
+  assignmentExtension: 'assignment',
+  assignmentInterruption: 'assignment',
 } as const satisfies Record<string, ResourceType>
 
 export type ModelName = keyof typeof MATRIX_ROW_BY_OBJECT
