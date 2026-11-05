@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:aueg": "tsx tests/aueg-runner/lauf.ts",
+    "test:services": "vitest run --config vitest.services.config.ts",
     "test:aueg:report": "tsx tests/aueg-runner/bericht.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",

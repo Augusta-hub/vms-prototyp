@@ -124,8 +124,14 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 - 🟨 **Demo-Stand vorführbar** — der Prozess ist durchklickbar (Stammdaten →
   Bedarf → Ausschreibung → Profilvorschlag → Einsatz mit Verlängerung,
   Unterbrechung und Beendigung), und die Prüfungen greifen an den Übergängen.
-  Was fehlt: für `lib/services/` gibt es keinen automatisierten Test — die
-  Dienste sind nur von Hand und über die Oberfläche belegt
+  Die Naht zwischen Regelwerk und Statusmodell ist seit 05.11.2026
+  **automatisiert belegt**: `npm run test:services` führt 18 Tests gegen eine
+  **eigene** Datenbank (`_test`, vor jedem Test geleert) und prüft, was ohne
+  Datenbank nicht prüfbar ist — welche Zeilen der Dienst lädt, ob die gerechnete
+  Tatsache den Übergang erreicht und ob eine Sperre nichts schreibt. Zwei
+  absichtliche Mutationen im Dienst machen punktgenau je ein Szenario rot; ein
+  grüner Lauf, der nichts prüft, wäre kein Beleg. Was fehlt: `demand.ts` und
+  `masterData.ts` haben noch keine Tests — das Muster steht
 
 ## M5 — Zeiterfassung und Freigabe ⬜
 

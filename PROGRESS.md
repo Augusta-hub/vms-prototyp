@@ -5,6 +5,108 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-05 — Dienst-Tests: die Anbindung ist jetzt belegt, nicht behauptet
+
+### Gemacht
+
+Der Eintrag darunter nennt als größte offene Lücke, dass für `lib/services/`
+**kein** automatisierter Test existiert: die Dienste laden inzwischen die
+Überlassungskette, den Konzernverbund und die Tarifzuordnungen und schreiben in
+derselben Transaktion — belegt war das nur von Hand. Diese Lücke ist zu.
+
+**Ein eigener Lauf mit eigener Datenbank** (`npm run test:services`):
+
+- `tests/services/umgebung.ts` leitet die Verbindung aus `DATABASE_URL` ab und
+  hängt `_test` an den Namen der Datenbank. Verbindungsdaten stehen in keiner
+  Datei (CLAUDE.md, Regel 2); ausgegeben wird nichts davon.
+- `tests/services/aufbau.ts` legt die Testdatenbank an und migriert sie einmal
+  je Lauf; `fixture.ts` leert sie vor **jedem** Test und baut die synthetische
+  Welt: ein Betreiber, ein Kunde mit Standort und Kostenstelle, ein zweites
+  Unternehmen desselben Konzerns, zwei Lieferanten und eine Person mit je einem
+  Kandidatensatz je Lieferant.
+- `vitest.services.config.ts` und das Skript `test:services` halten den Lauf von
+  `npm test` getrennt.
+
+**18 Tests gegen echte Übergänge**, alle grün:
+
+| Was geprüft wird | Fundstelle |
+|---|---|
+| Die Kette zählt über **Lieferanten hinweg** und der Stand wird an **jedem** Einsatz der Kette fortgeschrieben | § 1 Abs. 1b Satz 2; 5.0, 5.1.3 |
+| Eine Sperre schreibt **nichts** — der Einsatz bleibt in `planned` | 4.0, Regel 5 |
+| Der Start **am** Fristende ist zulässig, einen Tag später nicht | 5.1.5, Q23 |
+| Standort vor Kunde, Verleiherseite nie, sonst Regelgrenze; die spätere Zuordnung derselben Ebene gewinnt | 5.1.2 |
+| Die Drehtür sperrt den Start ohne Vergleichsentgelt — auch für einen Arbeitgeber aus dem Konzern; nicht vor dem Fenster, nicht für einen Dritten | 5.3.1, § 18 AktG |
+| Das Arbeitsverhältnis am ersten Überlassungstag: Bewerber gesperrt, ein Tag zu spät gesperrt, **am** ersten Tag genügt | 5.3.4, Q47 |
+| Die Verlängerung über das Fristende hinaus wird nicht wirksam; innerhalb wird sie wirksam und schreibt den Stand neu | 4.3.2, Q30, 5.5.1 b |
+| Ein Einsatz **ohne** bestätigte Personenidentität gehört nicht zur Kette | 5.0, Entscheidung zu Frage 18 |
+
+**Gemessen:** `npm run test:services` → **18 grün** · `npm test` → 554 grün in
+26 Dateien, weiterhin **ohne** Datenbank · `npm run typecheck` → Exit 0 (die
+neuen Dateien sind erfasst, mit einem absichtlichen Typfehler gegengeprüft) ·
+`npm run build` → kompiliert · `npm run test:aueg` → 82 grün, 0 rot ·
+die Entwicklungsdatenbank ist unverändert: fünf Einsätze, alle abgeleiteten
+Felder leer.
+
+### Entscheidungen
+
+1. **Eigene Datenbank statt Transaktions-Rollback.** Die Dienste öffnen ihre
+   **eigenen** Transaktionen (`prisma.$transaction`); ein Test, der alles in
+   eine äußere Transaktion packt und zurückrollt, sähe die Schreibvorgänge der
+   Dienste gar nicht. Deshalb eine echte Datenbank, die vor jedem Test geleert
+   wird.
+2. **`npm test` bleibt ohne Datenbank.** Die Fachlogik ist in `lib/aueg/` ohne
+   Prisma geprüft, und das soll so bleiben: ein schneller Lauf, der überall
+   durchläuft, ist mehr wert als ein vollständiger, den niemand startet. Die
+   Dienst-Tests laufen wie die AÜG-Suite über ein eigenes Skript.
+3. **`TRUNCATE` über das Schema statt einer Modellliste.** Eine Liste veraltet
+   bei jedem neuen Modell, und ein vergessenes Modell macht den nächsten Test
+   unberechenbar.
+4. **Der Genehmiger gehört zur Kundenseite.** Die Verlängerung wird von `KG`
+   genehmigt (4.3.2, Fußnote [26]), nicht von `MD` — das Fixture führt deshalb
+   einen eigenen Benutzer im Kundenmandanten. Beim ersten Lauf hat genau das
+   den Test zurückgewiesen, und das ist der Beweis, dass die
+   Berechtigungsprüfung im Lauf wirklich greift.
+
+### Gegengeprüft
+
+Jede Zahl oben ist hier noch einmal gemessen worden, und die Rechnungen sind
+gegen die Spezifikation nachgerechnet: 15.01.2026 plus 18 Monate minus einen Tag
+ist der 14.07.2027 (5.1.3), 17 + 28 + 31 + 30 + 31 + 1 = 138 angerechnete Tage
+über beide Einsätze, und das Rückschaufenster der Drehtür reicht bei einem Start
+am 01.09.2026 vom 01.03. bis zum 31.08.2026 (5.3.1).
+
+**Ein grüner Lauf ist noch kein Beweis, dass er etwas prüft.** Deshalb zwei
+absichtliche Mutationen in `lib/services/staffing.ts`, jede einzeln:
+
+| Mutation | Erwartet rot | Gemessen |
+|---|---|---|
+| Der Standort fällt aus der Abfrage der Tarifzuordnungen (5.1.2, Rang 1) | „nimmt die Zuordnung des Standorts vor der des Kunden" | genau dieses eine Szenario rot, 17 grün |
+| Der Konzernverbund wird nicht geladen (§ 18 AktG) | „greift auch für einen Arbeitgeber desselben Konzerns" | genau dieses eine Szenario rot, 17 grün |
+
+Beide Mutationen sind zurückgenommen; `lib/services/staffing.ts` ist unverändert
+gegenüber `c962e1e`.
+
+**Die Trennung der Datenbanken ist nachgesehen, nicht angenommen:** neben
+`vms_prototyp` liegt jetzt `vms_prototyp_test`, und die Entwicklungsdatenbank ist
+nach dem Lauf zeichengleich wie davor — fünf Mandanten, 14 Benutzer, fünf
+Einsätze mit leeren abgeleiteten Feldern, acht Bedarfe, sieben Kandidaten. Die
+neuen Dateien enthalten keine Verbindungsdaten (durchsucht nach
+Verbindungsstrings, Passwörtern, Tokens und Schlüsseln), und keine der vier
+`tests/aueg/*.feature` ist angefasst.
+
+### Offen
+
+- **`demand.ts` und `masterData.ts` haben keine Tests.** Das Muster steht jetzt;
+  die Arbeit ist dieselbe.
+- **P9 und P10 sind am Einsatz und an der Verlängerung nicht angebunden.** Ihre
+  Sperren gehören in diesen Lauf, sobald die Erlaubnissätze und Nachweise dort
+  geladen werden.
+- Der Lauf braucht eine laufende PostgreSQL-Instanz. Ohne `DATABASE_URL` bricht
+  er mit einer benannten Meldung ab — ein Dienst-Test ohne Datenbank ist kein
+  bestandener Test, sondern ein übersprungener.
+
+---
+
 ## 2026-11-05 — Vier weitere AÜG-Prüfungen und ihre Anbindung an die Statusmodelle
 
 ### Gemacht
