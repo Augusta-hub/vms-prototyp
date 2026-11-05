@@ -39,6 +39,14 @@ export interface Uebersteuerungslage {
   readonly datenlageZulaessig: boolean
 }
 
+/** Ein durch eine Prüfung gesperrter Übergang (SPEC 5.5.4). */
+export interface Gesperrter {
+  readonly objektart: Objektart
+  readonly nachStatus: string
+  /** Zustand, in dem der Vorgang bleibt (4.0, Regel 5); `null`, wo unbekannt. */
+  readonly vonStatus: string | null
+}
+
 export interface Zeitangaben {
   zeitraum: Zeitraum | null
   geplant: Zeitraum | null
@@ -62,6 +70,13 @@ export interface Vorgangslage {
   readonly zeit: Zeitangaben
   /** Status des Vorgangs, um den es geht; `null`, wenn er nicht genannt ist. */
   readonly vorgangsstatus: string | null
+  /**
+   * Objektart des Vorgangs, dessen Status der Vorgang nennt. Der Auslöser nennt
+   * sie nicht immer: „der Bedarfsträger zusagt und der MSP-Disponent den Status
+   * »accepted« setzen will" nennt keinen Profilvorschlag. Dann steht sie hier,
+   * aus dem Satz, der den Status trägt.
+   */
+  readonly vorgangsart: Objektart | null
   /** Lieferantenstatus nach 4.6, je Firmenname. */
   readonly lieferantenstatus: ReadonlyMap<string, string>
   /** Lieferantennamen in der Reihenfolge ihres Auftretens (ohne Entleiher). */
@@ -77,7 +92,7 @@ export interface Vorgangslage {
   /** Der zuletzt genannte Standort — das Bezugsobjekt der Unterweisung. */
   readonly standortImSzenario: string | null
   /** Der durch eine Prüfung gesperrte Übergang (5.5.4, Invariante 1). */
-  readonly gesperrterVorgang: { objektart: Objektart; nachStatus: string } | null
+  readonly gesperrterVorgang: Gesperrter | null
   readonly uebersteuerung: Uebersteuerungslage
   /** Alle Sätze in Reihenfolge, Auslöser zuletzt — für prüfungseigene Leser. */
   readonly saetze: readonly { satz: string; art: string; ausSzenario: boolean }[]
@@ -117,8 +132,9 @@ export function leseVorgangslage(
   const saetze: { satz: string; art: string; ausSzenario: boolean }[] = []
 
   let vorgangsstatus: string | null = null
+  let vorgangsart: Objektart | null = null
   let eingeladen: readonly string[] = []
-  let gesperrterVorgang: { objektart: Objektart; nachStatus: string } | null = null
+  let gesperrterVorgang: Gesperrter | null = null
   let lieferantImSzenario: string | null = null
   let standortImSzenario: string | null = null
   let nachGrundlage = false
@@ -171,7 +187,10 @@ export function leseVorgangslage(
     if (status !== null) lieferantenstatus.set(status.name, status.status)
 
     const gelesen = leseVorgangsstatus(satz)
-    if (gelesen !== null) vorgangsstatus = gelesen
+    if (gelesen !== null) {
+      vorgangsstatus = gelesen
+      vorgangsart = objektartAusSatz(satz) ?? vorgangsart
+    }
 
     leseZeitangaben(satz, zeit)
 
@@ -188,6 +207,7 @@ export function leseVorgangslage(
     stichtag: istTag(ausloeser.stichtag) ? ausloeser.stichtag : null,
     zeit,
     vorgangsstatus,
+    vorgangsart,
     lieferantenstatus,
     lieferanten,
     entleiher,
@@ -223,6 +243,22 @@ export function anlassVon(ausloeser: Ausloeser): Anlass {
     default:
       return 'berechnung'
   }
+}
+
+/** Die Objektart, die ein Satz benennt (SPEC Kapitel 3 und 4). */
+export function objektartAusSatz(satz: string): Objektart | null {
+  const zuordnung: ReadonlyArray<readonly [RegExp, Objektart]> = [
+    [/Bedarfsanfrage/, 'bedarfsanfrage'],
+    [/Einladung/, 'einladung'],
+    [/Profilvorschlag/, 'profilvorschlag'],
+    [/Verlängerung/, 'verlaengerung'],
+    [/Stundenzettel/, 'stundenzettel'],
+    [/\bBeleg\b/, 'beleg'],
+    [/\bEinsatz\b|\bEinsätze\b/, 'einsatz'],
+    [/\bLieferant\b|\bLieferanten\b/, 'lieferant'],
+    [/\bNachweis\b/, 'nachweis'],
+  ]
+  return zuordnung.find(([muster]) => muster.test(satz))?.[1] ?? null
 }
 
 export function alsObjektart(wert: string): Objektart {
@@ -317,18 +353,39 @@ function leseEinladungen(satz: string): readonly string[] | null {
  * Welcher Übergang ist durch eine Prüfung gesperrt? Die Wendungen, mit denen
  * die Vorgänge einen Sperrvorzustand benennen (SPEC 5.5.4, Invariante 1: eine
  * Übersteuerung gilt für genau einen Übergang eines benannten Objekts).
+ *
+ * `vonStatus` ist der Zustand, in dem der Vorgang **bleibt**, solange die
+ * Sperre besteht (4.0, Regel 5). Er ist hier die Abschrift der Statusmodelle
+ * aus Kapitel 4 — nicht aus 4.7, die diese Übergänge als „→ accepted" und
+ * „→ planned" ohne Ausgangszustand führt. Nennt Kapitel 4 mehrere
+ * Ausgangszustände (4.2.3: `releasedToCustomer`, `interviewScheduled` →
+ * `accepted`), steht hier der **erste** — der Regelweg; der zweite ist der
+ * Umweg über das Vorstellungsgespräch. Wo Kapitel 4 keinen eindeutigen nennt,
+ * bleibt der Wert `null` und wird nicht geraten (5.0, Nummer 4).
  */
-function leseGesperrtenVorgang(
-  satz: string,
-): { objektart: Objektart; nachStatus: string } | null {
-  if (!/durch die Prüfung P(?:9|10) gesperrt/.test(satz)) return null
-  if (/Einladung/.test(satz)) return { objektart: 'einladung', nachStatus: 'invited' }
-  if (/Anlegen des Einsatzes/.test(satz)) return { objektart: 'einsatz', nachStatus: 'planned' }
-  if (/Einsatzstart/.test(satz)) return { objektart: 'einsatz', nachStatus: 'active' }
-  if (/Wirksamkeit der Verlängerung/.test(satz)) {
-    return { objektart: 'verlaengerung', nachStatus: 'effective' }
+function leseGesperrtenVorgang(satz: string): Gesperrter | null {
+  if (!/durch die Prüfung P\d{1,2} gesperrt/.test(satz)) return null
+  if (/Einladung/.test(satz)) {
+    return { objektart: 'einladung', nachStatus: 'invited', vonStatus: null }
   }
-  if (/Freischalten/.test(satz)) return { objektart: 'lieferant', nachStatus: 'active' }
+  if (/Zusage zum Profilvorschlag/.test(satz)) {
+    return { objektart: 'profilvorschlag', nachStatus: 'accepted', vonStatus: 'releasedToCustomer' }
+  }
+  if (/Anlegen des Einsatzes/.test(satz)) {
+    return { objektart: 'einsatz', nachStatus: 'planned', vonStatus: null }
+  }
+  if (/Einsatzstart/.test(satz)) {
+    return { objektart: 'einsatz', nachStatus: 'active', vonStatus: 'planned' }
+  }
+  if (/Wiederaufnahme/.test(satz)) {
+    return { objektart: 'einsatz', nachStatus: 'active', vonStatus: 'interrupted' }
+  }
+  if (/Wirksamkeit der Verlängerung/.test(satz)) {
+    return { objektart: 'verlaengerung', nachStatus: 'effective', vonStatus: 'approved' }
+  }
+  if (/Freischalten/.test(satz)) {
+    return { objektart: 'lieferant', nachStatus: 'active', vonStatus: 'onboarding' }
+  }
   return null
 }
 
@@ -452,6 +509,61 @@ export function einTag(text: string, muster: RegExp): Tag | null {
 export function alsTag(deutsch: string): Tag {
   const [monatstag, monat, jahr] = deutsch.split('.')
   return `${jahr}-${monat}-${monatstag}`
+}
+
+/* ------------------------------------------------------------------ */
+/* Firmen und Personen in einem Satz — die Rollen auseinanderhalten    */
+/* ------------------------------------------------------------------ */
+
+const PERSONENNAME = /"((?:\p{Lu}\p{Ll}+)(?: \p{Lu}\p{Ll}+)+)"/u
+
+/** Ein zitierter Personenname, der keine Firmenbezeichnung trägt (SPEC 3.6). */
+export function personAusSatz(satz: string): string | null {
+  const treffer = PERSONENNAME.exec(satz)?.[1]
+  if (treffer === undefined || FIRMA.test(treffer)) return null
+  return treffer
+}
+
+/**
+ * Der Entleiher (3.1). „bei X", „beim Kunden X" und „für X ist/gilt" nennen
+ * ihn — **außer** der Satz handelt von einem Kandidatensatz, denn der gehört
+ * zum Verleiher: „als Kandidat »Jana Behrens« bei »Elbe Zeitarbeit GmbH«
+ * geführt" nennt keinen Kunden. Beide tragen eine Firmenbezeichnung und sind
+ * verschiedene Objekte; wer sie verwechselt, prüft am Ende das falsche.
+ */
+export function kundeAusSatz(satz: string): string | null {
+  const kandidatensatz = /Kandidat(?:en|ensatz|ensätze)?\s+"[^"]+"\s+bei\s+"([^"]+)"/.exec(satz)
+  const verleiher = kandidatensatz?.[1] ?? null
+
+  const kandidaten: string[] = []
+  for (const muster of [
+    /\bEntleiher\s+"([^"]+)"/g,
+    /\bbeim Kunden\s+"([^"]+)"/g,
+    /\bbei\s+"([^"]+)"/g,
+    /\bfür\s+(?:den Kunden\s+)?"([^"]+)"\s+(?:ist|gilt)/g,
+  ]) {
+    for (const treffer of satz.matchAll(muster)) {
+      const name = treffer[1]
+      if (name !== undefined && FIRMA.test(name) && name !== verleiher) kandidaten.push(name)
+    }
+  }
+  // „für den Standort" und „für den Lieferanten" nennen keinen Kunden.
+  if (/für den (?:Standort|Lieferanten)/.test(satz) && kandidaten.length === 0) return null
+  return kandidaten[0] ?? null
+}
+
+/** Der Verleiher (3.2): „über X", „Lieferant X", „Kandidat »…« bei X". */
+export function lieferantAusSatz(satz: string): string | null {
+  // Kein `\b` vor „über": in JavaScript zählt „ü" nicht als Wortzeichen, die
+  // Stelle zwischen Leerzeichen und „ü" ist deshalb **keine** Wortgrenze — das
+  // Muster würde nie treffen.
+  const treffer =
+    /(?:^|\s)über\s+"([^"]+)"/.exec(satz) ??
+    /Kandidat(?:en|ensatz)?\s+"[^"]+"\s+bei\s+"([^"]+)"/.exec(satz) ??
+    /Lieferant(?:en)?\s+"([^"]+)"/.exec(satz) ??
+    /zwischen Betreiber und "([^"]+)"/.exec(satz)
+  const name = treffer?.[1]
+  return name !== undefined && FIRMA.test(name) ? name : null
 }
 
 export function letztes(werte: readonly string[]): string | null {

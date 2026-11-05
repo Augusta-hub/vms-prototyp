@@ -86,7 +86,46 @@ export interface Katalogzeile {
   readonly wirkung: Readonly<Partial<Record<string, Ergebnisart>>>
 }
 
+/**
+ * Die Werte der Höchstüberlassungsdauer (SPEC 5.1) und der Drehtürklausel
+ * (5.3.1). `regelgrenzeMonate`, `unterbrechungMonate` und `rueckschauMonate`
+ * sind **gesetzliche** Werte (§ 1 Abs. 1b Sätze 1 und 2, § 8 Abs. 3 AÜG) und
+ * stehen hier, weil 5.0 Nummer 2 sie ausdrücklich zulässt („Zahlen nur, wo sie
+ * gesetzliche Werte sind: 18 Monate, 9 Monate, 15 Monate, 6 Monate, 3 Monate").
+ * Eine **tarifliche** Abweichung ist Konfiguration an der Tarifzuordnung (3.3)
+ * und erreicht die Regel als Eingangsdatum, nicht über dieses Modul.
+ *
+ * `hinweisTage` und `warnungTage` sind `maxDurationNoticeDays` und
+ * `maxDurationWarningDays` aus 5.0, Abschnitt „Festwerte dieses Kapitels".
+ */
+export interface Dauerkonfiguration {
+  readonly regelgrenzeMonate: number
+  readonly unterbrechungMonate: number
+  readonly rueckschauMonate: number
+  readonly hinweisTage: number
+  readonly warnungTage: number
+}
+
 export interface Regelwerkkonfiguration {
+  readonly dauer: Dauerkonfiguration
+  /** Restbudget ≤ `hinweisTage` (5.1.6, Zeile 1). */
+  readonly adressatenDauerHinweis: readonly Rollenkuerzel[]
+  /** Restbudget ≤ `warnungTage` (5.1.6, Zeile 2): `MD` → `MA`, Information an `KB`. */
+  readonly adressatenDauerWarnung: readonly Rollenkuerzel[]
+  /** Fristende erreicht, Einsatz läuft weiter (5.1.6, Zeile 3). */
+  readonly adressatenDauerErreicht: readonly Rollenkuerzel[]
+  /** Fehlende Tarifzuordnung — gerechnet wird mit der Regelgrenze (5.1.2). */
+  readonly adressatenRegelgrenze: readonly Rollenkuerzel[]
+  /** Fehlende oder unbestätigte Personenidentität (5.0 Nr. 3, 5.1.5). */
+  readonly adressatenZaehlgrundlage: readonly Rollenkuerzel[]
+  /** Treffer der Drehtürklausel: Equal Pay ab dem ersten Tag (5.3.1, Schritt 5). */
+  readonly adressatenDrehtuer: readonly Rollenkuerzel[]
+  /** Fehlende Erklärung zur Vorbeschäftigung (5.3.1, „Wenn Daten fehlen"). */
+  readonly adressatenErklaerungFehlt: readonly Rollenkuerzel[]
+  /** Konzernzugehörigkeit nicht gepflegt (5.3.1, Schritt 4). */
+  readonly adressatenKonzernUnbekannt: readonly Rollenkuerzel[]
+  /** Arbeitsverhältnis beim Verleiher fehlt oder beginnt zu spät (5.3.4). */
+  readonly adressatenArbeitsverhaeltnis: readonly Rollenkuerzel[]
   readonly vorlauf: Readonly<Record<Nachweisart, Vorlauf>>
   readonly stufenadressaten: Readonly<Record<Nachweisart, Stufenadressaten>>
   /** Wer erfährt von einem Datenfehler am Erlaubnissatz (5.4.6). */
@@ -118,6 +157,26 @@ const OHNE_STUFEN: Stufenadressaten = {
 const OHNE_VORLAUF: Vorlauf = { information: null, warnung: null, eskalation: null }
 
 export const REGELWERK: Regelwerkkonfiguration = {
+  dauer: {
+    // § 1 Abs. 1b Satz 1 AÜG, SPEC 5.1.2 Rang 3.
+    regelgrenzeMonate: 18,
+    // § 1 Abs. 1b Satz 2 AÜG, SPEC 5.1.4.
+    unterbrechungMonate: 3,
+    // § 8 Abs. 3 AÜG, SPEC 5.3.1 Schritt 2.
+    rueckschauMonate: 6,
+    // SPEC 5.0: `maxDurationNoticeDays`, `maxDurationWarningDays`.
+    hinweisTage: 90,
+    warnungTage: 30,
+  },
+  adressatenDauerHinweis: ['MD'],
+  adressatenDauerWarnung: ['MD', 'MA', 'KB'],
+  adressatenDauerErreicht: ['MD', 'MA', 'KB', 'LD'],
+  adressatenRegelgrenze: ['MA'],
+  adressatenZaehlgrundlage: ['MD'],
+  adressatenDrehtuer: ['MD', 'LD'],
+  adressatenErklaerungFehlt: ['MD', 'LD'],
+  adressatenKonzernUnbekannt: ['MA'],
+  adressatenArbeitsverhaeltnis: ['MD', 'LD'],
   // SPEC 5.4.4, Spalte „Vorlauf (Information / Warnung / Eskalation)".
   vorlauf: {
     permitCertificate: { information: 90, warnung: 30, eskalation: 14 },

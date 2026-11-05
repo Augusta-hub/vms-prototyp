@@ -89,37 +89,43 @@ Zahlen sind richtig, sie zählen Verschiedenes.
 
 ## Stand des Regelwerks
 
-Stand 03.11.2026: **267 Szenarien — 42 grün, 0 rot, 225 ausstehend.** Umgesetzt
-sind **P9** (AÜG-Erlaubnis, SPEC 5.4.1) und **P10** (Pflichtnachweise,
-SPEC 5.4.4) in `lib/aueg/`, beide mit ihrem nächtlichen Lauf (N1, N5) und der
-Übersteuerung nach 5.5.4. P1 bis P8 und P11 haben noch keinen Rechenweg und
-melden deshalb weiter `ausstehend`. Jeder Schritt ohne Fachlogik nennt die
-fehlende Prüfung; **stillschweigend grün wird nichts.**
+Stand 05.11.2026: **267 Szenarien — 82 grün, 0 rot, 185 ausstehend.** Umgesetzt
+sind in `lib/aueg/` sechs der elf Prüfungen:
 
-| Prüfung | grün | rot | ausstehend | von |
-|---|---:|---:|---:|---:|
-| P9 AÜG-Erlaubnis | **29** | 0 | 15 | 44 |
-| P10 Pflichtnachweise | **15** | 0 | 8 | 23 |
+| Prüfung | grün | rot | ausstehend | von | Kapitel |
+|---|---:|---:|---:|---:|---|
+| P1 Höchstüberlassungsdauer | **19** | 0 | 37 | 56 | 5.1 |
+| P2 Unterbrechung und Drei-Monats-Regel | **6** | 0 | 3 | 9 | 5.1.4 |
+| P6 Drehtürklausel | **8** | 0 | 15 | 23 | 5.3.1 |
+| P9 AÜG-Erlaubnis | **29** | 0 | 15 | 44 | 5.4.1 |
+| P10 Pflichtnachweise | **15** | 0 | 8 | 23 | 5.4.4 |
+| P11 Arbeitsverhältnis beim Verleiher | **7** | 0 | 11 | 18 | 5.3.4 |
 
-Grün sind die Rechenwegszenarien beider Prüfungen, die Übergänge Q04, Q06, Q10,
-Q16, Q20, Q21, Q31, Q37, Q38, Q41, Q42, Q43 und Q44, die gestuften nächtlichen
-Läufe N1 und N5, die zurückgewiesene und die wirksame Übersteuerung.
+P3, P4, P5, P7 und P8 haben **keinen** Rechenweg und melden deshalb weiter
+`ausstehend`. Jeder Schritt ohne Fachlogik nennt die fehlende Prüfung;
+**stillschweigend grün wird nichts.**
 
-**Warum die restlichen 23 ausstehen, obwohl beide Prüfungen laufen.** Keines
-dieser Szenarien scheitert am Rechenweg — in jedem ist das Prüfergebnis selbst
-zugesichert und grün. Ausstehend bleibt jeweils ein **anderer** Satz desselben
-Szenarios, den der Runner nicht maschinell prüft:
+Grün sind die Rechenwegszenarien dieser Prüfungen, die Übergänge Q03, Q04, Q06,
+Q07, Q08, Q09, Q10, Q11, Q12, Q14, Q15, Q16, Q17, Q20, Q21, Q23, Q26, Q28, Q30,
+Q31, Q33, Q35, Q37, Q38, Q41 bis Q44 und Q47, die gestuften nächtlichen Läufe
+N1, N2 und N5, die zurückgewiesenen und die wirksamen Übersteuerungen.
 
-| Grund | Szenarien | Beispielsatz |
-|---|---:|---|
-| Fachliche Feststellung in Prosa (`fachaussage`, `rechtsfolge`) | 22 | „die Übersteuerung heilt die Rechtslage nicht" |
-| Satz nennt keinen vergleichbaren Wert (`berechneter_wert`) | 1 | „entfallen die Unterbrechungstage aus dem Prüfzeitraum" |
+**Warum die 185 ausstehen, obwohl sechs Prüfungen laufen.** 99 von ihnen haben
+**keinen** Befund: ihre Prüfungen haben noch keinen Rechenweg (P3 bis P5, P7,
+P8) oder das Szenario trägt keine Prüfungszuordnung. Die anderen **86 haben
+einen** — in ihnen ist das Prüfergebnis selbst zugesichert und grün. Ausstehend
+bleibt jeweils ein **anderer** Satz desselben Szenarios, den der Runner nicht
+maschinell prüft:
+
+| Grund | Beispielsatz |
+|---|---|
+| Fachliche Feststellung in Prosa (`fachaussage`, `rechtsfolge`) | „die Übersteuerung heilt die Rechtslage nicht", „der Einsatz wird geplant, nicht begonnen" |
+| Satz nennt keinen vergleichbaren Wert (`berechneter_wert`) | „die abgeleiteten Felder sind an jedem Einsatz der Kette fortgeschrieben" |
+| Datentrennung und Rechtsfolge (`sichtbarkeit`, `rechtsfolge`) | „der 14.07.2027 ist der letzte zulässige Überlassungstag" |
 
 Ein Teil dieser Sätze **wäre** gegen den Befund prüfbar und ist nur von der
 Signaturtabelle in `tests/aueg-runner/support/erwartung.ts` als Prosa
-eingeordnet: „deckt der Satz keinen Tag" ist eine Deckungsaussage, „die Sperre
-nennt die Nachweisart »safetyBriefing«" eine über den Meldungstext, den der
-Befund führt. Das ist die nächste Verbesserung am **Runner**, nicht an der
+eingeordnet. Das ist die nächste Verbesserung am **Runner**, nicht an der
 Fachlogik; sie betrifft alle vier Feature-Dateien.
 
 Ein Szenario gilt erst als grün, wenn **jede** seiner Zusicherungen geprüft ist.
@@ -141,6 +147,7 @@ Ein Szenario gilt erst als grün, wenn **jede** seiner Zusicherungen geprüft is
 
 Diese Tabelle ist der Fortschrittsmesser für M4 und M5: sie zeigt, wie viel vom
 Regelwerk tatsächlich läuft, nicht wie viel beschrieben ist.
+
 
 ## Noch offen
 

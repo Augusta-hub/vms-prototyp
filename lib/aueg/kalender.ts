@@ -18,9 +18,10 @@
  * Umrechnung in UTC-Mitternacht findet ausschließlich innerhalb dieses Moduls
  * statt und ist dort reine Arithmetik, keine Zeitzonenumrechnung.
  *
- * Monatsfristen nach §§ 187 Abs. 2, 188 Abs. 2 BGB gehören zu P1 und P3 und
- * stehen deshalb noch nicht hier — dieses Modul trägt nur, was P9 (SPEC 5.4.1)
- * braucht.
+ * Monatsfristen nach §§ 187 Abs. 2, 188 Abs. 2 BGB sind mit P1 (SPEC 5.1) und
+ * P2 (5.1.4) hinzugekommen: die Höchstüberlassungsdauer, die Drei-Monats-Regel
+ * der Unterbrechung und das Rückschaufenster der Drehtürklausel (5.3.1) rechnen
+ * alle mit derselben Arithmetik, und sie gehört an **eine** Stelle.
  */
 
 /** Ein Kalendertag als ISO-Kennung `JJJJ-MM-TT`. */
@@ -93,6 +94,56 @@ export function tageDesZeitraums(von: Tag, bis: Tag): Tag[] {
     tage.push(tagVersetzt(von, versatz))
   }
   return tage
+}
+
+/**
+ * Der Tag im `monate`-ten Folgemonat, der dieselbe Tageszahl trägt wie
+ * `ausgang`. Gibt es ihn im Zielmonat nicht, ist es der **letzte** Tag des
+ * Zielmonats (§ 188 Abs. 3 BGB; SPEC 5.0, „Fehlender Tag im Zielmonat":
+ * Beginn 31.01., 1 Monat → 28.02. bzw. 29.02.).
+ *
+ * Negative Werte gehen zurück — das Rückschaufenster der Drehtürklausel ist
+ * eine Monatsfrist in die Vergangenheit (SPEC 5.3.1, Schritt 2).
+ */
+export function monatsversatz(ausgang: Tag, monate: number): Tag {
+  const [jahr, monat, monatstag] = zerlegt(ausgang)
+  const monatszahl = jahr * 12 + (monat - 1) + monate
+  const zieljahr = Math.floor(monatszahl / 12)
+  const zielmonat = monatszahl - zieljahr * 12 + 1
+  const zieltag = Math.min(monatstag, tageImMonat(zieljahr, zielmonat))
+  return `${String(zieljahr).padStart(4, '0')}-${String(zielmonat).padStart(2, '0')}-${String(zieltag).padStart(2, '0')}`
+}
+
+/**
+ * Ende einer Monatsfrist nach §§ 187 Abs. 2, 188 Abs. 2 BGB (SPEC 5.0,
+ * „Monatsfristen"): beginnt die Frist mit dem Tag `T`, endet eine Frist von
+ * `monate` Monaten mit dem **Vortag** des Tages im `monate`-ten Folgemonat, der
+ * dieselbe Tageszahl trägt wie `T`.
+ *
+ * Beispiel aus 5.0: Beginn 15.01., 18 Monate → Ende 14.07. des Folgejahres.
+ * Beispiel aus 5.1.4: Lückenbeginn 01.04., 3 Monate → Ende 30.06.
+ */
+export function monatsfristEnde(beginn: Tag, monate: number): Tag {
+  const ziel = monatsversatz(beginn, monate)
+  // § 188 Abs. 3 BGB (SPEC 5.0, „Fehlender Tag im Zielmonat": Beginn 31.01.,
+  // 1 Monat → Ende 28.02. bzw. 29.02.): fehlt die Tageszahl im Zielmonat, endet
+  // die Frist mit dem **letzten** Tag dieses Monats — nicht mit seinem Vortag.
+  // Der Vortag wäre der 27.02. und damit ein Tag zu früh.
+  if (zerlegt(ziel)[2] !== zerlegt(beginn)[2]) return ziel
+  return tagVersetzt(ziel, -1)
+}
+
+/** Zahl der Tage eines Kalendermonats. */
+export function tageImMonat(jahr: number, monat: number): number {
+  return new Date(Date.UTC(jahr, monat, 0)).getUTCDate()
+}
+
+function zerlegt(wert: Tag): [number, number, number] {
+  const treffer = TAGESMUSTER.exec(wert)
+  if (treffer === null) {
+    throw new Error(`„${wert}" ist kein Kalendertag in der Form JJJJ-MM-TT (SPEC 5.0).`)
+  }
+  return [Number(treffer[1]), Number(treffer[2]), Number(treffer[3])]
 }
 
 /** Liegt der Tag im Zeitraum, Randtage eingeschlossen? */

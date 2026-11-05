@@ -98,6 +98,31 @@ function werteErgebnisart(erwartung: Erwartung, befunde: readonly Befund[]): Aus
  * wirklich als „ja" in die Rechnung ging, nicht nur, dass ein Befund existiert.
  */
 function wertePruefbarkeit(erwartung: Erwartung, befunde: readonly Befund[]): Auswertung {
+  // "ist die Pruefung P6 nicht pruefbar", "ist die Ueberlassungskette nicht
+  // bildbar": das ist keine Prosa, sondern der Mangel, den der Befund fuehrt.
+  // Nur wenn **kein** Befund `pruefbar` oder `mangel` fuehrt, ist der Rechenweg
+  // dafuer nicht da — dann ausstehend, nicht rot und nicht stillschweigend
+  // gruen.
+  if (/nicht (?:prüfbar|bildbar|bestimmbar)/.test(erwartung.satz)) {
+    const fuehrtPruefbarkeit = befunde.some(
+      (befund) => 'pruefbar' in befund.werte || 'mangel' in befund.werte,
+    )
+    if (!fuehrtPruefbarkeit) {
+      return { ergebnis: 'ausstehend', grund: 'kein Befund führt pruefbar oder mangel' }
+    }
+    const unpruefbar = befunde.some(
+      (befund) =>
+        befund.werte['pruefbar'] === 'nein' ||
+        (befund.werte['mangel'] ?? null) !== null,
+    )
+    return unpruefbar
+      ? ERFUELLT
+      : {
+          ergebnis: 'verletzt',
+          grund: 'erwartet war ein Mangel, der Befund nennt die Lage als prüfbar',
+        }
+  }
+
   if (!/wie "ja" gerechnet/.test(erwartung.satz)) {
     return {
       ergebnis: 'ausstehend',
@@ -293,6 +318,13 @@ function werteBerechnetenWert(erwartung: Erwartung, befunde: readonly Befund[]):
   const werte = befunde.flatMap((befund) => Object.values(befund.werte))
   if (werte.length === 0) return { ergebnis: 'ausstehend', grund: 'der Befund führt keine Werte' }
 
+  // "die Unterbrechung ist (nicht) zaehlwirksam" und "die Zaehlwirksamkeit
+  // traegt den Vermerk 'vorlaeufig'" sichern ein Ja/Nein zu, keine Zahl. Der
+  // Befund fuehrt sie als "ja"/"nein" (SPEC 3.7, `countsAsReset`).
+  if (/zählwirksam|Ergebnis der Bewertung/i.test(erwartung.satz)) {
+    return werteJaNein(erwartung, befunde)
+  }
+
   const erwarteteDaten = erwartung.werte.datumsangaben
   const erwarteteTage = erwartung.werte.mengen
     .filter((menge) => menge.einheit === 'tage')
@@ -313,6 +345,67 @@ function werteBerechnetenWert(erwartung: Erwartung, befunde: readonly Befund[]):
     }
   }
   return ERFUELLT
+}
+
+/**
+ * Eine Ja/Nein-Zusicherung gegen den Befund (SPEC 3.7, `countsAsReset`, und
+ * 5.1.4). Fuehrt kein Befund den Schluessel, bleibt der Satz ausstehend — die
+ * Abwesenheit eines Wertes ist kein "nein".
+ */
+function werteJaNein(erwartung: Erwartung, befunde: readonly Befund[]): Auswertung {
+  // Der Szenariogrundriss Q25 nennt das Ergebnis der Lueckenbewertung in Worten.
+  // Die drei Werte sind eine geschlossene Menge und stehen beide im Befund:
+  // "keine Luecke" ist `keineLuecke`, "Reset" und "kein Reset" sind
+  // `zaehlwirksam` (SPEC 5.1.4).
+  const bewertung = /Ergebnis der Bewertung ist "([^"]+)"/.exec(erwartung.satz)?.[1]
+  if (bewertung !== undefined) {
+    const [schluessel, erwartet] = /keine Lücke/.test(bewertung)
+      ? (['keineLuecke', 'ja'] as const)
+      : /kein Reset/.test(bewertung)
+        ? (['zaehlwirksam', 'nein'] as const)
+        : /\bReset\b/.test(bewertung)
+          ? (['zaehlwirksam', 'ja'] as const)
+          : (['', ''] as const)
+    if (schluessel === '') {
+      return { ergebnis: 'ausstehend', grund: `die Bewertung "${bewertung}" ist nicht abgebildet` }
+    }
+    return vergleicheJaNein(schluessel, erwartet, befunde)
+  }
+
+  const schluessel = /vorläufig|Vermerk/.test(erwartung.satz) ? 'vorlaeufig' : 'zaehlwirksam'
+  const gefuehrt = befunde
+    .map((befund) => befund.werte[schluessel])
+    .find((wert) => wert === 'ja' || wert === 'nein')
+  if (gefuehrt === undefined) {
+    return { ergebnis: 'ausstehend', grund: `kein Befund führt ${schluessel}` }
+  }
+  const erwartetNein = /\bnicht (?:zählwirksam|vorläufig)\b/.test(erwartung.satz)
+  return gefuehrt === (erwartetNein ? 'nein' : 'ja')
+    ? ERFUELLT
+    : {
+        ergebnis: 'verletzt',
+        grund: `erwartet war ${schluessel} = ${erwartetNein ? 'nein' : 'ja'}, der Befund nennt ${gefuehrt}`,
+      }
+}
+
+/** Vergleicht einen Ja/Nein-Schluessel des Befunds mit dem erwarteten Wert. */
+function vergleicheJaNein(
+  schluessel: string,
+  erwartet: string,
+  befunde: readonly Befund[],
+): Auswertung {
+  const gefuehrt = befunde
+    .map((befund) => befund.werte[schluessel])
+    .find((wert) => wert === 'ja' || wert === 'nein')
+  if (gefuehrt === undefined) {
+    return { ergebnis: 'ausstehend', grund: `kein Befund führt ${schluessel}` }
+  }
+  return gefuehrt === erwartet
+    ? ERFUELLT
+    : {
+        ergebnis: 'verletzt',
+        grund: `erwartet war ${schluessel} = ${erwartet}, der Befund nennt ${gefuehrt}`,
+      }
 }
 
 /** Adressaten und Eskalation (SPEC 5.5.2 Nummer 6). */

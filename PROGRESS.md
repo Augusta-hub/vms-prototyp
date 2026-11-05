@@ -5,6 +5,263 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-05 — Vier weitere AÜG-Prüfungen und ihre Anbindung an die Statusmodelle
+
+### Gemacht
+
+**P1 (Höchstüberlassungsdauer) und P2 (Unterbrechung) nach SPEC 5.1.** Die
+Überlassungskette aus 5.0 wird gebildet, über Lieferanten und Kunden hinweg und
+an der **bestätigten** Personenidentität (Entscheidung zu Frage 18 — ein nur
+vorgeschlagener Treffer zählt nicht). Daraus: `chainStartDate`, das Tagebudget
+aus der Monatsgrenze, `countedDurationDays`, `maxDurationEndDate` und das
+Restbudget mit den Schwellen aus 5.1.6. Die Drei-Monats-Regel aus 5.1.4 schneidet
+die Kette, und **exakt** drei Monate setzen die Zählung nicht zurück.
+
+- `lib/aueg/regeln/p1Hoechstdauer.ts` — Rechenweg P1 und Lückenbewertung P2
+- `lib/aueg/lesen/kettenlage.ts` — Sachverhaltsleser, fünf dokumentierte Lesarten
+- `lib/aueg/kalender.ts` trägt jetzt `monatsversatz` und `monatsfristEnde`
+  (§§ 187 Abs. 2, 188 Abs. 2 **und 3** BGB)
+
+**P6 (Drehtürklausel) und P11 (Arbeitsverhältnis beim Verleiher) nach SPEC 5.3.**
+P6 rechnet das Rückschaufenster von sechs Monaten vor dem Überlassungsbeginn,
+wertet die Erklärung aus 3.6 aus, prüft den Konzernbezug und setzt als
+Rechtsfolge Equal Pay ab dem ersten Überlassungstag — **keine** Sperre. P11
+prüft das Arbeitsverhältnis am ersten Überlassungstag; `employedSince` gleich
+dem ersten Tag genügt.
+
+- `lib/aueg/regeln/p6Drehtuer.ts`, `lib/aueg/regeln/p11Arbeitsverhaeltnis.ts`
+- `lib/aueg/lesen/kandidatenlage.ts` — ein Leser für beide, weil beide denselben
+  Gegenstand lesen: den Kandidatensatz beim Verleiher
+- `lib/aueg/querschnitt.ts` trägt jetzt Q03, Q07 bis Q09, Q11 bis Q15, Q17,
+  Q23 bis Q28, Q30, Q33, Q35, Q47 sowie N2 und N6
+
+**Angebunden an die Statusmodelle 4.2.3 und 4.3.** `RULE_CHECKS_PENDING` in
+`lib/services/staffing.ts` war die eine Stelle, an der die noch nicht
+gerechneten Prüfergebnisse herkamen. Für P1, P6 und P11 kommen sie jetzt aus dem
+Regelwerk:
+
+- `lib/aueg/anbindung.ts` trägt neben `hatAnerkannteGueltigeErlaubnis` (P9, Q04
+  und Q06) jetzt `hoechstdauerstand`, `haeltVerlaengerungDieFrist`,
+  `drehtuerstand` und `bestehtArbeitsverhaeltnisAmErstenTag`. Das Modul
+  **rechnet, es lädt nicht**: jede Funktion nimmt die Zeilen, die der Dienst
+  geladen hat, und gibt die Tatsache zurück, die das Statusmodell verlangt.
+  Damit bleibt die Umrechnung zwischen Datenmodell und Regelwerk ohne Prisma
+  prüfbar.
+- Der Dienst lädt die **Überlassungskette** (alle Einsätze derselben
+  bestätigten Personenidentität bei demselben Kunden samt Unterbrechungen), die
+  **Tarifzuordnungen** von Standort und Kunde (5.1.2, die Verleiherseite wird
+  nicht geladen) und den **Konzernverbund** des Entleihers (3.1, § 18 AktG).
+- `maxDurationEndDate` und `countedDurationDays` werden an **jedem** Einsatz der
+  Kette fortgeschrieben (5.1.3, „Ergebnisfelder") — beim Anlegen, bei jedem
+  Übergang am Einsatz und wenn eine Verlängerung wirksam wird, jeweils in
+  derselben Transaktion wie der Übergang (5.5.1 b).
+- Der Stichtag kommt aus der Tabelle in 5.0 und ist **nie** der Tag des
+  Aufrufs: beim Start `actualStartDate`, beim Unterbrechen `interruptionFrom`,
+  bei der Wiederaufnahme `interruptionTo` + 1 Tag, beim Abschluss
+  `actualEndDate`, beim Anlegen der geplante Zeitraum.
+- `employmentOnFirstDay` hat die Regel aus 5.3.4 ein zweites Mal kodiert und
+  reicht die Felder jetzt an P11 weiter. Das Gesetz steht an einer Stelle.
+
+**Nicht angebunden** bleiben P9 und P10 an den Zeilen am Einsatz, an der
+Verlängerung, am Beleg und am Lieferantenstatus: ihre Eingangsdaten
+(Erlaubnissätze, Nachweise) sind dort nicht geladen. P7 und P8 haben keinen
+Rechenweg. Beide behalten in `RULE_CHECKS_PENDING` den benannten, **nicht
+sperrenden** Wert.
+
+**Gemessen** (`npm run test:aueg`): **267 Szenarien — 82 grün, 0 rot, 185
+ausstehend** (vorher 42 grün, 0 rot). P1 19/56, P2 6/9, P6 8/23, P9 29/44,
+P10 15/23, P11 7/18. 99 der ausstehenden Szenarien haben **keinen** Befund,
+weil ihre Prüfung keinen Rechenweg hat; die anderen 86 haben einen und warten
+nur auf eine Zusicherung, die der Runner nicht maschinell prüft. Der Runner ist
+in derselben Arbeitseinheit parallel verbessert worden; die Zahl ist deshalb
+eine Momentaufnahme, kein Endstand.
+
+`npm test` → 541 grün in 26 Dateien — neu sind die Einheitentests zu P1 und P2,
+zu P6 und P11, zu den beiden Lesern und zur Monatsfristenarithmetik ·
+`npm run typecheck` → Exit 0 · `npm run build` → kompiliert.
+`tests/aueg/*.feature` ist unverändert.
+
+**Die Anbindung ist gegen die Entwicklungsdatenbank gemessen**, nicht nur
+getippt: `loadAssignments` und `loadSubmissions` lesen die fünf Einsätze und
+acht Profilvorschläge des Seeds fehlerfrei, und die Rechnung liefert auf echten
+Zeilen plausible Werte — eine Kette über zwei Einsätze desselben Kunden
+(Kettenbeginn 01.09.2025, 182 angerechnete Tage, Grenze 24 Monate aus der
+Kundenzuordnung), eine greifende Drehtürklausel an einem Einsatz und ein
+Kandidat, dessen Arbeitsverhältnis am ersten Überlassungstag **nicht** besteht.
+Kein Einsatz ist überschritten, kein Übergang wird durch die Anbindung neu
+gesperrt. Der Schreibpfad ist in einer **abgebrochenen** Transaktion geprüft:
+fünf Zeilen geschrieben, zurückgelesen, Transaktion verworfen — die
+Entwicklungsdatenbank ist unverändert.
+
+### Entscheidungen
+
+1. **Eine Zeile aus 4.7 mit zwei Prüfungen beurteilt den Übergang zusammen.**
+   4.7 führt Q27 mit „P1, P3" und Q43/Q44 mit „P9, P10". Nach 5.5.2 Nr. 2 ist
+   das Ergebnis das **strengste** der Einzelergebnisse — und das lässt sich
+   nicht bestimmen, solange einem von ihnen der Rechenweg fehlt. Der Übergang
+   bleibt deshalb unbeurteilt und liefert **keinen** Befund
+   (`Querschnittzeile.weiterePruefungen`, Prüfung in `pruefwerk.ts`). Ein halb
+   beurteilter Übergang sähe aus wie ein zulässiger. Betrifft heute die drei
+   Q27-Szenarien; mit P3 fällt die Bremse von selbst weg.
+2. **Zeilen mit zwei Ergebnisarten werden als zwei Werte abgeschrieben, nicht
+   im Code entschieden.** Q26 trägt „Sperre, wenn das Fristende am
+   Wiederaufnahmetag erreicht ist; sonst Warnung"
+   (`trefferartStichtagErreicht`), Q12 und Q15 tragen „Warnung bei Treffer,
+   Sperre bei fehlender Erklärung" (`trefferartOhneGrundlage`). Beides steht in
+   4.7 wörtlich so.
+3. **Die Vorlaufschwellen aus 5.1.6 greifen nur vorausschauend.** Q27, Q33 und
+   Q35 stellen fest, was erbracht ist (5.5.5: „Die Zeiten sind **erbracht**",
+   „Abschlussstand, Dokumentationszweck"); dort warnt nichts vor einer
+   Überlassung, die nicht mehr kommt. Die Zeilen tragen dafür `rueckschau`.
+4. **Eine Zeile ohne Ausgangsstatus gilt dem Übergang unabhängig vom
+   Ausgangszustand.** 4.7 schreibt Q11, Q14, Q16 und Q27 als „→ accepted" bzw.
+   „→ planned"; `zeileFuerUebergang` nimmt sie jetzt auch, wenn der Vorgang
+   einen Ausgangsstatus nennt, zu dem es keine eigene Zeile gibt.
+5. **P6 ist nicht übersteuerbar** (5.3.6). Der Treffer ist keine Sperre; die
+   Sperre bei fehlender Erklärung wird durch Beibringen der Erklärung
+   aufgelöst, nicht durch eine Abweichung von der Regel. P1 und P11 sind
+   übersteuerbar, und die Übersteuerung ist **nicht vertretbar** (2.4, Regel 8):
+   nur der MSP-Administrator selbst.
+6. **Berichtigt: `monatsfristEnde`.** Die erste Fassung zog stumpf einen Tag
+   ab. Fehlt die Tageszahl im Zielmonat, ist das einen Tag zu früh — 31.01. plus
+   einen Monat endet nach § 188 Abs. 3 BGB am **28.02.**, nicht am 27.02.; so
+   steht es auch in 5.0. Der eigene Test hat es aufgedeckt.
+7. **Tarif- und Fristwerte bleiben Konfiguration.** `regelwerk.ts` trägt die
+   gesetzlichen Werte (18, 3 und 6 Monate; 90 und 30 Tage Vorlauf) und die
+   Adressatenlisten aus 5.1.6; eine **tarifliche** Abweichung kommt aus der
+   Tarifzuordnung (3.3) und erreicht die Regel als Eingangsdatum. Die
+   Verleiherseite wird für 5.1 nicht gelesen.
+
+**Keine neue offene Frage für SPEC Kapitel 7.** 5.1, 5.3.1 und 5.3.4 sind
+vollständig genug, dass jede Rechnung eine Fundstelle hat; geraten wurde nichts.
+
+### Offen
+
+- **86 der 185 ausstehenden Szenarien warten nicht auf Fachlogik**, sondern auf
+  die Signaturtabelle des Runners: in ihnen ist das Prüfergebnis zugesichert und
+  grün, ausstehend bleibt eine fachliche Feststellung in Prosa. Vier Befunde aus
+  dieser Arbeitseinheit haben den Runner selbst verbessert — die Verneinung in
+  `leseErgebnisart` („eine Warnung, **keine** Sperre" wurde als Sperre
+  gelesen), die Einordnung von „die Übersteuerung wird … geführt" als
+  Zurückweisung, die Einheit „Lückentage" in `leseMengen` und die Auswertung
+  der Ja/Nein-Zusicherungen gegen `zaehlwirksam` und `vorlaeufig`. Sie sind von
+  der Session, die den Runner führt, noch in derselben Arbeitseinheit behoben
+  worden.
+- **P2 ist fachlich vollständig.** Der Rechenweg aus 5.1.4 rechnet
+  Lückenbeginn, Lückenende, Dreimonatsende, Lückentage, Zählwirksamkeit, den
+  vorläufigen Vermerk und den Beginn der neuen Kette; er steht in allen neun
+  Szenarien unter Zusicherung und ist in allen neun grün. Dass die Prüfung bei
+  **6 von 9** steht und nicht bei 9, liegt an drei Sätzen, die kein
+  Rechenergebnis sind: „die Zeiterfassung für den Unterbrechungszeitraum ist
+  gesperrt" (gehört zu M5, die Zeiterfassung gibt es noch nicht), „der Vermerk
+  wird bei der Wiederaufnahme endgültig" und „die Information nennt, dass die
+  Zählung mit der Wiederaufnahme zurückgesetzt wird". Die 3 sind **keine
+  offene Fachlogik.**
+- **P3, P4, P5, P7 und P8 haben keinen Rechenweg.** Sie sind in `REGELN`
+  eingetragen und liefern **keinen** Befund; ihre Szenarien bleiben ausstehend.
+- **Für `lib/services/` gibt es weiter keinen automatisierten Test.** Die
+  Rechnung der Anbindung ist in `lib/aueg/anbindung.test.ts` ohne Prisma
+  geprüft, der Lade- und Schreibpfad nur von Hand gegen die
+  Entwicklungsdatenbank (siehe oben) und vom Typsystem. Ein Fixture-Test für
+  die Dienste ist eine eigene Arbeitseinheit und die nächste, die ich
+  empfehlen würde.
+- **`equalPayDueDate` bleibt leer.** Die Drehtür setzt die Fälligkeit nach
+  5.3.1 Schritt 5 auf den Kettenbeginn; das abgeleitete Feld selbst rechnet
+  P3 (5.2.3) und steht aus. Angebunden ist bisher nur die **Tatsache**
+  `equalPayDueFromFirstDay`, die 4.3 als Vorbedingung nennt.
+- **Die Liste rechnet je Zeile.** `loadAssignments` und `loadSubmissions`
+  laden Kette, Tarifzuordnungen und Konzernverbund je Vorgang. Bei fünf
+  Einsätzen ist das richtig und unauffällig; bei einer langen Liste wäre eine
+  gemeinsame Abfrage nachzuziehen. Die Richtigkeit ändert das nicht.
+
+---
+
+## 2026-11-05 — Der Runner als Messgerät: vier Fehleinordnungen behoben
+
+**Gemacht**
+
+Diese Einheit hat **keine Fachlogik** angefasst, sondern den Lauf, der sie
+messt — `tests/aueg-runner/support/`. Zwei der vier Fehler hat die parallel
+arbeitende Regelwerk-Session gemeldet, zwei fielen beim Nachsehen auf.
+
+- **`leseErgebnisart` liest die Verneinung mit.** „eine Warnung, keine Sperre"
+  galt als Sperre, weil `/\bSperre\b/` zuerst prüfte. Das sind genau die zwei
+  Sätze, mit denen SPEC 5.5.5 für P6 und P11 entschieden hat, dass die Zusage
+  **warnt** und nicht sperrt — der Lauf machte aus der richtigen Fachlogik ein
+  rotes Szenario. Dass die Regelwerk-Session dem Fehlalarm **nicht** nachgegeben
+  hat, war richtig: eine Anpassung dort hätte eine Rechtsentscheidung
+  umgedreht, um einen Testlauf zu beruhigen.
+- **Die Signatur der zurückgewiesenen Übersteuerung ist eingeengt.**
+  `Übersteuerung (?:wird|…)` fing „die Übersteuerung **wird** in der
+  Übersteuerungsübersicht des Betreibers geführt" (Q11) und verlangte dann,
+  dass kein Befund den Übergang vollzieht — das Gegenteil einer wirksamen
+  Übersteuerung (5.5.4, Invariante 5). Über `Übergang (?:wird|wegen)` fing sie
+  zusätzlich „der Übergang wird am 15.12.2026 ausgelöst", einen Auslöser.
+- **`wertePruefbarkeit` wertet den Mangel aus.** „ist die Prüfung P6 nicht
+  prüfbar" und „ist die Überlassungskette nicht bildbar" sind keine Prosa — der
+  Befund führt `pruefbar` und `mangel`. Führt **kein** Befund einen der beiden
+  Schlüssel, bleibt der Satz ausstehend; Q45 (Kriterium K1, P8) läuft deshalb
+  weiter korrekt ins „kein Befund vor".
+- **Ja/Nein-Zusicherungen und Einheiten in Zusammensetzungen.** „die
+  Unterbrechung ist (nicht) zählwirksam" wird gegen `zaehlwirksam` geprüft, der
+  Vermerk gegen `vorlaeufig`, und die drei Werte des Szenariogrundrisses Q25
+  („Reset", „kein Reset", „keine Lücke") gegen `zaehlwirksam` und `keineLuecke`
+  — eine geschlossene Menge aus 5.1.4. Eine nicht abgebildete vierte Bewertung
+  bliebe ausstehend statt geraten. `leseMengen` liest „die 91 Lückentage"
+  jetzt als 91 **Tage**; die Einheit steckte im Wort, der Satz galt deshalb als
+  unvergleichbar. Die Signatur kannte außerdem nur das kleingeschriebene
+  `zählwirksam`, nicht „Zählwirksamkeit".
+- **Der Runner steht jetzt unter Test** — `erwartung.test.ts` und
+  `werte.test.ts`, 30 Fälle, dazu `tests/aueg-runner/**/*.test.ts` in
+  `vitest.config.ts` (die Ausnahme für `tests/aueg/**` aus harter Regel 1
+  bleibt). Darunter ausdrücklich die Sätze, die Prosa bleiben **müssen**.
+
+**Entscheidungen**
+
+| Thema | Entscheidung |
+|---|---|
+| Fehlalarm im Lauf | wird im Lauf behoben, nie in der Fachlogik — sonst richtet sich die Regel nach dem Messgerät |
+| Zeile der 4.7 mit zwei Prüfungen, eine ohne Rechenweg | bleibt **unbeurteilt** und liefert keinen Befund; ohne beide Einzelergebnisse ist das strengste nach 5.5.2 Nr. 2 nicht bestimmbar. Keine Lücke, nicht zu „reparieren" |
+| Tests auf dem Runner | Pflicht. Beide gemeldeten Fehler lagen monatelang unentdeckt, weil auf dem Messgerät kein Test lag |
+| Zielzahlen vor der Messung | werden nicht genannt. Bei P9 lag eine Vorhersage falsch; gemessen wird am Ende |
+
+**Geprüft**
+
+- `npm run test:aueg` → **267 Szenarien: 82 grün, 0 rot, 185 ausstehend**
+  (vorher 76 grün / 2 rot / 189 ausstehend). Die zwei roten wurden **nicht**
+  grün, sondern ausstehend: dahinter stehen weitere Prosa-Sätze, die der
+  Fehlschlag verdeckt hatte. Q12 hängt an „die tarifliche Equal-Pay-Frist ist
+  für diese Überlassung nicht anwendbar", Q13 an „die Sperre greift erst am
+  Einsatzstart".
+- `npm test` → **554 grün** · `npm run typecheck` → Exit 0 · `npm run build`
+  → kompiliert · `tests/aueg/*.feature` **unverändert** (0 geänderte Dateien)
+- **Phase 3 der Regelwerk-Session durch die Oberfläche gegengeprüft**, nicht
+  nur aus dem Bericht übernommen: der Übergang `planned` → `active` an
+  E-2026-0002 lief durch und schrieb `maxDurationEndDate` = 14.08.2028 und
+  `countedDurationDays` = 1 in die Datenbank — Beginn 15.02.2027 plus 18
+  Monate (die gesetzliche Regelgrenze; PI-0002 ist nur **vorgeschlagen** mit
+  dem zweiten Lieferanten verknüpft, die Kette besteht daher aus einem
+  Einsatz). Kein Übergang wurde neu gesperrt. Danach neu geseedet, der
+  Demo-Stand ist wiederhergestellt.
+- Vor dieser Prüfung war die Entwicklungsdatenbank unverändert — alle
+  abgeleiteten Felder `null`, Zeilenzahlen genau wie der Seed. Die
+  abgebrochene Transaktion der Regelwerk-Session hat nichts hinterlassen.
+
+**Offen / als Nächstes**
+
+- **Für `lib/services/` gibt es keinen automatisierten Test.** Die Dienste sind
+  nur von Hand und über die Oberfläche belegt — ein Fixture-Test wäre die
+  nächste Arbeitseinheit.
+- P3 bis P5, P7 und P8 stehen ohne Rechenweg in der Registry. `equalPayDueDate`
+  bleibt leer, bis P3 läuft.
+- In `RULE_CHECKS_PENDING` bleiben P9 und P10 am Einsatz und an der
+  Verlängerung — zwei Includes, keine neue Fachlogik.
+- Ein Teil der ausstehenden Sätze wäre weiter prüfbar (Meldungsinhalte, die der
+  Befund führt). Das bleibt eine Verbesserung am Runner, nicht an der
+  Fachlogik.
+
+---
+
 ## 2026-11-04 — M4: die Besetzung von der Kandidatenvorlage bis zum Einsatz
 
 **Gemacht**

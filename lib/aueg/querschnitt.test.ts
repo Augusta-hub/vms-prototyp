@@ -49,9 +49,25 @@ describe('Suche nach der Zeile eines Übergangs', () => {
     expect(zeileFuerUebergang('P9', 'stundenzettel', 'inApproval', 'approved')).toBeNull()
   })
 
-  it('liefert keine Zeile für eine Prüfung ohne Rechenweg', () => {
-    expect(zeileFuerUebergang('P1', 'einsatz', 'planned', 'active')).toBeNull()
-    expect(zeileFuerUebergang('P11', 'einsatz', 'planned', 'active')).toBeNull()
+  it('liefert keine Zeile für eine Prüfung ohne abgeschriebene Zeilen', () => {
+    // P3 bis P8 und P11 sind in 4.7 geführt, hier aber noch nicht
+    // abgeschrieben: ihre Zeilen kommen mit ihrem Rechenweg.
+    expect(zeileFuerUebergang('P8', 'einsatz', 'planned', 'active')).toBeNull()
+    expect(zeileFuerUebergang('P3', 'einsatz', null, 'completed')).toBeNull()
+  })
+
+  it('findet die Zeilen zu P1 und P2 (SPEC 5.1)', () => {
+    expect(zeileFuerUebergang('P1', 'einsatz', 'planned', 'active')?.nummer).toBe('Q23')
+    expect(zeileFuerUebergang('P1', 'einsatz', 'interrupted', 'active')?.nummer).toBe('Q26')
+    expect(zeileFuerUebergang('P2', 'einsatz', 'interrupted', 'active')?.nummer).toBe('Q25')
+    expect(zeileFuerUebergang('P2', 'einsatz', 'active', 'interrupted')?.nummer).toBe('Q24')
+  })
+
+  it('nimmt eine Zeile ohne Ausgangsstatus auch bei genanntem Ausgangsstatus (Q11, Q14)', () => {
+    // 4.7 schreibt diese Zeilen als „→ accepted" und „→ planned": sie gelten
+    // dem Übergang unabhängig vom Ausgangszustand.
+    expect(zeileFuerUebergang('P1', 'profilvorschlag', 'releasedToCustomer', 'accepted')?.nummer).toBe('Q11')
+    expect(zeileFuerUebergang('P1', 'einsatz', 'planned', 'planned')?.nummer).toBe('Q14')
   })
 
   it('unterscheidet P9 und P10 am selben Übergang', () => {
@@ -90,8 +106,13 @@ describe('Nächtlicher Lauf (SPEC 5.5.1)', () => {
     expect(zeileFuerNachtlauf('P10', 'einsatz')?.nummer).toBe('N5')
   })
 
+  it('findet N2 und N6 zum Einsatz (SPEC 5.5.1)', () => {
+    expect(zeileFuerNachtlauf('P1', 'einsatz')?.nummer).toBe('N2')
+    expect(zeileFuerNachtlauf('P2', 'einsatz')?.nummer).toBe('N6')
+  })
+
   it('findet keinen nächtlichen Lauf zu einer Prüfung ohne Zeile', () => {
-    expect(zeileFuerNachtlauf('P1', 'einsatz')).toBeNull()
+    expect(zeileFuerNachtlauf('P6', 'einsatz')).toBeNull()
     // N1 gilt dem Lieferanten, N5 dem Einsatz — nicht umgekehrt.
     expect(zeileFuerNachtlauf('P10', 'lieferant')).toBeNull()
     expect(zeileFuerNachtlauf('P9', 'einsatz')).toBeNull()

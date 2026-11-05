@@ -96,7 +96,10 @@ export function leseWerte(satz: string): GeleseneWerte {
 /** Zahlen mit Einheit: "546 Tage", "18 Monate", "21,40 EUR". */
 function leseMengen(satz: string): Menge[] {
   const mengen: Menge[] = []
-  const muster = /(\d+(?:,\d+)?)\s*(Tage|Tag|Monaten|Monate|Monat|EUR)?/g
+  // Zusammensetzungen gehoeren dazu: "die 91 Lueckentage" nennt Tage, auch wenn
+  // die Einheit im Wort steckt. Ohne das las der Lauf die Einheit als "ohne" und
+  // hielt den Satz fuer unvergleichbar.
+  const muster = /(\d+(?:,\d+)?)\s*((?:[A-Za-zÄÖÜäöüß]*[Tt]age?)|Monaten|Monate|Monat|EUR)?/g
   for (const treffer of satz.matchAll(muster)) {
     const rohwert = treffer[1]
     if (rohwert === undefined) continue
@@ -112,7 +115,7 @@ function leseMengen(satz: string): Menge[] {
 function einheitVon(roh: string | undefined): Menge['einheit'] {
   if (roh === undefined) return 'ohne'
   if (roh === 'EUR') return 'eur'
-  if (roh.startsWith('Tag')) return 'tage'
+  if (/[Tt]age?$/.test(roh)) return 'tage'
   return 'monate'
 }
 

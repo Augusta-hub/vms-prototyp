@@ -23,6 +23,15 @@
  * (Benachrichtigungen, Fristenlauf, Audit-Eintrag aus 3.12), sind an ihrer
  * Stelle als Kommentar benannt — nicht stillschweigend weggelassen.
  */
+import {
+  bestehtArbeitsverhaeltnisAmErstenTag,
+  drehtuerstand,
+  haeltVerlaengerungDieFrist,
+  hoechstdauerstand,
+  type Einsatzzeile,
+  type Hoechstdauerstand,
+  type Tarifzeile,
+} from '../aueg/anbindung'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
@@ -63,11 +72,13 @@ import {
 /**
  * Die Ergebnisse aus Kapitel 5, die **noch nicht gerechnet** sind.
  *
- * P9 (Erlaubnis) und P10 (Pflichtnachweise) rechnen in `lib/aueg/` bereits; P1,
- * P4, P6, P7, P8 und P11 stehen aus. Angebunden werden sie **alle** in der
- * Arbeitseinheit zum Regelwerk — dieses Modul ruft `lib/aueg/` bewusst nicht
- * auf, damit die Nahtstelle an einer Stelle liegt und nicht über die Dienste
- * verstreut ist.
+ * **Gerechnet** werden inzwischen P1 (Höchstüberlassungsdauer, 5.1), P6
+ * (Drehtürklausel, 5.3.1) und P11 (Arbeitsverhältnis beim Verleiher, 5.3.4) —
+ * über `lib/aueg/anbindung.ts`, siehe `Regelstand` unten. Hier stehen nur noch
+ * die Tatsachen, für die es keinen Rechenweg gibt (P7 Arbeitskampf, P8
+ * Kennzeichnung) oder deren Eingangsdaten an diesen Übergängen nicht geladen
+ * sind (P9 Erlaubnis, P10 Pflichtnachweise — am Einsatz und an der
+ * Verlängerung; an der Bedarfsanfrage und der Einladung rechnet P9 schon).
  *
  * Gewählt ist der **nicht sperrende** Wert, wie bei `hasAcceptedValidPermit` in
  * 4.1 und 4.2.1 vor P9: eine Vorbedingung, deren Tatsache niemand erhebt, darf
@@ -77,17 +88,331 @@ import {
  */
 const RULE_CHECKS_PENDING = {
   hasBlockingRuleCheck: false,
-  maxDurationExceeded: false,
   mandatoryDocumentsChecked: true,
   mandatoryDocumentsPresent: true,
   noIndustrialActionAtSite: true,
   concretizationComplete: true,
   hasAcceptedValidPermit: true,
-  equalPayDueFromFirstDay: false,
-  comparableWagePresent: true,
-  newEndWithinMaxDuration: true,
   hasAcceptedValidPermitForNewPeriod: true,
 } as const
+
+/**
+ * Die Ergebnisse aus Kapitel 5, die für **diesen** Vorgang gerechnet sind
+ * (SPEC 5.1, 5.3.1, 5.3.4).
+ *
+ * Gerechnet wird in `lib/aueg/`, geladen hier: die Regel bekommt die Zeilen,
+ * der Dienst holt sie. `hoechstdauer` trägt zusätzlich die abgeleiteten Felder
+ * aus 3.7 — `maxDurationEndDate`, `countedDurationDays` und die Einsätze der
+ * Kette, an denen beide fortzuschreiben sind (5.1.3, „Ergebnisfelder").
+ */
+interface Regelstand {
+  readonly maxDurationExceeded: boolean
+  readonly equalPayDueFromFirstDay: boolean
+  readonly newEndWithinMaxDuration: boolean
+  readonly hoechstdauer: Hoechstdauerstand | null
+}
+
+/**
+ * Der Stand, solange die Rechengrundlage fehlt: ohne Kette gibt es keine
+ * Überschreitung, und ohne Erklärung wird die Equal-Pay-Fälligkeit **nicht**
+ * vorgezogen (5.3.1, „Wenn Daten fehlen").
+ */
+const OHNE_REGELSTAND: Regelstand = {
+  maxDurationExceeded: false,
+  equalPayDueFromFirstDay: false,
+  newEndWithinMaxDuration: true,
+  hoechstdauer: null,
+}
+
+/** Die Eingangsdaten, die P1 und P6 aus der Datenbank brauchen. */
+interface Regelgrundlage {
+  /** Die Überlassungskette: alle Einsätze derselben Person bei diesem Kunden. */
+  readonly kette: readonly Einsatzzeile[]
+  readonly tarifzuordnungen: readonly Tarifzeile[]
+  /** Namen der Kunden mit demselben `corporateGroup` (§ 18 AktG, 5.3.1). */
+  readonly konzernunternehmen: readonly string[]
+  readonly identitaetBestaetigt: boolean
+}
+
+/**
+ * Lädt die Überlassungskette (5.0), die Tarifzuordnungen (3.3) und den
+ * Konzernverbund (3.1).
+ *
+ * **Schlüssel der Kette ist die bestätigte Personenidentität** — am Einsatz ist
+ * `workerIdentityId` nur bei bestätigter Verknüpfung gesetzt (3.6, 4.2).
+ * Fehlt sie, bleibt die Kette auf den Kandidatensatz **eines** Lieferanten
+ * begrenzt; `countedDurationDays` kann dadurch nur zu niedrig sein, nie zu hoch
+ * (5.1.5), und der Rechenweg führt den Vermerk mit.
+ */
+async function grundlageLaden(bezug: {
+  readonly customerId: string
+  readonly siteId: string
+  readonly workerIdentityId: string | null
+  readonly candidateId: string
+  readonly corporateGroup: string | null
+}): Promise<Regelgrundlage> {
+  const [kette, tarifzuordnungen, konzern] = await Promise.all([
+    prisma.assignment.findMany({
+      where: {
+        customerId: bezug.customerId,
+        ...(bezug.workerIdentityId !== null
+          ? { workerIdentityId: bezug.workerIdentityId }
+          : { candidateId: bezug.candidateId }),
+      },
+      include: { interruptions: true },
+      orderBy: [{ plannedStartDate: 'asc' }],
+    }),
+    // 5.1.2: Rang 1 der Standort, Rang 2 der Kunde. Die Verleiherseite wird
+    // nicht gelesen und deshalb nicht geladen.
+    prisma.collectiveAgreementAssignment.findMany({
+      where: { OR: [{ siteId: bezug.siteId }, { customerId: bezug.customerId }] },
+    }),
+    bezug.corporateGroup === null
+      ? Promise.resolve([])
+      : prisma.customer.findMany({
+          where: { corporateGroup: bezug.corporateGroup },
+          select: { legalName: true },
+        }),
+  ])
+
+  return {
+    kette: kette.map((zeile) => ({
+      id: zeile.id,
+      status: zeile.status,
+      plannedStartDate: zeile.plannedStartDate,
+      plannedEndDate: zeile.plannedEndDate,
+      actualStartDate: zeile.actualStartDate,
+      actualEndDate: zeile.actualEndDate,
+      interruptions: zeile.interruptions.map((pause) => ({
+        interruptionFrom: pause.interruptionFrom,
+        interruptionTo: pause.interruptionTo,
+      })),
+    })),
+    tarifzuordnungen,
+    konzernunternehmen: konzern.map((eintrag) => eintrag.legalName),
+    identitaetBestaetigt: bezug.workerIdentityId !== null,
+  }
+}
+
+/**
+ * Der Prüfzeitraum bzw. Stichtag eines Einsatzes nach der Tabelle in SPEC 5.0.
+ * Er hängt am **Zustand** des Einsatzes, nicht am Tag des Aufrufs: ein geplanter
+ * Einsatz wird über seinen geplanten Zeitraum beurteilt, ein laufender über
+ * seinen tatsächlichen Beginn.
+ */
+function dauerbezug(einsatz: {
+  readonly status: string
+  readonly plannedStartDate: Date
+  readonly plannedEndDate: Date | null
+  readonly actualStartDate: Date | null
+  readonly actualEndDate: Date | null
+}): { stichtag: Date | null; zeitraum: { von: Date; bis: Date | null } | null } {
+  if (einsatz.status === 'planned') {
+    return {
+      stichtag: null,
+      zeitraum: { von: einsatz.plannedStartDate, bis: einsatz.plannedEndDate },
+    }
+  }
+  if (einsatz.status === 'completed' || einsatz.status === 'terminatedEarly') {
+    return { stichtag: einsatz.actualEndDate ?? einsatz.actualStartDate, zeitraum: null }
+  }
+  return { stichtag: einsatz.actualStartDate, zeitraum: null }
+}
+
+/** Ein geladener Einsatz als Zeile für das Regelwerk (SPEC 3.7). */
+function alsEinsatzzeile(assignment: {
+  readonly id: string
+  readonly status: string
+  readonly plannedStartDate: Date
+  readonly plannedEndDate: Date | null
+  readonly actualStartDate: Date | null
+  readonly actualEndDate: Date | null
+  readonly interruptions: readonly {
+    readonly interruptionFrom: Date
+    readonly interruptionTo: Date | null
+  }[]
+}): Einsatzzeile {
+  return {
+    id: assignment.id,
+    status: assignment.status as Einsatzzeile['status'],
+    plannedStartDate: assignment.plannedStartDate,
+    plannedEndDate: assignment.plannedEndDate,
+    actualStartDate: assignment.actualStartDate,
+    actualEndDate: assignment.actualEndDate,
+    interruptions: assignment.interruptions.map((pause) => ({
+      interruptionFrom: pause.interruptionFrom,
+      interruptionTo: pause.interruptionTo,
+    })),
+  }
+}
+
+/**
+ * Der erste Wiederaufnahmetag: `interruptionTo` + 1 Tag (SPEC 5.0, Zeile
+ * `interrupted` → `active`). Die Datumsfelder sind UTC-Mitternacht, deshalb ist
+ * das reine Arithmetik und keine Zeitzonenumrechnung.
+ */
+function folgetagVon(wert: Date | null): Date | null {
+  return wert === null ? null : new Date(wert.getTime() + 86_400_000)
+}
+
+/** Die Zeile des Vorgangs selbst — sie ersetzt in der Kette die geladene. */
+function mitVorgang(
+  kette: readonly Einsatzzeile[],
+  zeile: Einsatzzeile,
+): readonly Einsatzzeile[] {
+  return [...kette.filter((eintrag) => eintrag.id !== zeile.id), zeile]
+}
+
+/**
+ * Der Regelstand eines Einsatzes (P1 und P6). `bezug` ist der Stichtag bzw.
+ * Prüfzeitraum des **Übergangs**, der geprüft wird (5.0); ohne Angabe gilt der
+ * Zustand des Einsatzes.
+ */
+async function regelstandFuerEinsatz(
+  zeile: Einsatzzeile,
+  bezug: { stichtag: Date | null; zeitraum: { von: Date; bis: Date | null } | null },
+  objekt: {
+    readonly customerId: string
+    readonly siteId: string
+    readonly workerIdentityId: string | null
+    readonly candidateId: string
+    readonly customer: { readonly legalName: string; readonly corporateGroup: string | null }
+    readonly candidate: {
+      readonly previousEmploymentDeclaredAt: Date | null
+      readonly previousEmploymentExisted: boolean | null
+      readonly previousEmploymentEndedOn: Date | null
+      readonly previousEmploymentEmployer: string | null
+    }
+  },
+): Promise<Regelstand> {
+  const grundlage = await grundlageLaden({
+    customerId: objekt.customerId,
+    siteId: objekt.siteId,
+    workerIdentityId: objekt.workerIdentityId,
+    candidateId: objekt.candidateId,
+    corporateGroup: objekt.customer.corporateGroup,
+  })
+
+  const dauer = hoechstdauerstand({
+    einsaetze: mitVorgang(grundlage.kette, zeile),
+    kunde: objekt.customer.legalName,
+    tarifzuordnungen: grundlage.tarifzuordnungen,
+    stichtag: bezug.stichtag,
+    zeitraum: bezug.zeitraum,
+    identitaetBestaetigt: grundlage.identitaetBestaetigt,
+  })
+
+  const drehtuer = drehtuerstand({
+    kandidat: objekt.candidate,
+    entleiher: {
+      name: objekt.customer.legalName,
+      corporateGroup: objekt.customer.corporateGroup,
+    },
+    konzernunternehmen: grundlage.konzernunternehmen,
+    ersterUeberlassungstag: zeile.actualStartDate ?? zeile.plannedStartDate,
+  })
+
+  return {
+    maxDurationExceeded: dauer.maxDurationExceeded,
+    equalPayDueFromFirstDay: drehtuer.equalPayDueFromFirstDay,
+    newEndWithinMaxDuration: !dauer.maxDurationExceeded,
+    hoechstdauer: dauer,
+  }
+}
+
+/** Dieselbe Rechnung für eine Verlängerung: `newEndDate` gegen das Fristende (Q28, Q30). */
+async function regelstandFuerVerlaengerung(
+  assignment: LoadedAssignment,
+  neuesEnde: Date,
+): Promise<Regelstand> {
+  const grundlage = await grundlageLaden({
+    customerId: assignment.customerId,
+    siteId: assignment.siteId,
+    workerIdentityId: assignment.workerIdentityId,
+    candidateId: assignment.candidateId,
+    corporateGroup: assignment.customer.corporateGroup,
+  })
+  const dauer = haeltVerlaengerungDieFrist({
+    einsaetze: grundlage.kette,
+    kunde: assignment.customer.legalName,
+    tarifzuordnungen: grundlage.tarifzuordnungen,
+    bisherigesEnde: assignment.plannedEndDate,
+    neuesEnde,
+  })
+  return {
+    maxDurationExceeded: dauer.maxDurationExceeded,
+    equalPayDueFromFirstDay: false,
+    newEndWithinMaxDuration: !dauer.maxDurationExceeded,
+    hoechstdauer: dauer,
+  }
+}
+
+/**
+ * Der Regelstand eines Profilvorschlags (P1 an Q07 und Q11). Prüfzeitraum nach
+ * 5.0: `availableFrom` des Vorschlags bis `endDate` der Bedarfsanfrage, bei
+ * leerem `endDate` bis `startDate`.
+ */
+async function regelstandFuerVorschlag(vorschlag: {
+  readonly availableFrom: Date
+  readonly candidate: { readonly id: string; readonly workerIdentityId: string | null }
+  readonly demandRequest: {
+    readonly customerId: string
+    readonly siteId: string
+    readonly startDate: Date
+    readonly endDate: Date | null
+  }
+}): Promise<Regelstand> {
+  const kunde = await prisma.customer.findUnique({
+    where: { id: vorschlag.demandRequest.customerId },
+    select: { legalName: true, corporateGroup: true },
+  })
+  if (kunde === null) return OHNE_REGELSTAND
+
+  const grundlage = await grundlageLaden({
+    customerId: vorschlag.demandRequest.customerId,
+    siteId: vorschlag.demandRequest.siteId,
+    workerIdentityId: vorschlag.candidate.workerIdentityId,
+    candidateId: vorschlag.candidate.id,
+    corporateGroup: null,
+  })
+  const dauer = hoechstdauerstand({
+    einsaetze: grundlage.kette,
+    kunde: kunde.legalName,
+    tarifzuordnungen: grundlage.tarifzuordnungen,
+    stichtag: vorschlag.availableFrom,
+    zeitraum: {
+      von: vorschlag.availableFrom,
+      bis: vorschlag.demandRequest.endDate ?? vorschlag.demandRequest.startDate,
+    },
+    identitaetBestaetigt: grundlage.identitaetBestaetigt,
+  })
+  return {
+    maxDurationExceeded: dauer.maxDurationExceeded,
+    equalPayDueFromFirstDay: false,
+    newEndWithinMaxDuration: !dauer.maxDurationExceeded,
+    hoechstdauer: dauer,
+  }
+}
+
+/**
+ * Schreibt `maxDurationEndDate` und `countedDurationDays` an **jedem** Einsatz
+ * der Kette fort (SPEC 5.1.3, „Ergebnisfelder"): sonst zeigt ein älterer
+ * Einsatz einen überholten Stand. Läuft in derselben Transaktion wie der
+ * Übergang, der die Rechengrundlage geändert hat (5.5.1 b).
+ */
+async function schreibeFristenstand(
+  tx: Pick<typeof prisma, 'assignment'>,
+  stand: Hoechstdauerstand | null,
+): Promise<void> {
+  if (stand === null || stand.chainAssignmentIds.length === 0) return
+  await tx.assignment.updateMany({
+    where: { id: { in: [...stand.chainAssignmentIds] } },
+    data: {
+      maxDurationEndDate: stand.maxDurationEndDate,
+      countedDurationDays: stand.countedDurationDays,
+    },
+  })
+}
 
 const DAY = (value: Date | null): string | null =>
   value === null ? null : value.toISOString().slice(0, 10)
@@ -406,6 +731,7 @@ function hasPreviousEmploymentDeclaration(candidate: {
 
 function submissionFacts(
   submission: LoadedSubmission,
+  regelstand: Regelstand,
   evaluationDate: Date,
   overrides: Partial<CandidateSubmissionFacts> = {},
 ): CandidateSubmissionFacts {
@@ -420,7 +746,8 @@ function submissionFacts(
     decidedById: submission.decidedById,
     decisionReason: submission.decisionReason,
     hasBlockingRuleCheck: RULE_CHECKS_PENDING.hasBlockingRuleCheck,
-    maxDurationExceeded: RULE_CHECKS_PENDING.maxDurationExceeded,
+    // P1 (5.1): gerechnet über die Überlassungskette, siehe `Regelstand`.
+    maxDurationExceeded: regelstand.maxDurationExceeded,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(submission.candidate),
     mandatoryDocumentsChecked: RULE_CHECKS_PENDING.mandatoryDocumentsChecked,
     evaluationDate,
@@ -451,6 +778,17 @@ export async function loadSubmissions(
     orderBy: [{ submissionNumber: 'asc' }],
   })
 
+  // Der Regelstand je Vorschlag wird **vor** der Projektion gerechnet: er
+  // braucht die Datenbank, die Projektion nicht.
+  const regelstaende = new Map(
+    await Promise.all(
+      submissions.map(
+        async (submission) =>
+          [submission.id, await regelstandFuerVorschlag(submission)] as const,
+      ),
+    ),
+  )
+
   return submissions.flatMap((submission) => {
     const status = submission.status as CandidateSubmissionState
     const ref = submissionResource(submission)
@@ -458,7 +796,11 @@ export async function loadSubmissions(
     const fields = project(describeSubmission(submission), decision)
     if (fields === null) return []
 
-    const facts = submissionFacts(submission, evaluationDate)
+    const facts = submissionFacts(
+      submission,
+      regelstaende.get(submission.id) ?? OHNE_REGELSTAND,
+      evaluationDate,
+    )
     const availableTransitions = transitionsFrom(CANDIDATE_SUBMISSION_MODEL, status).flatMap(
       (name) => {
         const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, name, {
@@ -546,7 +888,14 @@ export async function submitCandidate(
     decidedById: null,
     decisionReason: null,
     hasBlockingRuleCheck: RULE_CHECKS_PENDING.hasBlockingRuleCheck,
-    maxDurationExceeded: RULE_CHECKS_PENDING.maxDurationExceeded,
+    // P1 (5.1) über die Kette des Kandidaten beim Kunden der Anfrage.
+    maxDurationExceeded: (
+      await regelstandFuerVorschlag({
+        availableFrom: input.availableFrom,
+        candidate,
+        demandRequest,
+      })
+    ).maxDurationExceeded,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(candidate),
     mandatoryDocumentsChecked: RULE_CHECKS_PENDING.mandatoryDocumentsChecked,
     evaluationDate,
@@ -648,7 +997,12 @@ export async function transitionSubmission(
     currentStatus: status,
     subject: identity.subject,
     resource: submissionResource(submission),
-    facts: submissionFacts(submission, evaluationDate, overrides),
+    facts: submissionFacts(
+      submission,
+      await regelstandFuerVorschlag(submission),
+      evaluationDate,
+      overrides,
+    ),
   })
   if (!outcome.applied) return rejection(outcome)
 
@@ -867,6 +1221,7 @@ function describeAssignment(assignment: LoadedAssignment): AssignmentFields {
  */
 function assignmentFacts(
   assignment: LoadedAssignment,
+  regelstand: Regelstand,
   evaluationDate: Date,
   overrides: Partial<AssignmentFacts> = {},
 ): AssignmentFacts {
@@ -893,11 +1248,12 @@ function assignmentFacts(
     hasAcceptedValidPermit: RULE_CHECKS_PENDING.hasAcceptedValidPermit,
     mandatoryDocumentsPresent: RULE_CHECKS_PENDING.mandatoryDocumentsPresent,
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
-    maxDurationExceeded: RULE_CHECKS_PENDING.maxDurationExceeded,
+    // P1 (5.1) und P6 (5.3.1): gerechnet, siehe `Regelstand`.
+    maxDurationExceeded: regelstand.maxDurationExceeded,
     concretizationComplete: RULE_CHECKS_PENDING.concretizationComplete,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(assignment.candidate),
     employmentRelationshipOnFirstDay: employmentOnFirstDay(assignment),
-    equalPayDueFromFirstDay: RULE_CHECKS_PENDING.equalPayDueFromFirstDay,
+    equalPayDueFromFirstDay: regelstand.equalPayDueFromFirstDay,
     comparableWagePresent: assignment.comparableWage !== null,
     evaluationDate,
     ...overrides,
@@ -908,9 +1264,10 @@ function assignmentFacts(
  * Besteht am ersten Überlassungstag ein Arbeitsverhältnis beim Verleiher
  * (3.6, `employmentStatusWithSupplier` und `employedSince`)?
  *
- * Wie bei der Erklärung zur Vorbeschäftigung ist das eine **Feldabfrage**, nicht
- * P11: die Prüfung aus 5.3.4 mit Ergebnisart, Adressaten und Behandlung
- * fehlender Daten steht aus.
+ * Das ist **P11** aus SPEC 5.3.4 und wird dort gerechnet, nicht hier: diese
+ * Funktion reicht die Felder an `lib/aueg/anbindung.ts` weiter. Vorher stand die
+ * Regel ein zweites Mal in diesem Modul — das Gesetz gehört an **eine** Stelle,
+ * sonst laufen die beiden Fassungen auseinander.
  */
 function employmentOnFirstDay(assignment: {
   readonly candidate: {
@@ -920,11 +1277,14 @@ function employmentOnFirstDay(assignment: {
   readonly actualStartDate: Date | null
   readonly plannedStartDate: Date
 }): boolean {
-  if (assignment.candidate.employmentStatusWithSupplier !== 'employed') return false
-  const employedSince = assignment.candidate.employedSince
-  if (employedSince === null) return false
-  const firstDay = assignment.actualStartDate ?? assignment.plannedStartDate
-  return employedSince.getTime() <= firstDay.getTime()
+  return bestehtArbeitsverhaeltnisAmErstenTag({
+    kandidat: assignment.candidate,
+    ersterUeberlassungstag: assignment.actualStartDate ?? assignment.plannedStartDate,
+    // Die Vorprüfung (Q09, Q13, Q17) und der Einsatzstart (Q47) unterscheiden
+    // sich in der **Ergebnisart** aus 4.7, nicht im Treffer; die Tatsache, die
+    // 4.3 hier verlangt, ist dieselbe.
+    amEinsatzstart: assignment.actualStartDate !== null,
+  }).employmentRelationshipOnFirstDay
 }
 
 /**
@@ -965,6 +1325,37 @@ export async function loadAssignments(
     orderBy: [{ assignmentNumber: 'asc' }],
   })
 
+  // Der Regelstand je Einsatz und je Verlängerung wird **vor** der Projektion
+  // gerechnet: er braucht die Datenbank, die Projektion nicht.
+  const staende = new Map(
+    await Promise.all(
+      assignments.map(
+        async (assignment) =>
+          [
+            assignment.id,
+            await regelstandFuerEinsatz(
+              alsEinsatzzeile(assignment),
+              dauerbezug(assignment),
+              assignment,
+            ),
+          ] as const,
+      ),
+    ),
+  )
+  const verlaengerungsstaende = new Map(
+    await Promise.all(
+      assignments.flatMap((assignment) =>
+        assignment.extensions.map(
+          async (extension) =>
+            [
+              extension.id,
+              await regelstandFuerVerlaengerung(assignment, extension.newEndDate),
+            ] as const,
+        ),
+      ),
+    ),
+  )
+
   return assignments.flatMap((assignment) => {
     const status = assignment.status as AssignmentState
     const ref = assignmentResource(assignment)
@@ -972,7 +1363,11 @@ export async function loadAssignments(
     const fields = project(describeAssignment(assignment), decision)
     if (fields === null) return []
 
-    const facts = assignmentFacts(assignment, evaluationDate)
+    const facts = assignmentFacts(
+      assignment,
+      staende.get(assignment.id) ?? OHNE_REGELSTAND,
+      evaluationDate,
+    )
     const availableTransitions = transitionsFrom(ASSIGNMENT_MODEL, status).flatMap((name) => {
       const outcome = attemptTransition(ASSIGNMENT_MODEL, name, {
         currentStatus: status,
@@ -993,7 +1388,13 @@ export async function loadAssignments(
         availableTransitions,
         terminal: isTerminal(ASSIGNMENT_MODEL, status),
         extensions: assignment.extensions.map((extension) =>
-          describeExtension(assignment, extension, identity, evaluationDate),
+          describeExtension(
+            assignment,
+            extension,
+            verlaengerungsstaende.get(extension.id) ?? OHNE_REGELSTAND,
+            identity,
+            evaluationDate,
+          ),
         ),
         interruptions: assignment.interruptions.map((entry) => ({
           id: entry.id,
@@ -1021,6 +1422,7 @@ export async function loadAssignments(
 function describeExtension(
   assignment: LoadedAssignment,
   extension: LoadedAssignment['extensions'][number],
+  regelstand: Regelstand,
   identity: LoadedIdentity,
   evaluationDate: Date,
 ): ExtensionSummary {
@@ -1035,7 +1437,7 @@ function describeExtension(
     },
     status,
   )
-  const facts = extensionFacts(assignment, extension, identity.user.id, evaluationDate)
+  const facts = extensionFacts(assignment, regelstand, extension, identity.user.id, evaluationDate)
   return {
     id: extension.id,
     status,
@@ -1059,6 +1461,7 @@ function describeExtension(
 
 function extensionFacts(
   assignment: Pick<LoadedAssignment, 'status' | 'plannedEndDate'>,
+  regelstand: Regelstand,
   extension: {
     readonly newEndDate: Date
     readonly reason: string
@@ -1079,7 +1482,8 @@ function extensionFacts(
     actingUserId,
     approvedById: extension.approvedById,
     rejectionReason: extension.rejectionReason,
-    newEndWithinMaxDuration: RULE_CHECKS_PENDING.newEndWithinMaxDuration,
+    // P1 an der Verlängerung (Q28, Q30): `newEndDate` gegen das Fristende.
+    newEndWithinMaxDuration: regelstand.newEndWithinMaxDuration,
     hasAcceptedValidPermitForNewPeriod: RULE_CHECKS_PENDING.hasAcceptedValidPermitForNewPeriod,
     evaluationDate,
     ...overrides,
@@ -1159,6 +1563,26 @@ export async function createAssignment(
   const comparableWage: number | string | null =
     input.comparableWage ?? wageEntry?.comparableWage.toString() ?? null
 
+  // P1 und P6 für den Einsatz, der **noch nicht** gespeichert ist: seine
+  // vorgesehenen Tage gehen als eigene Zeile in die Kette (5.1.3, Schritt 6).
+  const neueZeile: Einsatzzeile = {
+    id: '(neuer Einsatz)',
+    status: 'planned',
+    plannedStartDate: input.plannedStartDate,
+    plannedEndDate: input.plannedEndDate,
+    actualStartDate: null,
+    actualEndDate: null,
+    interruptions: [],
+  }
+  const regelstand = await regelstandFuerEinsatz(neueZeile, dauerbezug(neueZeile), {
+    customerId: submission.demandRequest.customerId,
+    siteId: submission.demandRequest.siteId,
+    workerIdentityId: submission.candidate.workerIdentityId,
+    candidateId: submission.candidate.id,
+    customer: submission.demandRequest.customer,
+    candidate: submission.candidate,
+  })
+
   const facts: AssignmentFacts = {
     submissionStatus: submission.status,
     supplierStatus: submission.candidate.supplier.status,
@@ -1181,7 +1605,7 @@ export async function createAssignment(
     hasAcceptedValidPermit: RULE_CHECKS_PENDING.hasAcceptedValidPermit,
     mandatoryDocumentsPresent: RULE_CHECKS_PENDING.mandatoryDocumentsPresent,
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
-    maxDurationExceeded: RULE_CHECKS_PENDING.maxDurationExceeded,
+    maxDurationExceeded: regelstand.maxDurationExceeded,
     concretizationComplete: RULE_CHECKS_PENDING.concretizationComplete,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(submission.candidate),
     employmentRelationshipOnFirstDay: employmentOnFirstDay({
@@ -1189,7 +1613,7 @@ export async function createAssignment(
       actualStartDate: null,
       plannedStartDate: input.plannedStartDate,
     }),
-    equalPayDueFromFirstDay: RULE_CHECKS_PENDING.equalPayDueFromFirstDay,
+    equalPayDueFromFirstDay: regelstand.equalPayDueFromFirstDay,
     comparableWagePresent: comparableWage !== null,
     evaluationDate,
   }
@@ -1228,17 +1652,31 @@ export async function createAssignment(
         comparableWageCurrency: comparableWage === null ? null : 'EUR',
         status: 'planned',
         createdById: identity.user.id,
+        // 5.1.3, „Ergebnisfelder": der Einsatz trägt den Fristenstand seiner
+        // Kette von Anfang an — gerechnet mit seinen eigenen vorgesehenen
+        // Tagen (Schritt 6), nicht erst beim Start.
+        maxDurationEndDate: regelstand.hoechstdauer?.maxDurationEndDate ?? null,
+        countedDurationDays: regelstand.hoechstdauer?.countedDurationDays ?? null,
       },
     })
+    // Dieselben Werte an den **übrigen** Einsätzen der Kette; der neue trägt
+    // sie schon. Die Kennung des neuen Einsatzes stand beim Rechnen noch nicht
+    // fest und ist deshalb kein Ziel.
+    if (regelstand.hoechstdauer !== null) {
+      await schreibeFristenstand(prisma, {
+        ...regelstand.hoechstdauer,
+        chainAssignmentIds: regelstand.hoechstdauer.chainAssignmentIds.filter(
+          (kennung) => kennung !== '(neuer Einsatz)',
+        ),
+      })
+    }
   } catch (error) {
     return asFailure(error, 'Einsatz konnte nicht angelegt werden')
   }
   // Nebenwirkungen aus 4.3.1, die der Prototyp noch nicht hat:
-  // Benachrichtigung an `KB`, `KE` und `LD`; die abgeleiteten Felder
-  // `maxDurationEndDate`, `equalPayDueDate` und `countedDurationDays` rechnet
-  // Kapitel 5 (P1, P2, P3) und bleiben bis dahin leer. Die Bedarfsanfrage auf
-  // `filled` zu setzen ist ein eigener Übergang (4.1) und bleibt beim
-  // Betreiber.
+  // Benachrichtigung an `KB`, `KE` und `LD`. `equalPayDueDate` rechnet P3
+  // (5.2) und bleibt bis dahin leer. Die Bedarfsanfrage auf `filled` zu setzen
+  // ist ein eigener Übergang (4.1) und bleibt beim Betreiber.
   return success('Einsatz angelegt; Status „planned" (4.3.1).')
 }
 
@@ -1286,11 +1724,30 @@ export async function transitionAssignment(
     ...(input.transition === 'resume' ? { interruptionTo: input.interruptionTo } : {}),
   }
 
+  // Der Stichtag des Übergangs nach der Tabelle in SPEC 5.0 — nicht der Tag des
+  // Aufrufs. Die Zeile des Vorgangs trägt die Daten, die der Übergang mitbringt.
+  const zeile: Einsatzzeile = {
+    ...alsEinsatzzeile(assignment),
+    actualStartDate: input.actualStartDate ?? assignment.actualStartDate,
+    actualEndDate: input.actualEndDate ?? assignment.actualEndDate,
+  }
+  const bezug =
+    input.transition === 'start'
+      ? { stichtag: input.actualStartDate, zeitraum: null }
+      : input.transition === 'interrupt'
+        ? { stichtag: input.interruptionFrom, zeitraum: null }
+        : input.transition === 'resume'
+          ? { stichtag: folgetagVon(input.interruptionTo), zeitraum: null }
+          : input.transition === 'complete' || input.transition === 'terminateEarly'
+            ? { stichtag: input.actualEndDate, zeitraum: null }
+            : dauerbezug(zeile)
+  const regelstand = await regelstandFuerEinsatz(zeile, bezug, assignment)
+
   const outcome = attemptTransition(ASSIGNMENT_MODEL, input.transition, {
     currentStatus: status,
     subject: identity.subject,
     resource: assignmentResource(assignment),
-    facts: assignmentFacts(assignment, evaluationDate, overrides),
+    facts: assignmentFacts(assignment, regelstand, evaluationDate, overrides),
   })
   if (!outcome.applied) return rejection(outcome)
 
@@ -1319,6 +1776,11 @@ export async function transitionAssignment(
           data: { interruptionTo: input.interruptionTo, updatedById: identity.user.id },
         })
       }
+      // 5.1.3, „Ergebnisfelder": `maxDurationEndDate` und
+      // `countedDurationDays` werden an **jedem** Einsatz der Kette
+      // fortgeschrieben — in derselben Transaktion wie der Übergang, der die
+      // Rechengrundlage geändert hat (5.5.1 b).
+      await schreibeFristenstand(tx, regelstand.hoechstdauer)
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Einsatz konnte nicht gespeichert werden')
@@ -1453,6 +1915,7 @@ export async function requestExtension(
     resource: ref,
     facts: extensionFacts(
       assignment,
+      await regelstandFuerVerlaengerung(assignment, input.newEndDate),
       {
         newEndDate: input.newEndDate,
         reason: input.reason,
@@ -1530,6 +1993,7 @@ export async function transitionExtension(
     resource: ref,
     facts: extensionFacts(
       assignment,
+      await regelstandFuerVerlaengerung(assignment, extension.newEndDate),
       {
         newEndDate: extension.newEndDate,
         reason: extension.reason,
@@ -1561,12 +2025,19 @@ export async function transitionExtension(
       if (input.transition === 'makeEffective') {
         // 4.3.2: `plannedEndDate` wird verschoben; der Einsatz bleibt in
         // seinem Zustand — „verlängert" ist **kein** Zustand (4.3.1).
-        // `maxDurationEndDate` und `equalPayDueDate` werden neu abgeleitet
-        // (5.1, 5.2) und stehen aus.
         await tx.assignment.update({
           where: { id: assignment.id },
           data: { plannedEndDate: extension.newEndDate, updatedById: identity.user.id },
         })
+        // Das neue Ende ist Rechengrundlage: `maxDurationEndDate` und
+        // `countedDurationDays` werden mit ihm neu abgeleitet (5.1, 5.5.1 b).
+        // `equalPayDueDate` folgt mit P3 (5.2) und bleibt bis dahin leer.
+        const nachVerlaengerung = await regelstandFuerEinsatz(
+          { ...alsEinsatzzeile(assignment), plannedEndDate: extension.newEndDate },
+          dauerbezug({ ...assignment, plannedEndDate: extension.newEndDate }),
+          assignment,
+        )
+        await schreibeFristenstand(tx, nachVerlaengerung.hoechstdauer)
       }
     })
   } catch (error) {

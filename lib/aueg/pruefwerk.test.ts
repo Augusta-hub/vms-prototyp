@@ -55,16 +55,16 @@ function auftrag(
 }
 
 describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
-  it('hat bisher zwei Rechenwege: P9 und P10', () => {
-    expect(umgesetztePruefungen()).toEqual(['P9', 'P10'])
+  it('hat bisher sechs Rechenwege: P1, P2, P6, P9, P10 und P11', () => {
+    expect(umgesetztePruefungen()).toEqual(['P1', 'P2', 'P6', 'P9', 'P10', 'P11'])
   })
 
-  it('liefert für eine Prüfung ohne Rechenweg keinen Befund', () => {
+  it('liefert keinen Befund, solange eine erwartete Prüfung keinen Rechenweg hat', () => {
     const befunde = pruefe(
       auftrag(
         ['ein Einsatz von "Miriam Falk" steht im Status "planned" mit tatsächlichem Beginn 01.03.2026'],
         { satz: 'der MSP-Disponent den Einsatz in den Status "active" überführt', objektart: 'einsatz', zielstatus: 'active' },
-        ['P1', 'P11'],
+        ['P9', 'P4'],
       ),
     )
     // Eine nicht umgesetzte Prüfung darf nicht wie eine erfüllte aussehen.

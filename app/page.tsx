@@ -60,8 +60,9 @@ export default async function Home() {
         Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat und
         Profilvorschlag sowie der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3. Noch nicht
         umgesetzt: Zeiten (3.8), Abrechnung (3.9), Nachweise (3.10) und das Protokoll (3.12). Aus
-        Kapitel 5 laufen P9 (AÜG-Erlaubnis) und P10 (Pflichtnachweise); an den Übergängen des
-        Kernprozesses greift noch keine Prüfung.
+        Kapitel 5 rechnen P1, P2, P6, P9, P10 und P11; P1, P6 und P11 greifen an den Übergängen
+        des Einsatzes und schreiben das Fristende und die angerechnete Dauer fort. P3 bis P5, P7
+        und P8 stehen aus — die Equal-Pay-Fälligkeit bleibt deshalb leer.
       </p>
 
       <h2>Testidentität</h2>

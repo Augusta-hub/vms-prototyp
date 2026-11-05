@@ -47,13 +47,23 @@ export interface Erwartung {
 }
 
 const SIGNATUREN: ReadonlyArray<readonly [Erwartungsart, RegExp]> = [
-  ['uebersteuerung_zurueckgewiesen', /Übersteuerung (?:wird|zurückgewiesen)|wird die Übersteuerung zurückgewiesen|Übergang (?:wird|wegen)/],
+  // Nur die **Zurückweisung**, nicht jeder Satz über eine Übersteuerung: das
+  // frühere `Übersteuerung (?:wird|…)` fing auch „die Übersteuerung **wird** in
+  // der Übersteuerungsübersicht des Betreibers geführt" (Q11) und verlangte
+  // dann, dass kein Befund den Übergang vollzieht — das Gegenteil einer
+  // wirksamen Übersteuerung (5.5.4, Invariante 5). Ebenso muss „Übergang" das
+  // Wort „zurückgewiesen" tragen; „der Übergang wird am 15.12.2026 ausgelöst"
+  // ist ein Auslöser, keine Zurückweisung.
+  [
+    'uebersteuerung_zurueckgewiesen',
+    /Übersteuerung (?:wird )?zurückgewiesen|Übergang (?:wird|wegen) [^.]*zurückgewiesen/,
+  ],
   ['protokolleintrag', /Protokolleintrag|Protokolleinträge|wird protokolliert|protokolliert\b|Prüfhistorie/],
   ['ergebnisart', /Ergebnis(?:se)? (?:der Prüfung|der Prüfungen|der Bewertung|des Prüfung)?.*(?:Information|Warnung|Sperre|Treffer)|ist eine (?:Information|Warnung|Sperre)|ist ein Treffer|ist (?:eine|das) Sperre|Einzelergebnis|Sammelergebnis|Ergebnis ist "/],
   ['kriterium', /Kriterium|Kriterien K\d/],
   ['pruefbarkeit', /nicht prüfbar|nicht ausführbar|wirkt (?:hier )?(?:nicht )?wie ein Treffer|nicht bildbar|nicht bestimmbar|wie "ja" gerechnet|wie "kein Eintrag" behandelt/],
   ['deckung', /gedeckt|deckt (?:keinen|nichts|den|mit)|umschließt/],
-  ['berechneter_wert', /Kettenbeginn|Tagebudget|Fristbudget|angerechnete Dauer|Restbudget|Fristende|Fälligkeit|Rückschaufenster|Lückenbeginn|Lückenende|Prüfzeitraum|Dreimonatsfrist|beträgt \d+|zählt (?:jeder|einmal)|Zählgrundlage|zählwirksam|Frist von \d+ Monaten|gilt die (?:Frist|Grenze|gesetzliche)|mit (?:höchstens )?\d+ Monaten gerechnet|Regelgrenze von \d+ Monaten|neue Kette beginnt|Zählung (?:nicht )?zurück/],
+  ['berechneter_wert', /Kettenbeginn|Tagebudget|Fristbudget|angerechnete Dauer|Restbudget|Fristende|Fälligkeit|Rückschaufenster|Lückenbeginn|Lückenende|Prüfzeitraum|Dreimonatsfrist|beträgt \d+|zählt (?:jeder|einmal)|Zählgrundlage|zählwirksam|Zählwirksamkeit|Ergebnis der Bewertung ist "|Frist von \d+ Monaten|gilt die (?:Frist|Grenze|gesetzliche)|mit (?:höchstens )?\d+ Monaten gerechnet|Regelgrenze von \d+ Monaten|neue Kette beginnt|Zählung (?:nicht )?zurück/],
   ['vorgangsstatus', /Status (?:des|der) .* ist|entsteht kein|Status .* bleibt|Status .* unverändert|entstehen im Status|steht im Status|findet (?:der Übergang|nicht) statt|Übergang statt|erscheint im Einladungskreis/],
   ['adressierung', /adressiert|Adressat|erhält (?:eine|zusätzlich)|wird eskaliert|Eskalation|eskaliert|benachrichtigt|angezeigt|erreicht den|geht an|nennt der Kundenseite|wird dem MSP-Administrator angezeigt/],
   ['sichtbarkeit', /nennt (?:sie )?(?:den Katalog|die Einsätze|nicht)|unsichtbar|nicht offengelegt|keine Fremddaten|ohne Angaben zu fremden|nennt den Katalog des Standorts nicht/],
@@ -68,8 +78,12 @@ export function erfasseErwartung(satz: string): Erwartung {
 }
 
 function leseErgebnisart(satz: string): Erwartung['ergebnisart'] {
-  if (/\bSperre\b/.test(satz)) return 'sperre'
-  if (/\bWarnung\b/.test(satz)) return 'warnung'
+  // Die Verneinung gehoert dazu. "eine Warnung, keine Sperre" ist der Satz, mit
+  // dem 5.5.5 fuer P6 und P11 entschieden hat, dass die Zusage warnt und nicht
+  // sperrt — ohne die Ausnahme las der Lauf ihn als "Sperre" und machte aus der
+  // richtigen Fachlogik ein rotes Szenario.
+  if (/\bSperre\b/.test(satz) && !/keine Sperre/.test(satz)) return 'sperre'
+  if (/\bWarnung\b/.test(satz) && !/keine Warnung/.test(satz)) return 'warnung'
   if (/\bTreffer\b/.test(satz) && !/kein Treffer|ohne Treffer/.test(satz)) return 'treffer'
   if (/\bInformation(?:en)?\b/.test(satz)) return 'information'
   return null
