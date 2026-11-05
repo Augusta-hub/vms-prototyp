@@ -380,6 +380,11 @@ function leseGesperrtenVorgang(satz: string): Gesperrter | null {
   if (/Wiederaufnahme/.test(satz)) {
     return { objektart: 'einsatz', nachStatus: 'active', vonStatus: 'interrupted' }
   }
+  // Q36: „die Genehmigung des Stundenzettels »SZ-2026-10-001« ist durch die
+  // Prüfung P4 gesperrt". Der Zettel bleibt in `inApproval` (4.0, Regel 5).
+  if (/Genehmigung des Stundenzettels/.test(satz)) {
+    return { objektart: 'stundenzettel', nachStatus: 'approved', vonStatus: 'inApproval' }
+  }
   if (/Wirksamkeit der Verlängerung/.test(satz)) {
     return { objektart: 'verlaengerung', nachStatus: 'effective', vonStatus: 'approved' }
   }

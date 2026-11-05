@@ -62,19 +62,33 @@ Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 ## M4 — Klickbare Demo: Besetzung 🟨
 
 Fortschrittsmesser steht: `npm run test:aueg` führt die 267 Szenarien aus und
-berichtet je Prüfung P1 bis P11. Stand 05.11.2026: **82 grün, 0 rot, 185
+berichtet je Prüfung P1 bis P11. Stand 05.11.2026: **105 grün, 0 rot, 162
 ausstehend** — jede implementierte Prüfung schlägt sich unmittelbar in der
 Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 
 - ✅ Gherkin-Runner angebunden, AÜG-Suite läuft (getrennt von `npm test`)
-- 🟨 AÜG-Prüfungen umgesetzt — **sechs von elf laufen:**
-  - **P1 Höchstüberlassungsdauer** (5.1): 19 von 56 grün. Kalendarische
+- 🟨 AÜG-Prüfungen umgesetzt — **neun von elf laufen:**
+  - **P1 Höchstüberlassungsdauer** (5.1): 22 von 56 grün. Kalendarische
     Zählung über Lieferanten und Kunden hinweg entlang der **bestätigten**
     Personenidentität, Tarifabweichung als Konfiguration, Schwellen und
     Eskalation, Übersteuerung nach 5.5.4
   - **P2 Unterbrechung und Drei-Monats-Regel** (5.1.4): 6 von 9 grün.
     Fachlich **vollständig** — die drei ausstehenden hängen an Prosa, eines
     davon an der Zeiterfassung aus M5
+  - **P3 Equal-Pay-Fälligkeit** (5.2.3): 11 von 21 grün. Gerechnet auf
+    **derselben** Überlassungskette wie P1 — „dieselbe Kette, andere Frist"
+    (5.2.1); die Kettenbildung ist aus `p1Hoechstdauer.ts` importiert, nicht
+    nachgebaut. Die Frist kommt vom **Verleihertarif** (5.2.2), nicht von der
+    Einsatzbranche: alle sechs Fälle, einschließlich der Begrenzung auf 15
+    Monate und der nicht verwendbaren Frist ohne Zuschlagsschema
+  - **P4 Vergleichsentgelt** (5.2.4): 7 von 26 grün. Der fehlende Eintrag des
+    Standorts und der fehlende Wert am Einsatz sind **zwei** Mängel mit
+    verschiedenen Fälligkeiten; `wageSource = estimate` ist verwendbar, aber
+    kein Nachweis und begrenzt die Sperre auf eine Warnung. **Nicht
+    übersteuerbar** (5.5.4)
+  - **P5 Branchenzuschlagsschema** (5.2.5): 2 von 5 grün. Ohne hinterlegte
+    Stufenfolge bleibt die Stufe **offen** — eine Stufengrenze zu erfinden wäre
+    ein Tarifwert im Code
   - **P6 Drehtürklausel** (5.3.1): 8 von 23 grün. Nicht übersteuerbar, die
     zugehörigen Szenarien erwarten den zurückgewiesenen Versuch
   - **P9 AÜG-Erlaubnis** (5.4.1): 29 von 44 grün. Tagesgenaue Deckung,
@@ -84,7 +98,7 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     Konfiguration, Sammelergebnis als strengstes Einzelergebnis, fehlende
     Pflichtangaben wie „ja", nächtlicher Lauf N5
   - **P11 Arbeitsverhältnis beim Verleiher** (5.3.4): 7 von 18 grün
-  - P3 bis P5, P7 und P8 stehen aus — sie stehen ohne Rechenweg in der
+  - P7 und P8 stehen aus — sie stehen ohne Rechenweg in der
     Registry und liefern deshalb **keinen** Befund. Eine Zeile der 4.7 mit
     zwei Prüfungen, von denen eine fehlt, bleibt **unbeurteilt**: ohne beide
     Einzelergebnisse ist das strengste nach 5.5.2 Nr. 2 nicht bestimmbar
@@ -95,13 +109,17 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     Prosa bleiben **müssen** — ein stillschweigend grünes Szenario ist
     schlimmer als ein rotes
 - 🟨 Anbindung an die Übergänge — **Q04 und Q06** (Erlaubnis, 4.1 und 4.2.1)
-  sowie **P1, P6 und P11 am Einsatz und an der Verlängerung** (4.2.3 und 4.3)
-  sind angebunden. `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
+  sowie **P1, P3, P6 und P11 am Einsatz und an der Verlängerung** (4.2.3 und
+  4.3) sind angebunden. `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
   Datenmodell und Regelwerk ohne Prisma; `lib/services/staffing.ts` lädt die
   Kette, die Tarifzuordnungen und den Konzernverbund. Der Stichtag kommt aus
   der Tabelle in 5.0, nie aus dem Tag des Aufrufs. In `RULE_CHECKS_PENDING`
   bleiben P7 und P8 (kein Rechenweg) und P9/P10 am Einsatz — die rechnen, ihre
-  Eingangsdaten sind dort nur nicht geladen. Ohne Statusmodell bleiben Q31,
+  Eingangsdaten sind dort nur nicht geladen. Dasselbe gilt für den Teil von P4,
+  der den Vergleichsentgelt-**Eintrag** des Standorts prüft (Q18, Q36), und für
+  die Zuschlagsstufe aus P5: beide rechnen, ihre Eingangsdaten sind an den
+  Übergängen nicht geladen. Die Sperre aus **Q48** greift dagegen, weil sie nur
+  `equalPayDueDate` und `comparableWage` braucht. Ohne Statusmodell bleiben Q31,
   Q37, Q38 und Q41 bis Q44 — sie warten auf SPEC 3.9 und die Statusmodelle
   4.4, 4.5 und 4.6 (Lieferantenstatus)
 - ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
@@ -117,15 +135,16 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 - ✅ **AÜG-Prüfungen aus M2 greifen beim Anlegen und Verlängern** — P1, P6 und
   P11 werden an den Übergängen des Einsatzes gerechnet, und `maxDurationEndDate`
   und `countedDurationDays` werden an jedem Einsatz der Kette in derselben
-  Transaktion wie der Übergang fortgeschrieben (5.1.3). Durch die Oberfläche
-  gegengeprüft: `planned` → `active` an E-2026-0002 schreibt das Fristende
-  14.08.2028 und die angerechnete Dauer 1 — Beginn 15.02.2027 plus 18 Monate,
-  letzter zulässiger Tag. `equalPayDueDate` bleibt leer, bis P3 läuft
+  Transaktion wie der Übergang fortgeschrieben (5.1.3), seit 05.11.2026 auch
+  `equalPayDueDate` (5.2.3). Durch die Oberfläche gegengeprüft: `planned` →
+  `active` an E-2026-0002 schreibt das Fristende 14.08.2028, die angerechnete
+  Dauer 1 und die Equal-Pay-Fälligkeit **15.11.2027** — Beginn 15.02.2027 plus
+  18 bzw. 9 Monate, letzter zulässiger Tag bzw. erster Tag mit Equal-Pay-Pflicht
 - 🟨 **Demo-Stand vorführbar** — der Prozess ist durchklickbar (Stammdaten →
   Bedarf → Ausschreibung → Profilvorschlag → Einsatz mit Verlängerung,
   Unterbrechung und Beendigung), und die Prüfungen greifen an den Übergängen.
   Die Naht zwischen Regelwerk und Statusmodell ist seit 05.11.2026
-  **automatisiert belegt**: `npm run test:services` führt 18 Tests gegen eine
+  **automatisiert belegt**: `npm run test:services` führt 25 Tests gegen eine
   **eigene** Datenbank (`_test`, vor jedem Test geleert) und prüft, was ohne
   Datenbank nicht prüfbar ist — welche Zeilen der Dienst lädt, ob die gerechnete
   Tatsache den Übergang erreicht und ob eine Sperre nichts schreibt. Zwei

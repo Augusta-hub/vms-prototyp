@@ -325,12 +325,45 @@ function werteBerechnetenWert(erwartung: Erwartung, befunde: readonly Befund[]):
     return werteJaNein(erwartung, befunde)
   }
 
+  // "es entsteht keine Ueberlassungskette bei diesem Kunden" ist eine Aussage
+  // ueber den **Kettenbeginn**, nicht ueber den Statusuebergang: der Uebergang
+  // nach `terminatedEarly` findet statt, nur entsteht kein Ueberlassungstag
+  // (SPEC 5.1.5, "Einsatz, der nie begonnen hat"). Die Signatur `entsteht kein`
+  // der Art `vorgangsstatus` meint einen Vorgang, der nicht entsteht — eine
+  // Einladung, einen Einsatz. Eine **Kette** ist kein Vorgang. Ohne diesen
+  // Zweig verlangte der Lauf, dass der Uebergang unterbleibt, und machte aus
+  // richtiger Fachlogik ein rotes Szenario.
+  if (/entsteht keine Überlassungskette/.test(erwartung.satz)) {
+    const fuehrend = befunde.filter((befund) => 'kettenbeginn' in befund.werte)
+    if (fuehrend.length === 0) {
+      return { ergebnis: 'ausstehend', grund: 'kein Befund führt kettenbeginn' }
+    }
+    const genannt = fuehrend
+      .map((befund) => befund.werte['kettenbeginn'])
+      .filter((wert) => wert !== null)
+    return genannt.length === 0
+      ? ERFUELLT
+      : { ergebnis: 'verletzt', grund: `der Befund nennt den Kettenbeginn ${genannt.join(', ')}` }
+  }
+
   const erwarteteDaten = erwartung.werte.datumsangaben
   const erwarteteTage = erwartung.werte.mengen
     .filter((menge) => menge.einheit === 'tage')
     .map((menge) => menge.wert)
+  // Monatsangaben sind so vergleichbar wie Tageszahlen: der Befund fuehrt die
+  // gerechnete Frist als `fristMonate` bzw. `grenzeMonate` (SPEC 5.1.2, 5.2.2).
+  // Der Lauf hat sie lange nicht verglichen — "gilt die gesetzliche Regelfrist
+  // von 9 Monaten" blieb ausstehend, obwohl die Fachlogik 9 rechnete. Eine
+  // ungeprueffte Zusicherung ist schlimmer als eine rote.
+  const erwarteteMonate = erwartung.werte.mengen
+    .filter((menge) => menge.einheit === 'monate')
+    .map((menge) => menge.wert)
 
-  if (erwarteteDaten.length === 0 && erwarteteTage.length === 0) {
+  if (
+    erwarteteDaten.length === 0 &&
+    erwarteteTage.length === 0 &&
+    erwarteteMonate.length === 0
+  ) {
     return { ergebnis: 'ausstehend', grund: 'der Satz nennt keinen vergleichbaren Wert' }
   }
 
@@ -344,8 +377,52 @@ function werteBerechnetenWert(erwartung: Erwartung, befunde: readonly Befund[]):
       return { ergebnis: 'verletzt', grund: `die Tageszahl ${anzahl} kommt im Befund nicht vor` }
     }
   }
+  // Die Monatszahl wird gegen die **Fristschluessel** verglichen, nicht gegen
+  // alle Werte: eine 9 irgendwo im Befund ist keine Frist von 9 Monaten.
+  const monatswerte = befunde.flatMap((befund) =>
+    MONATSSCHLUESSEL.flatMap((schluessel) =>
+      schluessel in befund.werte ? [befund.werte[schluessel]] : [],
+    ),
+  )
+  // Die Verneinung gehoert dazu, wie bei der Ergebnisart: "es wird **nicht** mit
+  // 9 Monaten gerechnet, weil die Abweichung den Tarifvertrag voraussetzt" ist
+  // der Satz, mit dem SPEC 5.2.2 Fall 1 festlegt, dass eine fehlende
+  // Tarifzuordnung **nicht** die Regelfrist ergibt. Ohne die Ausnahme las der
+  // Lauf ihn als Zusicherung von 9 Monaten und machte aus der richtigen
+  // Fachlogik — 0 Monate — ein rotes Szenario.
+  const verneint = /(?:nicht|keine)[^.]{0,24}\d+\s*Monaten/.test(erwartung.satz)
+  for (const anzahl of erwarteteMonate) {
+    if (monatswerte.length === 0) {
+      return { ergebnis: 'ausstehend', grund: 'kein Befund führt eine Frist in Monaten' }
+    }
+    const gefuehrt = monatswerte.includes(anzahl)
+    if (verneint && gefuehrt) {
+      return {
+        ergebnis: 'verletzt',
+        grund: `mit ${anzahl} Monaten sollte nicht gerechnet werden, der Befund führt sie aber`,
+      }
+    }
+    if (!verneint && !gefuehrt) {
+      return {
+        ergebnis: 'verletzt',
+        grund: `die Frist von ${anzahl} Monaten kommt im Befund nicht vor (geführt: ${monatswerte.join(', ')})`,
+      }
+    }
+  }
   return ERFUELLT
 }
+
+/**
+ * Schluessel, unter denen ein Befund eine Frist **in Monaten** fuehrt: die
+ * Grenze der Hoechstueberlassungsdauer (SPEC 5.1.2) und die Equal-Pay-Frist
+ * (5.2.2).
+ */
+const MONATSSCHLUESSEL = [
+  'grenzeMonate',
+  'maxAssignmentDurationMonths',
+  'fristMonate',
+  'equalPayDeadlineMonths',
+] as const
 
 /**
  * Eine Ja/Nein-Zusicherung gegen den Befund (SPEC 3.7, `countsAsReset`, und

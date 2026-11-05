@@ -55,8 +55,18 @@ function auftrag(
 }
 
 describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
-  it('hat bisher sechs Rechenwege: P1, P2, P6, P9, P10 und P11', () => {
-    expect(umgesetztePruefungen()).toEqual(['P1', 'P2', 'P6', 'P9', 'P10', 'P11'])
+  it('hat bisher neun Rechenwege: nur P7 und P8 fehlen', () => {
+    expect(umgesetztePruefungen()).toEqual([
+      'P1',
+      'P2',
+      'P3',
+      'P4',
+      'P5',
+      'P6',
+      'P9',
+      'P10',
+      'P11',
+    ])
   })
 
   it('liefert keinen Befund, solange eine erwartete Prüfung keinen Rechenweg hat', () => {
@@ -64,7 +74,7 @@ describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
       auftrag(
         ['ein Einsatz von "Miriam Falk" steht im Status "planned" mit tatsächlichem Beginn 01.03.2026'],
         { satz: 'der MSP-Disponent den Einsatz in den Status "active" überführt', objektart: 'einsatz', zielstatus: 'active' },
-        ['P9', 'P4'],
+        ['P9', 'P8'],
       ),
     )
     // Eine nicht umgesetzte Prüfung darf nicht wie eine erfüllte aussehen.
@@ -73,7 +83,7 @@ describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
 
   it('rechnet P9 nur, wenn der Vorgang sie erwartet', () => {
     const ohneP9 = pruefe(
-      auftrag([], { satz: 'der Betreiber die Erlaubnis prüft', art: 'berechnung' }, ['P4']),
+      auftrag([], { satz: 'der Betreiber die Erlaubnis prüft', art: 'berechnung' }, ['P8']),
     )
     expect(ohneP9).toEqual([])
   })

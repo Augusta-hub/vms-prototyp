@@ -8,10 +8,11 @@
  * Rechenwege in `regeln/` greifen auf sie zu, statt eine Ergebnisart selbst zu
  * wählen. Weicht eine Zeile von 4.7 ab, ist das ein Fehler in dieser Datei.
  *
- * **Abgeschrieben sind bisher die Zeilen zu P9 und P10** (SPEC 5.4, bestätigt
- * in 5.5.5) und die Zeilen N1 und N5 des nächtlichen Laufs (5.5.1). Die Zeilen
- * der übrigen Prüfungen kommen mit ihrem Rechenweg; eine Zeile ohne Rechenweg
- * wäre eine Zusicherung, die nichts einlöst.
+ * **Abgeschrieben sind die Zeilen zu P1, P2, P3, P4, P5, P6, P9, P10 und P11**
+ * (SPEC 5.1 bis 5.4, bestätigt in 5.5.5) und die Zeilen N1, N2, N3, N5 und N6
+ * des nächtlichen Laufs (5.5.1). Die Zeilen zu P7 und P8 kommen mit ihrem
+ * Rechenweg; eine Zeile ohne Rechenweg wäre eine Zusicherung, die nichts
+ * einlöst.
  *
  * **Eine Besonderheit bei P10:** 4.7 ordnet Q21, Q42, Q43 und Q44 eine Sperre
  * zu, der Pflichtkatalog in 5.4.4 gibt der einzelnen Nachweisart aber teils
@@ -561,6 +562,169 @@ export const QUERSCHNITT: readonly Querschnittzeile[] = [
     trefferart: 'warnung',
     ergebnisartAusKatalog: true,
     specReference: 'SPEC 5.5.1, Zeile N5; 5.4.4',
+  },
+  /* ---------------------------------------------------------------- */
+  /* P3, P4 und P5 — Equal Pay (SPEC 5.2, bestätigt in 5.5.5)          */
+  /* ---------------------------------------------------------------- */
+  {
+    nummer: 'Q18',
+    objekt: 'einsatz',
+    von: null,
+    nach: 'planned',
+    pruefung: 'P4',
+    gegenstand: 'Vergleichsentgelt hinterlegt',
+    // „Die Fälligkeit liegt beim Anlegen regelmäßig in der Zukunft; die Sperre
+    // greift, wenn sie erreicht ist (Q36, neu Q48)" (5.5.5).
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q18; 5.2.4',
+  },
+  {
+    nummer: 'Q19',
+    objekt: 'einsatz',
+    von: null,
+    nach: 'planned',
+    pruefung: 'P5',
+    gegenstand: 'Branchenzuschlagsschema am Standort zugeordnet',
+    // „Das Schema wirkt auf Zuschlagsstufen, nicht auf die Zulässigkeit der
+    // Überlassung" (5.5.5).
+    trefferart: 'information',
+    specReference: 'SPEC 4.7 Q19; 5.2.5',
+  },
+  {
+    nummer: 'Q48',
+    objekt: 'einsatz',
+    von: 'planned',
+    nach: 'active',
+    pruefung: 'P4',
+    gegenstand:
+      '`equalPayDueDate` liegt am oder vor dem ersten Überlassungstag und `comparableWage` ist nicht gesetzt',
+    trefferart: 'sperre',
+    // 5.5.4: P4 ist **nicht** übersteuerbar — der Weg ist die Ergänzung des
+    // Werts durch den Entleiher. Eine Sperre mit offenem Weg wird nicht
+    // übersteuert, sondern aufgelöst.
+    nichtUebersteuerbar: true,
+    specReference: 'SPEC 4.7 Q48; 5.5.5, Tabelle „Neu"',
+  },
+  {
+    nummer: 'Q27',
+    objekt: 'einsatz',
+    von: null,
+    nach: 'completed',
+    pruefung: 'P3',
+    // 4.7 führt Q27 mit „P1, P3" — dieselbe Zeile, von der anderen Prüfung aus
+    // gesehen.
+    weiterePruefungen: ['P1'],
+    gegenstand: 'Abschlussstand der Fristen wird festgeschrieben',
+    trefferart: 'information',
+    rueckschau: true,
+    specReference: 'SPEC 4.7 Q27; 5.5.5',
+  },
+  {
+    nummer: 'Q27',
+    objekt: 'einsatz',
+    von: null,
+    nach: 'terminatedEarly',
+    pruefung: 'P3',
+    weiterePruefungen: ['P1'],
+    gegenstand: 'Abschlussstand der Fristen wird festgeschrieben',
+    trefferart: 'information',
+    rueckschau: true,
+    specReference: 'SPEC 4.7 Q27; 5.5.5',
+  },
+  {
+    nummer: 'Q29',
+    objekt: 'verlaengerung',
+    von: 'requested',
+    nach: 'approved',
+    pruefung: 'P3',
+    gegenstand: 'Equal-Pay-Fälligkeit fällt in den verlängerten Zeitraum',
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q29; 5.2.3',
+  },
+  {
+    nummer: 'Q32',
+    objekt: 'verlaengerung',
+    von: 'approved',
+    nach: 'effective',
+    pruefung: 'P4',
+    gegenstand: 'Vergleichsentgelt für den Zeitraum ab Equal-Pay-Fälligkeit',
+    // „Die Fälligkeit kann im verlängerten Zeitraum erst entstehen; die Sperre
+    // greift am Zettel (Q36)" (5.5.5).
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q32; 5.2.4',
+  },
+  {
+    nummer: 'Q34',
+    objekt: 'stundenzettel',
+    von: 'submitted',
+    nach: 'inApproval',
+    pruefung: 'P3',
+    gegenstand: 'Equal-Pay-Fälligkeit im Zettelzeitraum erreicht',
+    // „Hinweis an die genehmigende Rolle" (5.5.5).
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q34; 5.2.3',
+  },
+  {
+    nummer: 'Q36',
+    objekt: 'stundenzettel',
+    von: 'inApproval',
+    nach: 'approved',
+    pruefung: 'P4',
+    gegenstand:
+      'Fälligkeit erreicht, **kein verwendbarer** Vergleichsentgelt-Eintrag; `wageSource = estimate` genügt und erzeugt eine Warnung',
+    // 5.5.5: „Bestätigt mit Präzisierung: Sperre nur, wenn **kein
+    // verwendbarer** Eintrag vorliegt." Die Begrenzung auf eine Warnung bei
+    // einer Schätzung rechnet `p4Vergleichsentgelt.ts` (`nurWarnung`).
+    trefferart: 'sperre',
+    nichtUebersteuerbar: true,
+    specReference: 'SPEC 4.7 Q36; 5.5.5, Tabelle „Bestätigt mit Präzisierung"',
+  },
+  {
+    nummer: 'Q39',
+    objekt: 'beleg',
+    von: null,
+    nach: 'created',
+    pruefung: 'P4',
+    gegenstand: 'Vergleichsentgelt für Zeiträume nach Fälligkeit hinterlegt',
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q39; 5.2.4',
+  },
+  {
+    nummer: 'Q40',
+    objekt: 'beleg',
+    von: null,
+    nach: 'created',
+    pruefung: 'P5',
+    gegenstand: 'Branchenzuschlagsstufe der abgerechneten Zuschläge plausibel',
+    // „Plausibilität der Stufe, nicht der Höhe (5.2.5)" (5.5.5).
+    trefferart: 'information',
+    specReference: 'SPEC 4.7 Q40; 5.2.5',
+  },
+  {
+    nummer: 'N3',
+    objekt: 'einsatz',
+    von: null,
+    nach: null,
+    pruefung: 'P3',
+    gegenstand:
+      '`equalPayDueDate` innerhalb des Vorlaufs oder erreicht und `comparableWage` nicht gesetzt',
+    // 5.5.1 führt N3 mit „P3, P4". Der nächtliche Lauf erzeugt keine Sperre
+    // (5.5.1 c).
+    weiterePruefungen: ['P4'],
+    trefferart: 'warnung',
+    specReference: 'SPEC 5.5.1, Zeile N3; 5.0, Festwerte',
+  },
+  {
+    nummer: 'N3',
+    objekt: 'einsatz',
+    von: null,
+    nach: null,
+    pruefung: 'P4',
+    gegenstand:
+      '`equalPayDueDate` innerhalb des Vorlaufs oder erreicht und `comparableWage` nicht gesetzt',
+    weiterePruefungen: ['P3'],
+    trefferart: 'warnung',
+    specReference: 'SPEC 5.5.1, Zeile N3; 5.0, Festwerte',
   },
 ]
 

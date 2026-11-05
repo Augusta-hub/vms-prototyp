@@ -20,6 +20,10 @@
  *  - **P1** an die Zeilen am Profilvorschlag, am Einsatz und an der
  *    Verlängerung (Q07, Q11, Q14, Q23, Q26, Q28, Q30) samt den abgeleiteten
  *    Feldern `maxDurationEndDate` und `countedDurationDays` (3.7),
+ *  - **P3** an die Zeilen am Einsatz und an der Verlängerung samt dem
+ *    abgeleiteten Feld `equalPayDueDate` (3.7) und der Tatsache
+ *    `equalPayDueFromFirstDay`, die zusammen mit `comparableWagePresent` die
+ *    Sperre aus Q48 bildet,
  *  - **P6** an Q08, Q12 und Q15 — die Rechtsfolge `equalPayDueFromFirstDay`
  *    und die Tatsachengrundlage `hasPreviousEmploymentDeclaration`,
  *  - **P11** an Q09, Q13, Q17 und Q47.
@@ -44,6 +48,7 @@ import {
   type Einsatzsatz,
   type Grenzherkunft,
 } from './regeln/p1Hoechstdauer'
+import { pruefeEqualPayFrist, type Fristfall } from './regeln/p3EqualPayFrist'
 import { pruefeDrehtuer } from './regeln/p6Drehtuer'
 import { pruefeArbeitsverhaeltnis } from './regeln/p11Arbeitsverhaeltnis'
 import { pruefeErlaubnis, type Erlaubnissatz, type Zeitraum } from './regeln/p9Erlaubnis'
@@ -210,6 +215,149 @@ export function haeltVerlaengerungDieFrist(eingabe: {
     stichtag: null,
     zeitraum: { von, bis: eingabe.neuesEnde },
   })
+}
+
+/**
+ * Eine Tarifzuordnung der **Verleiherseite**, wie 5.2.2 sie liest (SPEC 3.3).
+ * Sie ist ein anderes Objekt als `Tarifzeile`: 5.1.2 liest die Einsatzbranche,
+ * 5.2.2 den Zeitarbeitstarifvertrag. Beide stehen in derselben Tabelle und
+ * dürfen trotzdem nicht verwechselt werden.
+ */
+export interface Verleiherzeile {
+  readonly appliesToType: string
+  readonly validFrom: Date
+  readonly validTo: Date | null
+  readonly equalPayDeadlineMonths: number | null
+  readonly industryPremiumScheme: string | null
+}
+
+/** Der Fristenstand des Equal Pay (SPEC 5.2, abgeleitetes Feld 3.7). */
+export interface EqualPaystand {
+  /** `equalPayDueDate` — der erste Tag mit Equal-Pay-Pflicht (5.2.3). */
+  readonly equalPayDueDate: Date | null
+  readonly equalPayDeadlineMonths: number
+  readonly fristfall: Fristfall
+  readonly chainStartDate: Date | null
+  /** Wie bei 5.1.3: der Stand wird an **jedem** Einsatz der Kette geführt. */
+  readonly chainAssignmentIds: readonly string[]
+  /**
+   * Die Tatsache, die 4.2.3 und 4.3 als Vorbedingung nennen: Equal Pay ist am
+   * oder vor dem ersten Überlassungstag geschuldet. Zusammen mit
+   * `comparableWagePresent` ist das die Sperre aus Q48 (5.5.5).
+   */
+  readonly equalPayDueFromFirstDay: boolean
+  /** Die Fristkonfiguration ist zu beanstanden (5.2.2, Fälle 1, 5 und 6). */
+  readonly konfigurationsmangel: boolean
+  readonly meldung: string
+}
+
+/**
+ * Rechnet `equalPayDueDate` nach SPEC 5.2.3 für einen Vorgang, dessen
+ * Überlassungskette geladen ist — auf **derselben** Kette wie 5.1 (5.2.1).
+ *
+ * `verleiherzuordnungen` sind die Zuordnungen des **Lieferanten** (3.3). Ist am
+ * Stichtag keine gültig, gilt Fall 1 aus 5.2.2: Equal Pay ab dem ersten
+ * Überlassungstag, **nicht** die Regelfrist — die Abweichung setzt den
+ * Tarifvertrag voraus. Wer hier eine leere Liste übergibt, weil er die
+ * Zuordnungen nicht geladen hat, bekommt deshalb die strengste Folge und keine
+ * stille Lücke.
+ */
+export function equalPaystand(eingabe: {
+  readonly einsaetze: readonly Einsatzzeile[]
+  readonly kunde: string
+  readonly verleiherzuordnungen: readonly Verleiherzeile[]
+  readonly stichtag: Date | null
+  readonly zeitraum: { readonly von: Date; readonly bis: Date | null } | null
+  readonly ersterUeberlassungstag: Date | null
+  readonly vergleichsentgeltGesetzt: boolean
+  readonly identitaetBestaetigt?: boolean
+}): EqualPaystand {
+  const zuordnung = verleiherzuordnungAmStichtag(eingabe.verleiherzuordnungen, eingabe.stichtag)
+  const zeitraum =
+    eingabe.zeitraum === null
+      ? null
+      : {
+          von: alsTag(eingabe.zeitraum.von),
+          bis: alsTag(eingabe.zeitraum.bis ?? eingabe.zeitraum.von),
+        }
+
+  const ergebnis = pruefeEqualPayFrist({
+    kette: {
+      person: '(Personenidentität)',
+      kunde: eingabe.kunde,
+      einsaetze: eingabe.einsaetze.map((zeile) => alsEinsatzsatz(zeile, eingabe.kunde)),
+      stichtag: eingabe.stichtag === null ? null : alsTag(eingabe.stichtag),
+      zeitraum,
+      zeitpositionen: null,
+      // Die Grenze aus 5.1 spielt für die Equal-Pay-Frist keine Rolle; sie steht
+      // hier nur, weil die Kettenlage sie trägt.
+      grenzeMonate: REGELWERK.dauer.regelgrenzeMonate,
+      grenzeHerkunft: 'regelgrenze',
+      grenzeGesenkt: false,
+      gesetztesFristende: null,
+      gesetzteDauer: null,
+      gesetzteDauerStand: null,
+      gesetztesRestbudget: null,
+      zaehlgrundlage: eingabe.identitaetBestaetigt === false ? 'einLieferant' : 'bestaetigt',
+      luecke: null,
+      wiederaufnahmetag: null,
+      fehlendeFelder: [],
+    },
+    verleihertarifVorhanden: zuordnung !== null,
+    fristMonateAngegeben: zuordnung?.equalPayDeadlineMonths ?? null,
+    zuschlagsschema: zuordnung?.industryPremiumScheme ?? null,
+    vergleichsentgeltGesetzt: eingabe.vergleichsentgeltGesetzt,
+    gesetzteFaelligkeit: null,
+  })
+
+  const ersterTag =
+    eingabe.ersterUeberlassungstag === null ? null : alsTag(eingabe.ersterUeberlassungstag)
+  const amOderVorErstemTag =
+    ergebnis.faelligkeit !== null &&
+    ersterTag !== null &&
+    istVorOderGleich(ergebnis.faelligkeit, ersterTag)
+
+  return {
+    equalPayDueDate: alsDatum(ergebnis.faelligkeit),
+    equalPayDeadlineMonths: ergebnis.fristMonate,
+    fristfall: ergebnis.fristfall,
+    chainStartDate: alsDatum(ergebnis.kettenbeginn),
+    chainAssignmentIds: einsaetzeDerKette(
+      eingabe.einsaetze,
+      ergebnis.kettenbeginn,
+      null,
+    ),
+    equalPayDueFromFirstDay: amOderVorErstemTag,
+    konfigurationsmangel: ergebnis.konfigurationsmangel,
+    meldung: ergebnis.meldung,
+  }
+}
+
+/**
+ * 5.2.2: maßgeblich ist die am **Stichtag** gültige Zuordnung der
+ * Verleiherseite. Ohne Stichtag zählt jede vorhandene — sonst wäre eine
+ * Vorschau ohne Stichtag automatisch Fall 1 und damit strenger als die
+ * Rechtslage.
+ */
+function verleiherzuordnungAmStichtag(
+  zuordnungen: readonly Verleiherzeile[],
+  stichtag: Date | null,
+): Verleiherzeile | null {
+  const einschlaegig = zuordnungen.filter((zuordnung) => {
+    if (zuordnung.appliesToType !== 'supplier') return false
+    if (stichtag === null) return true
+    const tag = alsTag(stichtag)
+    if (!istVorOderGleich(alsTag(zuordnung.validFrom), tag)) return false
+    if (zuordnung.validTo !== null && !istVorOderGleich(tag, alsTag(zuordnung.validTo))) {
+      return false
+    }
+    return true
+  })
+  // Mehrere gültige Zuordnungen: die **spätere** gilt, wie in 5.1.2 für
+  // dieselbe Ebene.
+  return (
+    [...einschlaegig].sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0] ?? null
+  )
 }
 
 /** Das Ergebnis der Drehtürklausel für die Tatsachen aus 4.2.3 und 4.3 (SPEC 5.3.1). */

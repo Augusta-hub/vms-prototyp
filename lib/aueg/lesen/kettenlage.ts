@@ -166,9 +166,17 @@ export function leseKettenlage(
     const positionen = leseZeitpositionen(satz)
     if (positionen !== null) zeitpositionen = positionen
 
-    const beginn = einTag(satz, new RegExp(`tatsächliche(?:r)? Beginn ist der ${DATUM}`))
+    // Zwei Schreibweisen desselben Datums: „der tatsächliche Beginn ist der
+    // 15.01.2026" und „… steht im Status »planned« mit tatsächlichem Beginn
+    // 15.01.2026". Beide nennen `actualStartDate`, und beide sind der Stichtag
+    // nach der Tabelle in 5.0. Die zweite kam mit den Szenarien zu 5.2 dazu.
+    const beginn =
+      einTag(satz, new RegExp(`tatsächliche(?:r)? Beginn ist der ${DATUM}`)) ??
+      einTag(satz, new RegExp(`mit tatsächlichem Beginn (?:am )?${DATUM}`))
     if (beginn !== null) tatsaechlicherBeginn = beginn
-    const ende = einTag(satz, new RegExp(`tatsächliche(?:s)? Ende ist der ${DATUM}`))
+    const ende =
+      einTag(satz, new RegExp(`tatsächliche(?:s)? Ende ist der ${DATUM}`)) ??
+      einTag(satz, new RegExp(`mit tatsächlichem Ende (?:am )?${DATUM}`))
     if (ende !== null) tatsaechlichesEnde = ende
 
     const wiederaufnahme = einTag(
@@ -349,7 +357,13 @@ function leseEinsatz(satz: string, kunde: string | null): Einsatzsatz | null {
     einTag(satz, new RegExp(`beginnt am ${DATUM}`)) ??
     einTag(satz, new RegExp(`ab dem ${DATUM}`)) ??
     einTag(satz, new RegExp(`läuft seit dem ${DATUM}`)) ??
-    einTag(satz, new RegExp(`geplantem Beginn ${DATUM}`))
+    einTag(satz, new RegExp(`geplantem Beginn ${DATUM}`)) ??
+    // „steht im Status »planned« mit tatsächlichem Beginn 15.01.2026": der
+    // Einsatz trägt `actualStartDate` und ist der erste Überlassungstag der
+    // Kette. Dass er noch in `planned` steht, macht seine Tage **vorgesehen**
+    // und nicht tatsächlich (5.0, `realizedAssignmentDay`) — den Kettenbeginn
+    // trägt er trotzdem.
+    einTag(satz, new RegExp(`mit tatsächlichem Beginn (?:am )?${DATUM}`))
   if (beginn === null) return null
   return einsatz(satz, kunde, lieferant, beginn, null, !geplant)
 }

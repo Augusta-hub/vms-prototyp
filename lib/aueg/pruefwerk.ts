@@ -32,14 +32,17 @@
  *    Übergangsmenge in `lib/status/` (4.0, Regel 1).
  *
  * **Stand:** umgesetzt sind **P1** (Höchstüberlassungsdauer, SPEC 5.1) mit dem
- * nächtlichen Lauf N2, **P2** (Unterbrechung, 5.1.4) mit N6, **P6**
+ * nächtlichen Lauf N2, **P2** (Unterbrechung, 5.1.4) mit N6, **P3**
+ * (Equal-Pay-Fälligkeit, 5.2.3), **P4** (Vergleichsentgelt, 5.2.4) und **P5**
+ * (Branchenzuschlag, 5.2.5) — P3 und P4 zusammen mit N3 —, **P6**
  * (Drehtürklausel, 5.3.1), **P9** (AÜG-Erlaubnis, 5.4.1) mit N1, **P10**
  * (Pflichtnachweise, 5.4.4) mit N5 und **P11** (Arbeitsverhältnis beim
- * Verleiher, 5.3.4). Übersteuerbar nach 5.5.4 sind P1, P9, P10 und P11; P6
- * ist es nicht (5.3.6). P3, P4, P5, P7 und P8 sind eingetragen, aber ohne
- * Rechenweg — sie melden nichts.
+ * Verleiher, 5.3.4). Übersteuerbar nach 5.5.4 sind P1, P2, P9, P10 und P11;
+ * P4 und P6 sind es nicht (5.5.4, 5.3.6), P3 und P5 sperren nicht. P7 und P8
+ * sind eingetragen, aber ohne Rechenweg — sie melden nichts.
  */
 
+import { leseEntgeltlage, type Entgeltprueflage } from './lesen/entgeltlage'
 import { leseErlaubnislage, type Prueflage } from './lesen/erlaubnislage'
 import { leseKettenlage, type Kettenprueflage } from './lesen/kettenlage'
 import {
@@ -65,6 +68,15 @@ import {
   pruefeNachweisVorlauf,
   type Nachweisergebnis,
 } from './regeln/p10Nachweise'
+import { pruefeEqualPayFrist, type EqualPayergebnis } from './regeln/p3EqualPayFrist'
+import {
+  pruefeVergleichsentgelt,
+  type Entgeltergebnis,
+} from './regeln/p4Vergleichsentgelt'
+import {
+  pruefeBranchenzuschlag,
+  type Zuschlagsergebnis,
+} from './regeln/p5Branchenzuschlag'
 import { QUERSCHNITT, type Querschnittzeile } from './querschnitt'
 import {
   pruefeErlaubnis,
@@ -110,9 +122,9 @@ type Rechenweg = (auftrag: Pruefauftrag) => readonly Befund[]
 const REGELN: Readonly<Record<Pruefung, Rechenweg | null>> = {
   P1: pruefeP1,
   P2: pruefeP2,
-  P3: null,
-  P4: null,
-  P5: null,
+  P3: pruefeP3,
+  P4: pruefeP4,
+  P5: pruefeP5,
   P6: pruefeP6,
   P7: null,
   P8: null,
@@ -784,6 +796,254 @@ function kettenbefund(
       pruefzeitraumVon: lage.lage.zeitraum?.von ?? null,
       pruefzeitraumBis: lage.lage.zeitraum?.bis ?? null,
       specReference: lage.zeile?.specReference ?? 'SPEC 5.1',
+      ...zusatz.ergaenzung,
+    },
+    adressaten: zusatz.adressaten,
+    meldung: zusatz.meldung,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* P3, P4 und P5 — Equal Pay (SPEC 5.2)                                */
+/* ------------------------------------------------------------------ */
+
+/** P3 — Equal-Pay-Fälligkeit (SPEC 5.2.3). */
+function pruefeP3(auftrag: Pruefauftrag): readonly Befund[] {
+  const lage = leseEntgeltlage(auftrag.sachverhalte, auftrag.ausloeser, 'P3')
+  if (!vollstaendigBeurteilbar(lage.zeile)) return []
+
+  const ergebnis = pruefeEqualPayFrist(lage.equalPay)
+  const zeile = lage.zeile
+
+  // Die Ergebnisart kommt aus 4.7 (5.5.1 a). Ohne Treffer ist sie eine
+  // Information — **außer** die Fristkonfiguration selbst ist zu beanstanden:
+  // 5.2.2 führt für die Fälle 1, 5 und 6 ausdrücklich eine Warnung, unabhängig
+  // vom Vergleichsentgelt, weil das Fehlen eine unmittelbare Entgeltfolge hat.
+  // Die Vorlaufschwellen aus 5.0 (`equalPayNoticeDays`, `equalPayWarningDays`)
+  // gehören dem **nächtlichen Lauf** (Zeile N3): sie beschreiben, wie früh das
+  // System auf eine kommende Fälligkeit hinweist. An einem Übergang entscheidet
+  // allein 5.2.3, Schritt 4 — ob die Fälligkeit in den Prüfzeitraum fällt oder
+  // vor ihm liegt. Eine Fälligkeit, die 15 Tage **nach** dem Prüfzeitraum
+  // liegt, ist dort eine Information, keine Warnung (Q29, Q34).
+  const vorlaufwarnung = lage.ketten.anlass === 'nachtlauf' && ergebnis.warnungErreicht
+  const roh: Ergebnisart = ergebnis.treffer
+    ? (zeile?.trefferart ?? 'warnung')
+    : ergebnis.konfigurationsmangel || vorlaufwarnung || ergebnis.mindestensWarnung
+      ? 'warnung'
+      : 'information'
+  // 5.2.6: bei begrenzter Zählgrundlage und fehlendem Vergleichsentgelt ist das
+  // Ergebnis **mindestens** eine Warnung — auch dort, wo die Zeile in 4.7 eine
+  // Information vorsieht.
+  const angehoben: Ergebnisart =
+    ergebnis.mindestensWarnung && roh === 'information' ? 'warnung' : roh
+
+  // 5.2.2 und 5.5.3: rückt die Fälligkeit durch einen Tarifwechsel oder eine
+  // Berichtigung in die Vergangenheit, ist das Ergebnis eine Warnung mit
+  // Pflicht-Eskalation — **keine rückwirkende Sperre**. Der nächtliche Lauf
+  // sperrt ohnehin nie (5.5.1 c).
+  const feststellung =
+    lage.ketten.anlass === 'nachtlauf' ||
+    lage.ketten.anlass === 'berichtigung' ||
+    ergebnis.faelligkeitVergangen
+  const ergebnisart: Ergebnisart =
+    feststellung && angehoben === 'sperre' ? 'warnung' : angehoben
+
+  const kennStatuswechsel =
+    lage.ketten.anlass === 'uebergang' || lage.ketten.anlass === 'uebergangsversuch'
+  const adressaten =
+    feststellung && ergebnis.treffer
+      ? [...new Set([...ergebnis.adressaten, ...REGELWERK.adressatenRueckwirkenderBefund])]
+      : ergebnis.adressaten
+
+  return [
+    entgeltbefund(lage, 'P3', ergebnisart, kennStatuswechsel && ergebnisart !== 'sperre', {
+      ergaenzung: equalPaywerte(ergebnis),
+      adressaten,
+      meldung: ergebnis.meldung,
+    }),
+  ]
+}
+
+/** P4 — Vergleichsentgelt (SPEC 5.2.4). */
+function pruefeP4(auftrag: Pruefauftrag): readonly Befund[] {
+  const lage = leseEntgeltlage(auftrag.sachverhalte, auftrag.ausloeser, 'P4')
+  if (!vollstaendigBeurteilbar(lage.zeile)) return []
+
+  // 5.5.4: P4 ist **nicht** übersteuerbar. Der Weg ist die Ergänzung des Werts
+  // durch den Entleiher (3.3) — eine Sperre mit offenem Weg wird nicht
+  // übersteuert, sondern aufgelöst.
+  if (lage.uebersteuerungBeantragt) {
+    return [
+      entgeltbefund(lage, 'P4', 'sperre', false, {
+        ergaenzung: { uebersteuerung: 'zurückgewiesen', uebersteuerbar: 'nein' },
+        adressaten: REGELWERK.adressatenVergleichsentgeltFehlt,
+        meldung:
+          'P4: Die Übersteuerung wird zurückgewiesen, weil die Prüfung P4 nicht übersteuerbar ' +
+          'ist (SPEC 5.5.4). Der offene Weg ist die Ergänzung des Vergleichsentgelts durch den ' +
+          'Entleiher — das ist seine Pflicht aus 3.3, und eine Sperre mit offenem Weg wird ' +
+          'aufgelöst, nicht übersteuert. Der Versuch wird protokolliert.',
+      }),
+    ]
+  }
+
+  // E13: die Fälligkeit kommt aus 5.2.3. Führt der Vorgang sie als Datenstand,
+  // gilt dieser Wert; sonst wird sie gerechnet.
+  const frist = pruefeEqualPayFrist(lage.equalPay)
+  const ergebnis = pruefeVergleichsentgelt({
+    ...lage.entgelt,
+    faelligkeit: lage.entgelt.faelligkeit ?? frist.faelligkeit,
+  })
+  const zeile = lage.zeile
+
+  const roh: Ergebnisart = ergebnis.treffer ? (zeile?.trefferart ?? 'warnung') : 'information'
+  // Eine Schätzung ist verwendbar und begrenzt die Sperre auf eine Warnung
+  // (3.3, 5.2.4; 5.5.5 zu Q36). Dasselbe gilt für die Abweichung nach unten:
+  // sie ist mit Begründung zulässig und wird eskaliert, nicht gesperrt.
+  const begrenzt = ergebnis.nurWarnung && roh === 'sperre' ? 'warnung' : roh
+  // Der nächtliche Lauf sperrt nie (5.5.1 c); ein Befund in der Vergangenheit
+  // wird festgestellt, nicht gesperrt (5.5.3, R3).
+  const feststellung =
+    lage.ketten.anlass === 'nachtlauf' || lage.ketten.anlass === 'berichtigung'
+  const ergebnisart: Ergebnisart = feststellung && begrenzt === 'sperre' ? 'warnung' : begrenzt
+
+  const kennStatuswechsel =
+    lage.ketten.anlass === 'uebergang' || lage.ketten.anlass === 'uebergangsversuch'
+  const adressaten =
+    feststellung && ergebnis.treffer
+      ? [...new Set([...ergebnis.adressaten, ...REGELWERK.adressatenRueckwirkenderBefund])]
+      : ergebnis.adressaten
+
+  return [
+    entgeltbefund(lage, 'P4', ergebnisart, kennStatuswechsel && ergebnisart !== 'sperre', {
+      ergaenzung: { ...entgeltwerte(ergebnis), equalPayDueDate: ergebnis.faelligkeit },
+      adressaten,
+      meldung: ergebnis.meldung,
+    }),
+  ]
+}
+
+/** P5 — Branchenzuschlag (SPEC 5.2.5). */
+function pruefeP5(auftrag: Pruefauftrag): readonly Befund[] {
+  const lage = leseEntgeltlage(auftrag.sachverhalte, auftrag.ausloeser, 'P5')
+  if (!vollstaendigBeurteilbar(lage.zeile)) return []
+
+  // Schritt 3: Eingangsgröße der Stufe sind die Überlassungstage der **Kette**
+  // nach 5.1.3. Nennt der Vorgang sie selbst, gilt seine Angabe.
+  const frist = pruefeEqualPayFrist(lage.equalPay)
+  const ergebnis = pruefeBranchenzuschlag({
+    ...lage.zuschlag,
+    ueberlassungstage: lage.zuschlag.ueberlassungstage ?? frist.angerechneteDauer,
+  })
+
+  const roh: Ergebnisart = ergebnis.treffer
+    ? ergebnis.mangel === 'brancheFehlt'
+      ? // 5.2.5, Schritt 2 und 5.2.7: die Stufe wirkt auf das geschuldete
+        // Entgelt, deshalb Warnung statt Information — auch dort, wo 4.7 der
+        // Zeile eine Information zuordnet.
+        'warnung'
+      : (lage.zeile?.trefferart ?? 'information')
+    : 'information'
+  const kennStatuswechsel =
+    lage.ketten.anlass === 'uebergang' || lage.ketten.anlass === 'uebergangsversuch'
+
+  return [
+    entgeltbefund(lage, 'P5', roh, kennStatuswechsel && roh !== 'sperre', {
+      ergaenzung: zuschlagswerte(ergebnis),
+      adressaten: ergebnis.adressaten,
+      meldung: ergebnis.meldung,
+    }),
+  ]
+}
+
+function equalPaywerte(ergebnis: EqualPayergebnis): Record<string, string | number | null> {
+  return {
+    kunde: ergebnis.kunde,
+    kettenbeginn: ergebnis.kettenbeginn,
+    chainStartDate: ergebnis.kettenbeginn,
+    fristMonate: ergebnis.fristMonate,
+    equalPayDeadlineMonths: ergebnis.fristMonate,
+    fristfall: ergebnis.fristfall,
+    fristbudget: ergebnis.fristbudget,
+    equalPayDeadlineDays: ergebnis.fristbudget,
+    budgetende: ergebnis.budgetende,
+    faelligkeit: ergebnis.faelligkeit,
+    equalPayDueDate: ergebnis.faelligkeit,
+    angerechneteDauer: ergebnis.angerechneteDauer,
+    countedDurationDays: ergebnis.angerechneteDauer,
+    lueckentage: ergebnis.lueckentage,
+    bezugstag: ergebnis.bezugstag,
+    letzterTagDesPruefzeitraums: ergebnis.bezugstag,
+    restTage: ergebnis.restTage,
+    faelligkeitImZeitraum: ergebnis.faelligkeitImZeitraum ? 'ja' : 'nein',
+    faelligkeitVergangen: ergebnis.faelligkeitVergangen ? 'ja' : 'nein',
+    treffer: ergebnis.treffer ? 'ja' : 'nein',
+    mangel: ergebnis.mangel,
+    vermerke: ergebnis.vermerke.join(' | '),
+  }
+}
+
+function entgeltwerte(ergebnis: Entgeltergebnis): Record<string, string | number | null> {
+  return {
+    taetigkeit: ergebnis.taetigkeit,
+    activityDescription: ergebnis.taetigkeit,
+    anzahlEintraege: ergebnis.anzahlEintraege,
+    eintragsbetrag: ergebnis.eintragsbetrag,
+    einsatzwert: ergebnis.einsatzwert,
+    comparableWage: ergebnis.einsatzwert,
+    wageSource: ergebnis.quelle,
+    verwendbar: ergebnis.verwendbar ? 'ja' : 'nein',
+    nachweis: ergebnis.nachweis ? 'ja' : 'nein',
+    schaetzung: ergebnis.schaetzung ? 'ja' : 'nein',
+    faelligkeitErreicht: ergebnis.faelligkeitErreicht ? 'ja' : 'nein',
+    abweichungNachUnten: ergebnis.abweichungNachUnten ? 'ja' : 'nein',
+    abweichungNachOben: ergebnis.abweichungNachOben ? 'ja' : 'nein',
+    treffer: ergebnis.treffer ? 'ja' : 'nein',
+    mangel: ergebnis.mangel,
+  }
+}
+
+function zuschlagswerte(ergebnis: Zuschlagsergebnis): Record<string, string | number | null> {
+  return {
+    schema: ergebnis.schema,
+    industryPremiumScheme: ergebnis.schema,
+    anwendbar: ergebnis.anwendbar ? 'ja' : 'nein',
+    brancheBestimmbar: ergebnis.brancheBestimmbar ? 'ja' : 'nein',
+    ueberlassungstage: ergebnis.ueberlassungstage,
+    countedDurationDays: ergebnis.ueberlassungstage,
+    zuschlagsstufe: ergebnis.stufe,
+    stufeBestimmbar: ergebnis.stufeBestimmbar ? 'ja' : 'nein',
+    pruefbar: ergebnis.brancheBestimmbar ? 'ja' : 'nein',
+    positionenAbweichend: ergebnis.positionenAbweichend ? 'ja' : 'nein',
+    treffer: ergebnis.treffer ? 'ja' : 'nein',
+    mangel: ergebnis.mangel,
+    vermerke: ergebnis.vermerke.join(' | '),
+  }
+}
+
+function entgeltbefund(
+  lage: Entgeltprueflage,
+  pruefung: Pruefung,
+  ergebnisart: Ergebnisart,
+  uebergangVollzogen: boolean,
+  zusatz: Befundzusatz,
+): Befund {
+  const ketten = lage.ketten
+  return {
+    pruefung,
+    ergebnisart,
+    uebergangVollzogen,
+    werte: {
+      ruleRef: REGELBEZEICHNER[pruefung],
+      result: ergebnisart === 'sperre' ? 'blocked' : 'success',
+      qZeile: lage.zeile?.nummer ?? null,
+      anlass: ketten.anlass,
+      objektart: ketten.objektart,
+      statusVorher: ketten.vonStatus,
+      statusNachher: uebergangVollzogen ? ketten.nachStatus : ketten.vonStatus,
+      stichtag: ketten.stichtag,
+      pruefzeitraumVon: ketten.lage.zeitraum?.von ?? null,
+      pruefzeitraumBis: ketten.lage.zeitraum?.bis ?? null,
+      specReference: lage.zeile?.specReference ?? 'SPEC 5.2',
       ...zusatz.ergaenzung,
     },
     adressaten: zusatz.adressaten,

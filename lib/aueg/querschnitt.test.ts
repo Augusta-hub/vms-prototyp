@@ -50,10 +50,30 @@ describe('Suche nach der Zeile eines Übergangs', () => {
   })
 
   it('liefert keine Zeile für eine Prüfung ohne abgeschriebene Zeilen', () => {
-    // P3 bis P8 und P11 sind in 4.7 geführt, hier aber noch nicht
-    // abgeschrieben: ihre Zeilen kommen mit ihrem Rechenweg.
+    // P7 und P8 sind in 4.7 geführt, hier aber noch nicht abgeschrieben: ihre
+    // Zeilen kommen mit ihrem Rechenweg. Die Zeilen zu P3, P4 und P5 sind mit
+    // SPEC 5.2 dazugekommen.
     expect(zeileFuerUebergang('P8', 'einsatz', 'planned', 'active')).toBeNull()
-    expect(zeileFuerUebergang('P3', 'einsatz', null, 'completed')).toBeNull()
+    expect(zeileFuerUebergang('P7', 'einsatz', 'planned', 'active')).toBeNull()
+  })
+
+  it('findet die Zeilen zu P3, P4 und P5 (SPEC 5.2)', () => {
+    expect(zeileFuerUebergang('P3', 'einsatz', null, 'completed')?.nummer).toBe('Q27')
+    expect(zeileFuerUebergang('P3', 'verlaengerung', 'requested', 'approved')?.nummer).toBe('Q29')
+    expect(zeileFuerUebergang('P3', 'stundenzettel', 'submitted', 'inApproval')?.nummer).toBe('Q34')
+    expect(zeileFuerUebergang('P4', 'einsatz', null, 'planned')?.nummer).toBe('Q18')
+    expect(zeileFuerUebergang('P4', 'einsatz', 'planned', 'active')?.nummer).toBe('Q48')
+    expect(zeileFuerUebergang('P4', 'stundenzettel', 'inApproval', 'approved')?.nummer).toBe('Q36')
+    expect(zeileFuerUebergang('P4', 'beleg', null, 'created')?.nummer).toBe('Q39')
+    expect(zeileFuerUebergang('P5', 'einsatz', null, 'planned')?.nummer).toBe('Q19')
+    expect(zeileFuerUebergang('P5', 'beleg', null, 'created')?.nummer).toBe('Q40')
+  })
+
+  it('führt Q36 und Q48 als nicht übersteuerbar (SPEC 5.5.4)', () => {
+    // P4 ist nicht übersteuerbar: der Weg ist die Ergänzung des Werts durch den
+    // Entleiher, nicht eine Abweichung von der Regel.
+    expect(zeileFuerUebergang('P4', 'stundenzettel', 'inApproval', 'approved')?.nichtUebersteuerbar).toBe(true)
+    expect(zeileFuerUebergang('P4', 'einsatz', 'planned', 'active')?.nichtUebersteuerbar).toBe(true)
   })
 
   it('findet die Zeilen zu P1 und P2 (SPEC 5.1)', () => {

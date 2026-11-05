@@ -34,6 +34,16 @@ describe('Einordnung der Ergebnisart', () => {
     expect(erfasseErwartung('ist das Ergebnis eine Information, keine Warnung').ergebnisart).toBe('information')
   })
 
+  it('liest „eine Warnung statt einer Sperre" als Warnung', () => {
+    // SPEC 5.2.4: eine Schätzung ist verwendbar und lässt den Übergang zu
+    // (Q36 in 5.5.5). „statt einer Sperre" gehört zur Verneinung wie
+    // „keine Sperre".
+    expect(
+      erfasseErwartung('das Ergebnis der Prüfung P4 ist eine Warnung statt einer Sperre')
+        .ergebnisart,
+    ).toBe('warnung')
+  })
+
   it('liest „kein Treffer" nicht als Treffer', () => {
     expect(erfasseErwartung('ist das Ergebnis kein Treffer').ergebnisart).not.toBe('treffer')
   })
@@ -85,6 +95,26 @@ describe('Signatur der Prüfbarkeit', () => {
     'wird die fehlende Angabe wie "ja" gerechnet',
   ])('ordnet als Prüfbarkeit ein: %s', (satz) => {
     expect(erfasseErwartung(satz).art).toBe('pruefbarkeit')
+  })
+})
+
+describe('Die Überlassungskette ist kein Vorgang', () => {
+  it('ordnet „es entsteht keine Überlassungskette" als berechneten Wert ein', () => {
+    // Die Signatur `entsteht kein` der Art `vorgangsstatus` meint einen
+    // Vorgang, der nicht entsteht — eine Einladung, einen Einsatz. Eine Kette
+    // ist keiner von beiden: der Satz spricht über den Kettenbeginn
+    // (SPEC 5.1.5). Als `vorgangsstatus` verlangte er, dass der Übergang
+    // unterbleibt, und machte aus richtiger Fachlogik ein rotes Szenario.
+    expect(erfasseErwartung('es entsteht keine Überlassungskette bei diesem Kunden').art).toBe(
+      'berechneter_wert',
+    )
+  })
+
+  it('ordnet „es entsteht keine Einladung" weiter als Vorgangsstatus ein', () => {
+    expect(erfasseErwartung('es entsteht keine Einladung').art).toBe('vorgangsstatus')
+    expect(erfasseErwartung('es entsteht kein Einsatz im Status "planned"').art).toBe(
+      'vorgangsstatus',
+    )
   })
 })
 

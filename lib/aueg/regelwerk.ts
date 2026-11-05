@@ -106,8 +106,45 @@ export interface Dauerkonfiguration {
   readonly warnungTage: number
 }
 
+/**
+ * Die Werte des Equal Pay (SPEC 5.2). `regelfristMonate` und
+ * `obergrenzeMonate` sind **gesetzliche** Werte (§ 8 Abs. 4 Sätze 1 und 2
+ * AÜG) und stehen deshalb hier — 5.2.2 sagt es ausdrücklich: „Die Werte 9 und
+ * 15 sind gesetzliche Werte und stehen deshalb in diesem Kapitel; die
+ * Stufenfolge eines konkreten Branchenzuschlagstarifs steht als Konfiguration
+ * am `industryPremiumScheme` (3.3) und nirgends hier."
+ *
+ * `hinweisTage` und `warnungTage` sind `equalPayNoticeDays` und
+ * `equalPayWarningDays` aus 5.0, Abschnitt „Festwerte dieses Kapitels".
+ */
+export interface EqualPaykonfiguration {
+  /** § 8 Abs. 4 Satz 1 AÜG: nach neun Monaten gilt Equal Pay zwingend. */
+  readonly regelfristMonate: number
+  /** § 8 Abs. 4 Satz 2 AÜG: längstens bis zum 15. Monat, mit Zuschlagsschema. */
+  readonly obergrenzeMonate: number
+  /** `equalPayNoticeDays` — 60 Tage vor `equalPayDueDate`. */
+  readonly hinweisTage: number
+  /** `equalPayWarningDays` — 30 Tage vor `equalPayDueDate` ohne Entgeltangabe. */
+  readonly warnungTage: number
+}
+
 export interface Regelwerkkonfiguration {
   readonly dauer: Dauerkonfiguration
+  readonly equalPay: EqualPaykonfiguration
+  /** Fehlende Tarifzuordnung der Verleiherseite (5.2.2, Fall 1). */
+  readonly adressatenVerleihertarifFehlt: readonly Rollenkuerzel[]
+  /** Unzulässige Fristkonfiguration (5.2.2, Fälle 5 und 6). */
+  readonly adressatenFristkonfiguration: readonly Rollenkuerzel[]
+  /** `equalPayNoticeDays` erreicht (5.0, Festwerte). */
+  readonly adressatenEqualPayHinweis: readonly Rollenkuerzel[]
+  /** Fälligkeit erreicht und `comparableWage` fehlt (5.0, 5.2.3 Schritt 4). */
+  readonly adressatenEqualPayWarnung: readonly Rollenkuerzel[]
+  /** Kein verwendbarer Vergleichsentgelt-Eintrag (5.2.4, Schritt 2). */
+  readonly adressatenVergleichsentgeltFehlt: readonly Rollenkuerzel[]
+  /** Abweichung des Einsatzwerts **nach unten** (5.2.4, Schritt 3). */
+  readonly adressatenEntgeltabweichung: readonly Rollenkuerzel[]
+  /** Einsatzbranche und damit die Zuschlagsstufe nicht bestimmbar (5.2.5). */
+  readonly adressatenZuschlagsstufe: readonly Rollenkuerzel[]
   /** Restbudget ≤ `hinweisTage` (5.1.6, Zeile 1). */
   readonly adressatenDauerHinweis: readonly Rollenkuerzel[]
   /** Restbudget ≤ `warnungTage` (5.1.6, Zeile 2): `MD` → `MA`, Information an `KB`. */
@@ -168,6 +205,26 @@ export const REGELWERK: Regelwerkkonfiguration = {
     hinweisTage: 90,
     warnungTage: 30,
   },
+  equalPay: {
+    // § 8 Abs. 4 Satz 1 AÜG, SPEC 5.2.2 Fall 2.
+    regelfristMonate: 9,
+    // § 8 Abs. 4 Satz 2 AÜG, SPEC 5.2.2 Fall 4 und 6.
+    obergrenzeMonate: 15,
+    // SPEC 5.0: `equalPayNoticeDays`, `equalPayWarningDays`.
+    hinweisTage: 60,
+    warnungTage: 30,
+  },
+  // 5.2.2 Fall 1: `supplierCollectiveAgreement` ist ab `active` Pflicht (3.2);
+  // das Fehlen ist ein Datenfehler mit unmittelbarer Entgeltfolge.
+  adressatenVerleihertarifFehlt: ['MA'],
+  adressatenFristkonfiguration: ['MA'],
+  // 5.0, Festwerte: „Information an `MD` und `KE`".
+  adressatenEqualPayHinweis: ['MD', 'KE'],
+  adressatenEqualPayWarnung: ['MD', 'MA', 'KE'],
+  // 5.2.4: „Der Entleiher pflegt den Eintrag (3.3); die Meldung geht an `KE`."
+  adressatenVergleichsentgeltFehlt: ['KE'],
+  adressatenEntgeltabweichung: ['KE'],
+  adressatenZuschlagsstufe: ['KE', 'MD'],
   adressatenDauerHinweis: ['MD'],
   adressatenDauerWarnung: ['MD', 'MA', 'KB'],
   adressatenDauerErreicht: ['MD', 'MA', 'KB', 'LD'],

@@ -25,7 +25,15 @@ import {
   transitionAssignment,
   transitionExtension,
 } from '../../lib/services/staffing'
-import { baueWelt, legeEinsatzAn, legeTarifzuordnungAn, leereDatenbank, tag, type Welt } from './fixture'
+import {
+  baueWelt,
+  entferneVerleiherzuordnungen,
+  legeEinsatzAn,
+  legeTarifzuordnungAn,
+  leereDatenbank,
+  tag,
+  type Welt,
+} from './fixture'
 
 let welt: Welt
 let disponent: LoadedIdentity
@@ -152,6 +160,11 @@ describe('P1: die Überlassungskette wird geladen und fortgeschrieben (SPEC 5.1,
       nummer: 'E-2',
       status: 'planned',
       plannedStartDate: tag('2027-07-14'),
+      // Die Kette läuft seit dem 15.01.2026; Equal Pay ist seit dem 15.10.2026
+      // geschuldet (9 Monate, 5.2.2 Fall 2). Ohne `comparableWage` sperrt Q48
+      // den Start — zu Recht. Der Test prüft die Grenze aus 5.1.5, nicht die
+      // Entgeltlücke, und braucht deshalb eine rechtmäßige Welt.
+      vergleichsentgelt: '21.40',
     })
 
     expect((await starte(zweiter, tag('2027-07-14'))).ok).toBe(true)
@@ -378,6 +391,168 @@ describe('P1 an der Verlängerung (SPEC 4.3.2, Q30)', () => {
     // Das neue Ende ist Rechengrundlage: der Fristenstand wird mit ihm neu
     // abgeleitet (5.5.1 b).
     expect(zeile.maxDurationEndDate?.toISOString().slice(0, 10)).toBe('2027-07-14')
+  })
+})
+
+describe('P3: die Equal-Pay-Fälligkeit erreicht den Übergang (SPEC 5.2, 4.3)', () => {
+  async function fristenstandMitEqualPay(nummer: string) {
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: nummer } })
+    return zeile.equalPayDueDate?.toISOString().slice(0, 10) ?? null
+  }
+
+  it('schreibt equalPayDueDate an jeden Einsatz der Kette fort', async () => {
+    await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'terminatedEarly',
+      plannedStartDate: tag('2026-01-15'),
+      actualStartDate: tag('2026-01-15'),
+      actualEndDate: tag('2026-05-31'),
+    })
+    const zweiter = await legeEinsatzAn(welt, {
+      nummer: 'E-2',
+      status: 'planned',
+      plannedStartDate: tag('2026-06-01'),
+    })
+
+    expect((await starte(zweiter, tag('2026-06-01'))).ok).toBe(true)
+    // Kettenbeginn 15.01.2026, Regelfrist 9 Monate (5.2.2 Fall 2): das
+    // Fristbudget sind 273 Tage bis zum 14.10., die Fälligkeit ist der 15.10.
+    for (const nummer of ['E-1', 'E-2']) {
+      expect(await fristenstandMitEqualPay(nummer)).toBe('2026-10-15')
+    }
+  })
+
+  it('nimmt die tarifliche Frist der Verleiherseite, nicht die des Standorts', async () => {
+    // 5.2.2: die Frist kommt von der Verleiherseite — anders als die Grenze in
+    // 5.1.2. Eine Zuordnung des Standorts mit anderer Frist bleibt unbeachtet.
+    await prisma.collectiveAgreementAssignment.updateMany({
+      where: { appliesToType: 'supplier' },
+      data: { equalPayDeadlineMonths: 6 },
+    })
+    await legeTarifzuordnungAn(welt, {
+      ebene: 'site',
+      monate: 18,
+      equalPayMonate: 12,
+      validFrom: tag('2025-01-01'),
+    })
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+    // 6 Monate ab dem 15.01.2026: Budget bis zum 14.07., Fälligkeit 15.07.
+    expect(await fristenstandMitEqualPay('E-1')).toBe('2026-07-15')
+  })
+
+  it('begrenzt eine Frist über der Regelfrist ohne Zuschlagsschema auf neun Monate', async () => {
+    // § 8 Abs. 4 Satz 2: die Verlängerung setzt die stufenweise Annäherung
+    // voraus. Ohne Schema ist der Wert nicht verwendbar (5.2.2, Fall 5).
+    await prisma.collectiveAgreementAssignment.updateMany({
+      where: { appliesToType: 'supplier' },
+      data: { equalPayDeadlineMonths: 12, industryPremiumScheme: null },
+    })
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+    expect(await fristenstandMitEqualPay('E-1')).toBe('2026-10-15')
+  })
+
+  it('lässt die tarifliche Frist mit Zuschlagsschema gelten', async () => {
+    await prisma.collectiveAgreementAssignment.updateMany({
+      where: { appliesToType: 'supplier' },
+      data: { equalPayDeadlineMonths: 12, industryPremiumScheme: 'Beispielschema B1' },
+    })
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+    expect(await fristenstandMitEqualPay('E-1')).toBe('2027-01-15')
+  })
+
+  it('sperrt den Start ohne Verleihertarif und ohne Vergleichsentgelt (Q48)', async () => {
+    // 5.2.2 Fall 1: ohne Tarifzuordnung der Verleiherseite gibt es keine
+    // Abweichung vom Gleichstellungsgrundsatz — Equal Pay ab dem **ersten**
+    // Überlassungstag. Zusammen mit fehlendem `comparableWage` ist das die
+    // Sperre aus Q48.
+    await entferneVerleiherzuordnungen()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+    })
+
+    const ergebnis = await starte(einsatz, tag('2026-01-15'))
+    expect(ergebnis.ok).toBe(false)
+
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: 'E-1' } })
+    expect(zeile.status).toBe('planned')
+    // Eine Sperre schreibt nichts (4.0, Regel 5).
+    expect(zeile.equalPayDueDate).toBeNull()
+  })
+
+  it('lässt denselben Start mit hinterlegtem Vergleichsentgelt zu', async () => {
+    await entferneVerleiherzuordnungen()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      vergleichsentgelt: '21.40',
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+    // Die Fälligkeit ist der erste Überlassungstag selbst.
+    expect(await fristenstandMitEqualPay('E-1')).toBe('2026-01-15')
+  })
+
+  it('leitet die Fälligkeit mit der Verlängerung neu ab (Q32)', async () => {
+    await legeTarifzuordnungAn(welt, {
+      ebene: 'site',
+      monate: 18,
+      validFrom: tag('2025-01-01'),
+      validTo: tag('2028-12-31'),
+    })
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'active',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-06-30'),
+      actualStartDate: tag('2026-01-15'),
+      vergleichsentgelt: '21.40',
+    })
+
+    await requestExtension(disponent, {
+      assignmentId: einsatz,
+      newEndDate: tag('2026-12-31'),
+      reason: 'Projekt läuft länger',
+    })
+    const verlaengerung = await prisma.assignmentExtension.findFirstOrThrow()
+    await transitionExtension(genehmiger, {
+      extensionId: verlaengerung.id,
+      transition: 'approve',
+      rejectionReason: null,
+    })
+    expect(
+      (
+        await transitionExtension(disponent, {
+          extensionId: verlaengerung.id,
+          transition: 'makeEffective',
+          rejectionReason: null,
+        })
+      ).ok,
+    ).toBe(true)
+
+    // Die Fälligkeit fällt in den verlängerten Zeitraum und wird mit ihm
+    // fortgeschrieben (5.5.1 b).
+    expect(await fristenstandMitEqualPay('E-1')).toBe('2026-10-15')
   })
 })
 

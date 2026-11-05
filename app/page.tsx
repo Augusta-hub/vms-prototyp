@@ -60,9 +60,10 @@ export default async function Home() {
         Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat und
         Profilvorschlag sowie der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3. Noch nicht
         umgesetzt: Zeiten (3.8), Abrechnung (3.9), Nachweise (3.10) und das Protokoll (3.12). Aus
-        Kapitel 5 rechnen P1, P2, P6, P9, P10 und P11; P1, P6 und P11 greifen an den Übergängen
-        des Einsatzes und schreiben das Fristende und die angerechnete Dauer fort. P3 bis P5, P7
-        und P8 stehen aus — die Equal-Pay-Fälligkeit bleibt deshalb leer.
+        Kapitel 5 rechnen neun von elf Prüfungen: P1 bis P6 und P9 bis P11. An den Übergängen des
+        Einsatzes greifen P1, P3, P6 und P11 und schreiben Fristende, angerechnete Dauer und
+        Equal-Pay-Fälligkeit fort. P7 und P8 stehen aus; was P4 am Eintrag des Standorts prüft und
+        die Zuschlagsstufe aus P5 sind an den Übergängen noch nicht angebunden.
       </p>
 
       <h2>Testidentität</h2>

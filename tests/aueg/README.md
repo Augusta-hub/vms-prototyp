@@ -89,44 +89,64 @@ Zahlen sind richtig, sie zählen Verschiedenes.
 
 ## Stand des Regelwerks
 
-Stand 05.11.2026: **267 Szenarien — 82 grün, 0 rot, 185 ausstehend.** Umgesetzt
-sind in `lib/aueg/` sechs der elf Prüfungen:
+Stand 05.11.2026: **267 Szenarien — 105 grün, 0 rot, 162 ausstehend.** Umgesetzt
+sind in `lib/aueg/` **neun** der elf Prüfungen:
 
 | Prüfung | grün | rot | ausstehend | von | Kapitel |
 |---|---:|---:|---:|---:|---|
-| P1 Höchstüberlassungsdauer | **19** | 0 | 37 | 56 | 5.1 |
+| P1 Höchstüberlassungsdauer | **22** | 0 | 34 | 56 | 5.1 |
 | P2 Unterbrechung und Drei-Monats-Regel | **6** | 0 | 3 | 9 | 5.1.4 |
+| P3 Equal-Pay-Fälligkeit | **11** | 0 | 10 | 21 | 5.2.3 |
+| P4 Vergleichsentgelt | **7** | 0 | 19 | 26 | 5.2.4 |
+| P5 Branchenzuschlagsschema | **2** | 0 | 3 | 5 | 5.2.5 |
 | P6 Drehtürklausel | **8** | 0 | 15 | 23 | 5.3.1 |
 | P9 AÜG-Erlaubnis | **29** | 0 | 15 | 44 | 5.4.1 |
 | P10 Pflichtnachweise | **15** | 0 | 8 | 23 | 5.4.4 |
 | P11 Arbeitsverhältnis beim Verleiher | **7** | 0 | 11 | 18 | 5.3.4 |
 
-P3, P4, P5, P7 und P8 haben **keinen** Rechenweg und melden deshalb weiter
-`ausstehend`. Jeder Schritt ohne Fachlogik nennt die fehlende Prüfung;
-**stillschweigend grün wird nichts.**
+P7 und P8 haben **keinen** Rechenweg und melden deshalb weiter `ausstehend`.
+Jeder Schritt ohne Fachlogik nennt die fehlende Prüfung; **stillschweigend grün
+wird nichts.**
+
+P1 ist mit P3 von 19 auf 22 gestiegen, ohne dass sich an P1 etwas geändert hat:
+Q27 nennt in 4.7 „P1, **P3**", und ein Übergang, dem eine seiner Prüfungen
+fehlt, bleibt **ganz** unbeurteilt (5.5.2 Nr. 2). Die Bremse fällt von selbst
+weg, sobald der fehlende Rechenweg vorliegt — sie wird nicht gelöst.
 
 Grün sind die Rechenwegszenarien dieser Prüfungen, die Übergänge Q03, Q04, Q06,
 Q07, Q08, Q09, Q10, Q11, Q12, Q14, Q15, Q16, Q17, Q20, Q21, Q23, Q26, Q28, Q30,
 Q31, Q33, Q35, Q37, Q38, Q41 bis Q44 und Q47, die gestuften nächtlichen Läufe
 N1, N2 und N5, die zurückgewiesenen und die wirksamen Übersteuerungen.
 
-**Warum die 185 ausstehen, obwohl sechs Prüfungen laufen.** 99 von ihnen haben
-**keinen** Befund: ihre Prüfungen haben noch keinen Rechenweg (P3 bis P5, P7,
-P8) oder das Szenario trägt keine Prüfungszuordnung. Die anderen **86 haben
-einen** — in ihnen ist das Prüfergebnis selbst zugesichert und grün. Ausstehend
-bleibt jeweils ein **anderer** Satz desselben Szenarios, den der Runner nicht
-maschinell prüft:
+**Warum die 162 ausstehen, obwohl neun Prüfungen laufen.** Von den 254
+geschriebenen Szenarien haben **44 keinen** Befund: ihre Prüfungen haben noch
+keinen Rechenweg (P7, P8) oder das Szenario trägt keine Prüfungszuordnung. Die
+anderen **210 haben einen** — in ihnen ist das Prüfergebnis selbst zugesichert
+und grün. Ausstehend bleibt jeweils ein **anderer** Satz desselben Szenarios,
+den der Runner nicht maschinell prüft:
 
-| Grund | Beispielsatz |
-|---|---|
-| Fachliche Feststellung in Prosa (`fachaussage`, `rechtsfolge`) | „die Übersteuerung heilt die Rechtslage nicht", „der Einsatz wird geplant, nicht begonnen" |
-| Satz nennt keinen vergleichbaren Wert (`berechneter_wert`) | „die abgeleiteten Felder sind an jedem Einsatz der Kette fortgeschrieben" |
-| Datentrennung und Rechtsfolge (`sichtbarkeit`, `rechtsfolge`) | „der 14.07.2027 ist der letzte zulässige Überlassungstag" |
+| Grund | Zusicherungen | Beispielsatz |
+|---|---:|---|
+| Fachliche Feststellung in Prosa (`fachaussage`) | 138 | „die Übersteuerung heilt die Rechtslage nicht", „läuft die Überlassungskette entleiherbezogen weiter" |
+| Satz nennt keinen vergleichbaren Wert (`berechneter_wert`) | 17 | „die abgeleiteten Felder sind an jedem Einsatz der Kette fortgeschrieben" |
+| Rechtsfolge in Prosa (`rechtsfolge`) | 14 | „der 14.07.2027 ist der letzte zulässige Überlassungstag" |
+| Datentrennung (`sichtbarkeit`) | 4 | „das Entgeltgefüge des Entleihers bleibt für Lieferantenrollen unsichtbar" |
+| Übrige (`pruefbarkeit`, `adressierung`, Szenariogrundriss) | 6 | „wird die Lage wie »kein Eintrag« behandelt" |
 
 Ein Teil dieser Sätze **wäre** gegen den Befund prüfbar und ist nur von der
 Signaturtabelle in `tests/aueg-runner/support/erwartung.ts` als Prosa
 eingeordnet. Das ist die nächste Verbesserung am **Runner**, nicht an der
 Fachlogik; sie betrifft alle vier Feature-Dateien.
+
+**Der Runner hat eine eigene Gegenprobe.** cucumber überspringt die Schritte
+nach einem ausstehenden Schritt — eine falsch ausgewertete Zusicherung bleibt
+dadurch unsichtbar, bis ein früherer Schritt grün wird, und wird dann plötzlich
+rot. Deshalb werden **alle** Zusicherungen jedes Szenarios zusätzlich ohne das
+Überspringen durchgerechnet. Mit 5.2 hat das vier solche Fälle gefunden, darunter
+eine echte Lücke in der Fachlogik (5.2.6, „mindestens eine Warnung"). Die
+Einordnung und die Auswertung sind seitdem in
+`tests/aueg-runner/support/erwartung.test.ts` und `auswertung.test.ts`
+festgenagelt.
 
 Ein Szenario gilt erst als grün, wenn **jede** seiner Zusicherungen geprüft ist.
 

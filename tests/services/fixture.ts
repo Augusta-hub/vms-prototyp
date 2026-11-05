@@ -246,6 +246,27 @@ export async function baueWelt(): Promise<Welt> {
     data: { rateCardId: verkaufsliste.id, itemType: 'baseRate' },
   })
 
+  // Die Tarifzuordnung der **Verleiherseite**. Sie ist nach SPEC 3.2 ab Status
+  // `active` Pflicht, und 5.2.2 liest aus ihr die Equal-Pay-Frist. Ohne sie
+  // gilt Fall 1: Equal Pay ab dem ersten Überlassungstag — dann sperrt Q48
+  // jeden Einsatzstart ohne Vergleichsentgelt. Eine Welt ohne sie ist deshalb
+  // keine rechtmäßige Welt, sondern ein Datenfehler; den prüft ein eigener
+  // Test, nicht die Grundlage.
+  for (const lieferantId of [lieferant.id, zweiterLieferant.id]) {
+    await prisma.collectiveAgreementAssignment.create({
+      data: {
+        tenantId: betreiber.id,
+        collectiveAgreement: 'Beispieltarif Z1',
+        appliesToType: 'supplier',
+        supplierId: lieferantId,
+        validFrom: tag('2025-01-01'),
+        validTo: tag('2028-12-31'),
+        // Leer heißt: gesetzliche Regelfrist von neun Monaten (5.2.2, Fall 2).
+        equalPayDeadlineMonths: null,
+      },
+    })
+  }
+
   const personenidentitaet = await prisma.workerIdentity.create({
     data: {
       tenantId: betreiber.id,
@@ -337,6 +358,8 @@ export async function legeEinsatzAn(
     readonly lieferant?: string
     readonly kandidat?: string
     readonly mitPersonenidentitaet?: boolean
+    /** `comparableWage` (3.7) — ab `equalPayDueDate` Pflicht (5.2.4). */
+    readonly vergleichsentgelt?: string | null
   },
 ): Promise<string> {
   const einsatz = await prisma.assignment.create({
@@ -356,6 +379,8 @@ export async function legeEinsatzAn(
       actualStartDate: eigenes.actualStartDate ?? null,
       actualEndDate: eigenes.actualEndDate ?? null,
       weeklyHours: '35.00',
+      comparableWage: eigenes.vergleichsentgelt ?? null,
+      comparableWageCurrency: eigenes.vergleichsentgelt === undefined ? null : 'EUR',
       agreedRateCardItemId: welt.einkaufsposition,
       customerRateCardItemId: welt.verkaufsposition,
       status: eigenes.status,
@@ -364,7 +389,7 @@ export async function legeEinsatzAn(
   return einsatz.id
 }
 
-/** Eine Tarifzuordnung (SPEC 3.3) — die Grenze aus 5.1.2. */
+/** Eine Tarifzuordnung (SPEC 3.3) — die Grenze aus 5.1.2, die Frist aus 5.2.2. */
 export async function legeTarifzuordnungAn(
   welt: Welt,
   eigenes: {
@@ -372,6 +397,10 @@ export async function legeTarifzuordnungAn(
     readonly monate: number | null
     readonly validFrom: Date
     readonly validTo?: Date | null
+    /** `equalPayDeadlineMonths` (5.2.2); leer = gesetzliche Regelfrist. */
+    readonly equalPayMonate?: number | null
+    /** `industryPremiumScheme` (5.2.5). */
+    readonly zuschlagsschema?: string | null
   },
 ): Promise<void> {
   await prisma.collectiveAgreementAssignment.create({
@@ -385,6 +414,20 @@ export async function legeTarifzuordnungAn(
       validFrom: eigenes.validFrom,
       validTo: eigenes.validTo ?? null,
       maxAssignmentDurationMonths: eigenes.monate,
+      equalPayDeadlineMonths: eigenes.equalPayMonate ?? null,
+      industryPremiumScheme: eigenes.zuschlagsschema ?? null,
     },
+  })
+}
+
+/**
+ * Entfernt die Tarifzuordnungen der Verleiherseite — die Datenlage aus 5.2.2
+ * Fall 1. Sie ist ein **Datenfehler** (3.2 macht die Zuordnung ab `active` zur
+ * Pflicht), und ihre Folge ist die strengste des Kapitels: Equal Pay ab dem
+ * ersten Überlassungstag.
+ */
+export async function entferneVerleiherzuordnungen(): Promise<void> {
+  await prisma.collectiveAgreementAssignment.deleteMany({
+    where: { appliesToType: 'supplier' },
   })
 }

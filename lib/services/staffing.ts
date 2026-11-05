@@ -13,11 +13,22 @@
  *
  * **Die AÜG-Prüfungen rechnet dieses Modul nicht.** Die Statusmodelle 4.2.3
  * und 4.3 nennen in ihren Vorbedingungen die Ergebnisse von P1, P4, P6 bis P11;
- * `RULE_CHECKS_PENDING` unten ist die **eine** Stelle, an der die noch nicht
- * gerechneten Ergebnisse herkommen, und sie ist als solche benannt. Zwei
- * Tatsachen sind davon ausgenommen, weil sie reine Feldabfragen aus 3.6 sind
- * und keine Regel: das Vorliegen der Erklärung zur Vorbeschäftigung und das
- * Bestehen des Arbeitsverhältnisses am ersten Überlassungstag.
+ * gerechnet werden sie in `lib/aueg/`, geladen hier. `RULE_CHECKS_PENDING`
+ * unten ist die **eine** Stelle, an der die noch nicht gerechneten Ergebnisse
+ * herkommen, und sie ist als solche benannt. Zwei Tatsachen sind davon
+ * ausgenommen, weil sie reine Feldabfragen aus 3.6 sind und keine Regel: das
+ * Vorliegen der Erklärung zur Vorbeschäftigung und das Bestehen des
+ * Arbeitsverhältnisses am ersten Überlassungstag.
+ *
+ * **`equalPayDueFromFirstDay` hat zwei Quellen** (5.5.2 Nr. 2, strengstes
+ * Ergebnis): den Treffer der Drehtürklausel (P6, 5.3.1 Schritt 5) und eine
+ * Equal-Pay-Fälligkeit am oder vor dem ersten Überlassungstag (P3, 5.2.2
+ * Fall 1). Zusammen mit `comparableWagePresent` bildet das die Sperre aus Q48.
+ * Was P4 darüber hinaus prüft — den Eintrag des Standorts zu Tätigkeit und
+ * Zeitraum (5.2.4, E10) —, ist an diesen Übergängen **nicht** geladen; die
+ * Warnung aus Q18 und die Sperre aus Q36 hängen daran und fehlen deshalb noch.
+ * P5 braucht die Stufenfolge des Schemas (3.3) und ist ebenfalls nicht
+ * angebunden.
  *
  * Die Nebenwirkungen aus Kapitel 4, die der Prototyp noch nicht hat
  * (Benachrichtigungen, Fristenlauf, Audit-Eintrag aus 3.12), sind an ihrer
@@ -26,11 +37,14 @@
 import {
   bestehtArbeitsverhaeltnisAmErstenTag,
   drehtuerstand,
+  equalPaystand,
   haeltVerlaengerungDieFrist,
   hoechstdauerstand,
   type Einsatzzeile,
+  type EqualPaystand,
   type Hoechstdauerstand,
   type Tarifzeile,
+  type Verleiherzeile,
 } from '../aueg/anbindung'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
@@ -110,6 +124,8 @@ interface Regelstand {
   readonly equalPayDueFromFirstDay: boolean
   readonly newEndWithinMaxDuration: boolean
   readonly hoechstdauer: Hoechstdauerstand | null
+  /** P3 (5.2.3): `equalPayDueDate` und die Fälligkeit am ersten Tag. */
+  readonly equalPay: EqualPaystand | null
 }
 
 /**
@@ -122,6 +138,7 @@ const OHNE_REGELSTAND: Regelstand = {
   equalPayDueFromFirstDay: false,
   newEndWithinMaxDuration: true,
   hoechstdauer: null,
+  equalPay: null,
 }
 
 /** Die Eingangsdaten, die P1 und P6 aus der Datenbank brauchen. */
@@ -129,6 +146,13 @@ interface Regelgrundlage {
   /** Die Überlassungskette: alle Einsätze derselben Person bei diesem Kunden. */
   readonly kette: readonly Einsatzzeile[]
   readonly tarifzuordnungen: readonly Tarifzeile[]
+  /**
+   * Die Zuordnungen der **Verleiherseite** (3.3). 5.2.2 liest die Equal-Pay-
+   * Frist aus ihnen — anders als 5.1.2, wo die Einsatzbranche maßgeblich ist.
+   * Deshalb werden sie getrennt geführt und nicht mit `tarifzuordnungen`
+   * vermischt.
+   */
+  readonly verleiherzuordnungen: readonly Verleiherzeile[]
   /** Namen der Kunden mit demselben `corporateGroup` (§ 18 AktG, 5.3.1). */
   readonly konzernunternehmen: readonly string[]
   readonly identitaetBestaetigt: boolean
@@ -147,11 +171,12 @@ interface Regelgrundlage {
 async function grundlageLaden(bezug: {
   readonly customerId: string
   readonly siteId: string
+  readonly supplierId: string | null
   readonly workerIdentityId: string | null
   readonly candidateId: string
   readonly corporateGroup: string | null
 }): Promise<Regelgrundlage> {
-  const [kette, tarifzuordnungen, konzern] = await Promise.all([
+  const [kette, tarifzuordnungen, verleiherzuordnungen, konzern] = await Promise.all([
     prisma.assignment.findMany({
       where: {
         customerId: bezug.customerId,
@@ -163,10 +188,18 @@ async function grundlageLaden(bezug: {
       orderBy: [{ plannedStartDate: 'asc' }],
     }),
     // 5.1.2: Rang 1 der Standort, Rang 2 der Kunde. Die Verleiherseite wird
-    // nicht gelesen und deshalb nicht geladen.
+    // für die **Grenze** nicht gelesen und deshalb hier nicht geladen.
     prisma.collectiveAgreementAssignment.findMany({
       where: { OR: [{ siteId: bezug.siteId }, { customerId: bezug.customerId }] },
     }),
+    // 5.2.2: die Equal-Pay-**Frist** kommt dagegen von der Verleiherseite. Ohne
+    // Lieferanten gibt es keine Zuordnung — und damit Fall 1: Equal Pay ab dem
+    // ersten Überlassungstag (das ist die strengste Folge, nicht die mildeste).
+    bezug.supplierId === null
+      ? Promise.resolve([])
+      : prisma.collectiveAgreementAssignment.findMany({
+          where: { appliesToType: 'supplier', supplierId: bezug.supplierId },
+        }),
     bezug.corporateGroup === null
       ? Promise.resolve([])
       : prisma.customer.findMany({
@@ -189,6 +222,7 @@ async function grundlageLaden(bezug: {
       })),
     })),
     tarifzuordnungen,
+    verleiherzuordnungen,
     konzernunternehmen: konzern.map((eintrag) => eintrag.legalName),
     identitaetBestaetigt: bezug.workerIdentityId !== null,
   }
@@ -274,6 +308,10 @@ async function regelstandFuerEinsatz(
   objekt: {
     readonly customerId: string
     readonly siteId: string
+    /** Für 5.2.2: die Equal-Pay-Frist kommt von der Verleiherseite. */
+    readonly supplierId: string
+    /** `assignment.comparableWage` (3.7) — E12 aus 5.2.4. */
+    readonly comparableWage: unknown
     readonly workerIdentityId: string | null
     readonly candidateId: string
     readonly customer: { readonly legalName: string; readonly corporateGroup: string | null }
@@ -288,6 +326,7 @@ async function regelstandFuerEinsatz(
   const grundlage = await grundlageLaden({
     customerId: objekt.customerId,
     siteId: objekt.siteId,
+    supplierId: objekt.supplierId,
     workerIdentityId: objekt.workerIdentityId,
     candidateId: objekt.candidateId,
     corporateGroup: objekt.customer.corporateGroup,
@@ -312,11 +351,28 @@ async function regelstandFuerEinsatz(
     ersterUeberlassungstag: zeile.actualStartDate ?? zeile.plannedStartDate,
   })
 
+  const equalPay = equalPaystand({
+    einsaetze: mitVorgang(grundlage.kette, zeile),
+    kunde: objekt.customer.legalName,
+    verleiherzuordnungen: grundlage.verleiherzuordnungen,
+    stichtag: bezug.stichtag,
+    zeitraum: bezug.zeitraum,
+    ersterUeberlassungstag: zeile.actualStartDate ?? zeile.plannedStartDate,
+    vergleichsentgeltGesetzt: objekt.comparableWage !== null,
+    identitaetBestaetigt: grundlage.identitaetBestaetigt,
+  })
+
   return {
     maxDurationExceeded: dauer.maxDurationExceeded,
-    equalPayDueFromFirstDay: drehtuer.equalPayDueFromFirstDay,
+    // Zwei Wege führen zu Equal Pay ab dem ersten Tag: der Treffer der
+    // Drehtürklausel (5.3.1, Schritt 5) und eine Fälligkeit, die am oder vor
+    // dem ersten Überlassungstag liegt (5.2.2 Fall 1). Zusammen mit
+    // `comparableWagePresent` ist das die Sperre aus Q48.
+    equalPayDueFromFirstDay:
+      drehtuer.equalPayDueFromFirstDay || equalPay.equalPayDueFromFirstDay,
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
+    equalPay,
   }
 }
 
@@ -328,6 +384,7 @@ async function regelstandFuerVerlaengerung(
   const grundlage = await grundlageLaden({
     customerId: assignment.customerId,
     siteId: assignment.siteId,
+    supplierId: assignment.supplierId,
     workerIdentityId: assignment.workerIdentityId,
     candidateId: assignment.candidateId,
     corporateGroup: assignment.customer.corporateGroup,
@@ -339,11 +396,28 @@ async function regelstandFuerVerlaengerung(
     bisherigesEnde: assignment.plannedEndDate,
     neuesEnde,
   })
+  // 5.0, Zeile „Verlängerung": Prüfzeitraum ist das bisherige `plannedEndDate`
+  // + 1 Tag bis `newEndDate`. Dieselbe Rechnung für die Equal-Pay-Fälligkeit —
+  // sie kann im verlängerten Zeitraum erst entstehen (Q29, Q32).
+  const equalPay = equalPaystand({
+    einsaetze: grundlage.kette,
+    kunde: assignment.customer.legalName,
+    verleiherzuordnungen: grundlage.verleiherzuordnungen,
+    stichtag: null,
+    zeitraum: {
+      von: assignment.plannedEndDate ?? neuesEnde,
+      bis: neuesEnde,
+    },
+    ersterUeberlassungstag: assignment.actualStartDate ?? assignment.plannedStartDate,
+    vergleichsentgeltGesetzt: assignment.comparableWage !== null,
+    identitaetBestaetigt: grundlage.identitaetBestaetigt,
+  })
   return {
     maxDurationExceeded: dauer.maxDurationExceeded,
     equalPayDueFromFirstDay: false,
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
+    equalPay,
   }
 }
 
@@ -371,6 +445,9 @@ async function regelstandFuerVorschlag(vorschlag: {
   const grundlage = await grundlageLaden({
     customerId: vorschlag.demandRequest.customerId,
     siteId: vorschlag.demandRequest.siteId,
+    // 4.7 nennt P3 am Profilvorschlag nicht (Q07 und Q11 führen nur P1); die
+    // Verleiherzuordnung wird hier deshalb nicht geladen.
+    supplierId: null,
     workerIdentityId: vorschlag.candidate.workerIdentityId,
     candidateId: vorschlag.candidate.id,
     corporateGroup: null,
@@ -391,6 +468,7 @@ async function regelstandFuerVorschlag(vorschlag: {
     equalPayDueFromFirstDay: false,
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
+    equalPay: null,
   }
 }
 
@@ -403,6 +481,7 @@ async function regelstandFuerVorschlag(vorschlag: {
 async function schreibeFristenstand(
   tx: Pick<typeof prisma, 'assignment'>,
   stand: Hoechstdauerstand | null,
+  equalPay: EqualPaystand | null = null,
 ): Promise<void> {
   if (stand === null || stand.chainAssignmentIds.length === 0) return
   await tx.assignment.updateMany({
@@ -410,6 +489,10 @@ async function schreibeFristenstand(
     data: {
       maxDurationEndDate: stand.maxDurationEndDate,
       countedDurationDays: stand.countedDurationDays,
+      // `equalPayDueDate` gehört zur **gleichen** Kette und wird mit ihr
+      // fortgeschrieben (5.2.3, „Ergebnisfeld"). Fehlt der Stand, bleibt das
+      // Feld unberührt — ein `null` würde einen gerechneten Wert löschen.
+      ...(equalPay === null ? {} : { equalPayDueDate: equalPay.equalPayDueDate }),
     },
   })
 }
@@ -1577,6 +1660,11 @@ export async function createAssignment(
   const regelstand = await regelstandFuerEinsatz(neueZeile, dauerbezug(neueZeile), {
     customerId: submission.demandRequest.customerId,
     siteId: submission.demandRequest.siteId,
+    supplierId: submission.candidate.supplierId,
+    // Der Wert, den der Einsatz **erben** wird: entweder die Eingabe oder der
+    // Eintrag des Standorts (3.3, 5.2.4). Er zählt schon für diese Prüfung,
+    // weil er mit dem Einsatz gespeichert wird.
+    comparableWage,
     workerIdentityId: submission.candidate.workerIdentityId,
     candidateId: submission.candidate.id,
     customer: submission.demandRequest.customer,
@@ -1663,19 +1751,28 @@ export async function createAssignment(
     // sie schon. Die Kennung des neuen Einsatzes stand beim Rechnen noch nicht
     // fest und ist deshalb kein Ziel.
     if (regelstand.hoechstdauer !== null) {
-      await schreibeFristenstand(prisma, {
-        ...regelstand.hoechstdauer,
-        chainAssignmentIds: regelstand.hoechstdauer.chainAssignmentIds.filter(
-          (kennung) => kennung !== '(neuer Einsatz)',
-        ),
-      })
+      const ohneNeuen = (kennungen: readonly string[]) =>
+        kennungen.filter((kennung) => kennung !== '(neuer Einsatz)')
+      await schreibeFristenstand(
+        prisma,
+        {
+          ...regelstand.hoechstdauer,
+          chainAssignmentIds: ohneNeuen(regelstand.hoechstdauer.chainAssignmentIds),
+        },
+        regelstand.equalPay === null
+          ? null
+          : {
+              ...regelstand.equalPay,
+              chainAssignmentIds: ohneNeuen(regelstand.equalPay.chainAssignmentIds),
+            },
+      )
     }
   } catch (error) {
     return asFailure(error, 'Einsatz konnte nicht angelegt werden')
   }
   // Nebenwirkungen aus 4.3.1, die der Prototyp noch nicht hat:
   // Benachrichtigung an `KB`, `KE` und `LD`. `equalPayDueDate` rechnet P3
-  // (5.2) und bleibt bis dahin leer. Die Bedarfsanfrage auf `filled` zu setzen
+  // (5.2) und wird mit dem Übergang fortgeschrieben. Die Bedarfsanfrage auf `filled` zu setzen
   // ist ein eigener Übergang (4.1) und bleibt beim Betreiber.
   return success('Einsatz angelegt; Status „planned" (4.3.1).')
 }
@@ -1780,7 +1877,7 @@ export async function transitionAssignment(
       // `countedDurationDays` werden an **jedem** Einsatz der Kette
       // fortgeschrieben — in derselben Transaktion wie der Übergang, der die
       // Rechengrundlage geändert hat (5.5.1 b).
-      await schreibeFristenstand(tx, regelstand.hoechstdauer)
+      await schreibeFristenstand(tx, regelstand.hoechstdauer, regelstand.equalPay)
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Einsatz konnte nicht gespeichert werden')
@@ -2037,7 +2134,7 @@ export async function transitionExtension(
           dauerbezug({ ...assignment, plannedEndDate: extension.newEndDate }),
           assignment,
         )
-        await schreibeFristenstand(tx, nachVerlaengerung.hoechstdauer)
+        await schreibeFristenstand(tx, nachVerlaengerung.hoechstdauer, nachVerlaengerung.equalPay)
       }
     })
   } catch (error) {

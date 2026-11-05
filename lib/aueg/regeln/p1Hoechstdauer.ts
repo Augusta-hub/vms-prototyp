@@ -452,11 +452,18 @@ function pruefeDaten(lage: Kettenlage): Dauerergebnis | null {
  * nach `maxDurationEndDate` enthalten"), sonst der letzte Tag des
  * Prüfzeitraums, sonst der Stichtag.
  */
-function bezugstagVon(lage: Kettenlage): Tag | null {
+export function bezugstagVon(lage: Kettenlage): Tag | null {
   return lage.zeitpositionen?.bis ?? lage.zeitraum?.bis ?? lage.stichtag ?? null
 }
 
-interface Kette {
+/**
+ * Die maßgebliche Überlassungskette. **Auch 5.2 rechnet auf ihr** — „dieselbe
+ * Kette, andere Frist" (5.2.1): die Anrechnungsregel des § 8 Abs. 4 Satz 4 ist
+ * die des § 1 Abs. 1b Satz 2. Deshalb ist dieser Typ exportiert und P3 bildet
+ * die Kette nicht ein zweites Mal; zwei Fassungen derselben Rechnung würden
+ * auseinanderlaufen.
+ */
+export interface Kette {
   readonly beginn: Tag | null
   /** Die Überlassungstage der maßgeblichen Kette, chronologisch. */
   readonly tage: readonly Tag[]
@@ -469,7 +476,7 @@ interface Kette {
  * Schritte 1 und 2: Überlassungstage bilden, vereinigen und die Kette dort
  * schneiden, wo eine Lücke von mehr als drei Monaten liegt (5.1.4).
  */
-function bildeKette(
+export function bildeKette(
   lage: Kettenlage,
   bezugstag: Tag | null,
   konfiguration: Regelwerkkonfiguration,
@@ -571,7 +578,7 @@ function waehleKette(ketten: readonly Tag[][], bezug: Tag | null): readonly Tag[
  * das ist ein Ergebnis, keine Lücke in den Daten (5.1.5, „Einsatz, der nie
  * begonnen hat").
  */
-function zaehleDauer(lage: Kettenlage, kette: Kette): number | null {
+export function zaehleDauer(lage: Kettenlage, kette: Kette): number | null {
   if (lage.gesetzteDauer !== null && gehoertZurKette(lage.gesetzteDauerStand, kette)) {
     return lage.gesetzteDauer
   }
@@ -588,7 +595,7 @@ function zaehleDauer(lage: Kettenlage, kette: Kette): number | null {
  * fällt. Sind weniger Tage bekannt, wird ab dem letzten bekannten Tag
  * kalendarisch fortgeschrieben — jeder Folgetag gilt als Überlassungstag.
  */
-function tagFuerBudget(tage: readonly Tag[], budget: number): Tag | null {
+export function tagFuerBudget(tage: readonly Tag[], budget: number): Tag | null {
   if (budget <= 0) return tage[0] ?? null
   if (tage.length >= budget) return tage[budget - 1] ?? null
   const letzter = tage[tage.length - 1]

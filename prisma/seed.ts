@@ -655,8 +655,11 @@ async function main(): Promise<void> {
   })
 
   // Entleihertarif mit abweichenden Werten: 24 Monate Höchstüberlassungsdauer
-  // statt 18 (5.1) und 15 Monate Equal-Pay-Frist statt 9 (5.2) — genau die
-  // Parameter, die 3.3 am Zuordnungsobjekt führt.
+  // statt 18 (5.1) — genau die Parameter, die 3.3 am Zuordnungsobjekt führt.
+  // Die 15 Monate Equal-Pay-Frist stehen hier nur als Datenbeispiel: 5.2.2
+  // liest die Frist aus der Zuordnung der **Verleiherseite**, nicht aus der des
+  // Entleihers. Für die Rechnung ist dieser Wert deshalb ohne Wirkung — anders
+  // als `maxAssignmentDurationMonths`, das 5.1.2 gerade hier liest.
   const customerAgreementAssignment = await prisma.collectiveAgreementAssignment.create({
     data: {
       tenantId: tenantId('operator'),

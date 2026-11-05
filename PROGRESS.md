@@ -5,6 +5,131 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-05 — Equal Pay: P3, P4 und P5 rechnen, P3 greift am Übergang
+
+### Gemacht
+
+Der Equal-Pay-Block aus SPEC 5.2 ist umgesetzt: **P3** (Fälligkeit, 5.2.3),
+**P4** (Vergleichsentgelt, 5.2.4) und **P5** (Branchenzuschlag, 5.2.5). Damit
+rechnen **neun von elf** Prüfungen; ohne Rechenweg stehen nur noch P7 und P8.
+
+**Die Kette wird nicht zweimal gebaut.** 5.2.1 sagt „dieselbe Kette, andere
+Frist": die Anrechnungsregel des § 8 Abs. 4 Satz 4 ist die des § 1 Abs. 1b
+Satz 2. `p1Hoechstdauer.ts` exportiert deshalb `bildeKette`, `zaehleDauer` und
+`tagFuerBudget`, und `p3EqualPayFrist.ts` rechnet auf ihnen. Zwei Fassungen
+derselben Kette würden auseinanderlaufen — und die Lückenverschiebung, die
+5.2.6 verlangt, fällt so ohne eine Zeile Sonderlogik richtig aus.
+
+**Die Frist kommt von der Verleiherseite** (5.2.2), nicht von der
+Einsatzbranche wie die Grenze in 5.1.2. Beide stehen in derselben Tabelle;
+`kettenlage.ts` liest ausdrücklich **nicht** die Verleiherzuordnung, der neue
+Leser `entgeltlage.ts` liest ausschließlich sie. Alle sechs Fälle sind
+abgebildet, mit einer Reihenfolge, die begründet ist: Fall 5 (über der
+Regelfrist **ohne** Schema) wird **vor** Fall 6 (über der Obergrenze) geprüft.
+18 Monate ohne Schema ergeben deshalb 9, nicht 15 — die Obergrenze gilt der
+stufenweisen Annäherung, die dort fehlt.
+
+**Neue Dateien:** `lib/aueg/regeln/p3EqualPayFrist.ts(.test.ts)`,
+`p4Vergleichsentgelt.ts(.test.ts)`, `p5Branchenzuschlag.ts(.test.ts)`,
+`lib/aueg/lesen/entgeltlage.ts`, `tests/aueg-runner/support/auswertung.test.ts`.
+Dazu die elf Querschnittzeilen Q18, Q19, Q27, Q29, Q32, Q34, Q36, Q39, Q40, Q48
+und N3 in `querschnitt.ts`, die Equal-Pay-Festwerte in `regelwerk.ts` und
+`equalPaystand` in `anbindung.ts`.
+
+**P3 greift am Übergang.** `equalPayDueDate` war seit M4 das leere Feld, das auf
+P3 gewartet hat; es wird jetzt in derselben Transaktion wie der Übergang an
+**jedem** Einsatz der Kette fortgeschrieben. `equalPayDueFromFirstDay` hat
+seitdem zwei Quellen — den Treffer der Drehtürklausel (P6) und eine Fälligkeit
+am oder vor dem ersten Überlassungstag (P3, Fall 1). Zusammen mit
+`comparableWagePresent` ist das die Sperre aus **Q48**.
+
+### Entscheidungen
+
+1. **P5 erfindet keine Stufenfolge.** 5.2.5 sagt: „P5 nennt keine Prozentsätze,
+   keine Stufengrenzen und keine Branchenzuordnung." Ohne hinterlegte
+   Stufenfolge bleibt die Stufe deshalb `null`, mit Vermerk — die Rechnung nennt
+   die Eingangsgröße (Überlassungstage der Kette), nicht einen geratenen Wert.
+   Drei Szenarien bleiben dadurch ausstehend. Das ist richtig so: eine
+   Stufengrenze im Code wäre ein Tarifwert im Code.
+2. **Der Vorlauf gehört dem nächtlichen Lauf.** `equalPayNoticeDays` und
+   `equalPayWarningDays` (5.0) beschreiben, wie früh das System auf eine
+   kommende Fälligkeit hinweist. An einem Übergang entscheidet allein 5.2.3
+   Schritt 4. Eine Fälligkeit 15 Tage **nach** dem Prüfzeitraum ist dort eine
+   Information, keine Warnung — sonst wären Q29 und Q34 falsch.
+3. **Nur die fehlende Personenidentität hebt das Ergebnis an.** 5.2.6 gibt der
+   begrenzten Zählgrundlage „mindestens eine Warnung", dem unbestätigten
+   maschinellen Vorschlag aber nur „zählt nicht". Erst war meine Bedingung zu
+   weit und machte das zweite Szenario rot; der Unterschied ist sachlich: die
+   begrenzte Kette **rechnet** mit zu wenigen Tagen, der unbestätigte Vorschlag
+   wird gar nicht angerechnet.
+4. **Das Fixture der Dienst-Tests bekommt eine Verleiherzuordnung.** Nach der
+   Anbindung sperrten neun der 18 Dienst-Tests — zu Recht: ihr Lieferant hatte
+   keine Tarifzuordnung, also galt Fall 1 und Q48 griff. Nach 3.2 ist die
+   Zuordnung ab Status `active` **Pflicht**; eine Welt ohne sie ist kein
+   gültiger Testfall, sondern ein Datenfehler. Das Fixture führt sie jetzt, und
+   ein eigener Test entfernt sie absichtlich, um Fall 1 zu prüfen.
+
+### Vier verdeckte Fehler, die cucumber nicht gezeigt hat
+
+cucumber **überspringt** die Schritte nach einem ausstehenden Schritt. Eine
+falsch ausgewertete Zusicherung bleibt dadurch unsichtbar, bis ein früherer
+Schritt grün wird — und wird dann rot, an einer Stelle, die niemand angefasst
+hat. Alle Zusicherungen wurden deshalb zusätzlich **ohne** das Überspringen
+durchgerechnet. Das fand vier Fälle:
+
+| Fund | Art | Behandlung |
+|---|---|---|
+| „eine Warnung **statt einer Sperre**" las der Runner als Sperre | Runner | `leseErgebnisart` kennt die Wendung jetzt als Verneinung, wie „keine Sperre" |
+| Der gesperrte Vorgang „Genehmigung des Stundenzettels" war nicht abgebildet | Anwendungscode | `leseGesperrtenVorgang` kennt ihn (Q36, bleibt in `inApproval`) |
+| Der Stichtag einer **Berichtigung** wurde nicht gelesen | Anwendungscode | „am 20.11.2026 wird … nachgetragen" ist der Stichtag des zweiten Prüfanlasses (5.5.1 b) |
+| **Fachlogik fehlte:** 5.2.6 verlangt bei begrenzter Zählgrundlage und fehlendem Entgelt „mindestens eine Warnung" | Fachlogik | `mindestensWarnung` in P3, angehoben in `pruefwerk.ts` |
+
+Dazu zwei Lücken im Runner, die **ungeprüfte** Zusicherungen waren: er verglich
+nur Tageszahlen und Datumsangaben, **keine Monatsangaben** — „gilt die
+gesetzliche Regelfrist von 9 Monaten" blieb ausstehend, obwohl die Fachlogik 9
+rechnete. Und „es entsteht keine Überlassungs**kette**" las er als verweigerten
+Statusübergang; eine Kette ist aber kein Vorgang, der Übergang nach
+`terminatedEarly` findet statt. Beides ist behoben und in
+`tests/aueg-runner/support/auswertung.test.ts` festgenagelt.
+
+### Geprüft
+
+**Gemessen:** `npm run test:aueg` → 267 Szenarien, **105 grün, 0 rot, 162
+ausstehend** (vorher 82/0/185) · `npm test` → 612 grün in 30 Dateien, weiter
+ohne Datenbank · `npm run test:services` → **25 grün** (vorher 18) ·
+`npm run typecheck` → Exit 0 · `npm run build` → kompiliert ·
+`tests/aueg/*.feature` null geändert · `.env` nicht im Index.
+
+**Alle Zusicherungen ohne Überspringen:** 460 erfüllt, **0 verletzt**, 308
+ausstehend über alle vier Feature-Dateien.
+
+**Die Rechnungen sind gegen die Spezifikation nachgerechnet**, nicht nur gegen
+den Code: 15.01.2026 + 9 Monate − 1 Tag = 14.10.2026, Fristbudget 273 Tage,
+Fälligkeit 15.10.2026 (5.2.3, Schritt 3); 6 Monate → 181 Tage, 15.07.2026; 15
+Monate → 455 Tage, 15.04.2027; und die Unterbrechung von exakt drei Monaten
+schiebt die Fälligkeit um 91 Lückentage vom 01.07. auf den 30.09.2026.
+
+**Durch die Oberfläche gegengeprüft:** `planned` → `active` an E-2026-0002
+schreibt `equalPayDueDate = 2027-11-15` nach PostgreSQL und zeigt es an —
+Beginn 15.02.2027 plus 9 Monate, erster Tag mit Equal-Pay-Pflicht. Die
+Entwicklungsdatenbank ist danach neu geseedet; alle abgeleiteten Felder sind
+wieder leer.
+
+### Offen
+
+- **P4 und P5 sind an den Übergängen nur zum Teil angebunden.** Was P4 über den
+  Vergleichsentgelt-**Eintrag** des Standorts prüft (Q18, Q36) und die
+  Zuschlagsstufe aus P5 brauchen Eingangsdaten, die dort nicht geladen sind.
+  Die Sperre aus Q48 greift, weil sie nur `equalPayDueDate` und
+  `comparableWage` braucht.
+- **P7 (Arbeitskampf, 14 Szenarien) und P8 (Kennzeichnung, 20) haben keinen
+  Rechenweg.** Sie sind die letzten beiden.
+- Die drei ausstehenden P5-Szenarien hängen an der Stufenfolge, die
+  Konfiguration am Schema ist (3.3) und im Prototyp nicht gepflegt wird.
+- `demand.ts` und `masterData.ts` haben weiter keine Dienst-Tests.
+
+---
+
 ## 2026-11-05 — Dienst-Tests: die Anbindung ist jetzt belegt, nicht behauptet
 
 ### Gemacht
