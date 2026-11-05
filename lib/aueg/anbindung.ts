@@ -26,6 +26,8 @@
  *    Sperre aus Q48 bildet,
  *  - **P6** an Q08, Q12 und Q15 — die Rechtsfolge `equalPayDueFromFirstDay`
  *    und die Tatsachengrundlage `hasPreviousEmploymentDeclaration`,
+ *  - **P8** an Q45 und Q46 — die Tatsache `concretizationComplete` aus den
+ *    Kriterien K1 bis K5 (5.3.3),
  *  - **P11** an Q09, Q13, Q17 und Q47.
  *
  * **Nicht angebunden** sind P9 und P10 an den Zeilen am Einsatz, an der
@@ -33,8 +35,17 @@
  * Q38, Q41 bis Q44): ihre Eingangsdaten — Erlaubnissätze und Nachweise — sind
  * an diesen Übergängen nicht geladen, und das Laden ist ein eigener Schritt.
  * Das Prüfwerk rechnet diese Zeilen bereits, nur hängt dort noch kein Übergang
- * daran. P7 und P8 haben keinen Rechenweg; ihre Tatsachen behalten den
- * benannten, **nicht sperrenden** Wert in `lib/services/staffing.ts`.
+ * daran.
+ *
+ * **P7 ist nicht angebunden, und zwar nicht aus Zeitmangel.** 5.3.2 hält fest,
+ * dass Kapitel 3 für die Arbeitskampfanzeige **kein Feld** am Standort und für
+ * die Zusicherung nach § 11 Abs. 5 Satz 2 AÜG **kein Objekt** führt; beides ist
+ * behelfsweise ein `document` mit `documentCategory = other`. Die SPEC sagt
+ * dazu selbst: „damit ist die Regel prüfbar, aber **nicht auswertbar**". Ein
+ * Feld dafür zu erfinden wäre eine Entscheidung über *offene Frage 30*, und die
+ * steht nicht hier. Der Rechenweg läuft deshalb gegen die Gherkin-Suite, und
+ * `noIndustrialActionAtSite` bleibt in `lib/services/staffing.ts` der benannte,
+ * **nicht sperrende** Wert — mit dieser Begründung, nicht als Lücke.
  *
  * **Dieses Modul rechnet, es lädt nicht.** Jede Funktion nimmt die Zeilen, die
  * der Aufrufer geladen hat, und gibt die Tatsache zurück, die das Statusmodell
@@ -50,6 +61,7 @@ import {
 } from './regeln/p1Hoechstdauer'
 import { pruefeEqualPayFrist, type Fristfall } from './regeln/p3EqualPayFrist'
 import { pruefeDrehtuer } from './regeln/p6Drehtuer'
+import { pruefeKonkretisierung, type Pruefstufe } from './regeln/p8Konkretisierung'
 import { pruefeArbeitsverhaeltnis } from './regeln/p11Arbeitsverhaeltnis'
 import { pruefeErlaubnis, type Erlaubnissatz, type Zeitraum } from './regeln/p9Erlaubnis'
 import { REGELWERK } from './regelwerk'
@@ -448,6 +460,117 @@ export function bestehtArbeitsverhaeltnisAmErstenTag(eingabe: {
   })
   return {
     employmentRelationshipOnFirstDay: ergebnis.bestehtAmErstenTag,
+    meldung: ergebnis.meldung,
+  }
+}
+
+/** Der Rahmenvertrag der Lieferantenseite, wie K1 ihn braucht (SPEC 3.3). */
+export interface Rahmenvertragszeile {
+  readonly agreementNumber: string
+  readonly agreementType: string
+  readonly status: string
+  readonly supplierId: string | null
+  readonly validFrom: Date
+  readonly validTo: Date | null
+}
+
+/** Das Ergebnis der Konkretisierungsprüfung für die Tatsachen aus 4.3 (5.3.3). */
+export interface Konkretisierungsstand {
+  /** `concretizationComplete`: die Tatsache, die 4.3.1 als Vorbedingung führt. */
+  readonly concretizationComplete: boolean
+  /** Die Kriterien, die nicht tragen — für die Meldung am Vorgang. */
+  readonly offeneKriterien: readonly string[]
+  /** Kriterien, die aus Datenmangel nicht prüfbar sind (5.0). */
+  readonly nichtPruefbareKriterien: readonly string[]
+  /** Laufzeitende des Rahmenvertrags, wenn es vor dem Einsatzende liegt. */
+  readonly rahmenvertragEndetAm: Date | null
+  readonly meldung: string
+}
+
+/**
+ * P8 für einen Einsatz (SPEC 5.3.3).
+ *
+ * **Der Tag der Anlage ist `createdAt`.** 4.3.1 führt genau einen Weg nach
+ * `planned` — „— → `planned`" —, der Einsatz **entsteht** also in diesem
+ * Zustand. Der Übergang nach `planned`, den K5 datiert, ist damit die Anlage
+ * der Zeile. Das ist keine Annäherung: 3.12 würde denselben Tag protokollieren,
+ * nur führt das Datenmodell den Audit-Eintrag noch nicht als Tabelle.
+ *
+ * **Hier wird nichts vorbelegt.** Anders als der Gherkin-Leser, der eine
+ * erzählte Lage liest, bekommt diese Funktion echte Daten: ein fehlendes Feld
+ * ist ein Treffer (5.0).
+ */
+export function konkretisierungsstand(eingabe: {
+  readonly einsatz: {
+    readonly candidateId: string | null
+    readonly activityDescription: string
+    readonly siteId: string | null
+    readonly supplierId: string
+    readonly agreedRateCardItemId: string | null
+    readonly plannedStartDate: Date | null
+    readonly plannedEndDate: Date | null
+    readonly actualStartDate: Date | null
+    readonly createdAt: Date | null
+  }
+  /** Über `agreedRateCardItemRef` → `rateCard.masterAgreementRef` (3.3). */
+  readonly rahmenvertrag: Rahmenvertragszeile | null
+  /** `demandRequest.title`; `null`, wenn der Einsatz ohne Anfrage entstand. */
+  readonly titelDerAnfrage: string | null
+  /** `start`, sobald die Überlassung begonnen hat — dann gilt auch K5. */
+  readonly stufe: Pruefstufe
+}): Konkretisierungsstand {
+  const einsatz = eingabe.einsatz
+  const titel = eingabe.titelDerAnfrage
+  const beschreibung = einsatz.activityDescription.trim()
+
+  const ergebnis = pruefeKonkretisierung(
+    {
+      preisposition: einsatz.agreedRateCardItemId,
+      rahmenvertrag:
+        eingabe.rahmenvertrag === null
+          ? null
+          : {
+              bezeichnung: eingabe.rahmenvertrag.agreementNumber,
+              art: eingabe.rahmenvertrag.agreementType,
+              status: eingabe.rahmenvertrag.status,
+              gegenpartei: eingabe.rahmenvertrag.supplierId,
+              laufzeitVon: alsTag(eingabe.rahmenvertrag.validFrom),
+              laufzeitBis:
+                eingabe.rahmenvertrag.validTo === null
+                  ? null
+                  : alsTag(eingabe.rahmenvertrag.validTo),
+            },
+      lieferant: einsatz.supplierId,
+      kandidat: einsatz.candidateId,
+      taetigkeit: einsatz.activityDescription,
+      titelDerAnfrage: titel,
+      taetigkeitWieTitel: titel !== null && beschreibung === titel.trim(),
+      mitAnfrage: titel !== null,
+      qualifikationsanforderung: null,
+      standort: einsatz.siteId,
+      beginnGesetzt: einsatz.plannedStartDate !== null,
+      geplanterBeginn:
+        einsatz.plannedStartDate === null ? null : alsTag(einsatz.plannedStartDate),
+      geplantesEnde: einsatz.plannedEndDate === null ? null : alsTag(einsatz.plannedEndDate),
+      anlagetag: einsatz.createdAt === null ? null : alsTag(einsatz.createdAt),
+      ersterUeberlassungstag:
+        einsatz.actualStartDate === null
+          ? einsatz.plannedStartDate === null
+            ? null
+            : alsTag(einsatz.plannedStartDate)
+          : alsTag(einsatz.actualStartDate),
+    },
+    eingabe.stufe,
+  )
+
+  return {
+    // Die **Vorbedingung** des Übergangs ist erfüllt, solange kein Kriterium
+    // offen ist. Die Laufzeitwarnung aus dem Grenzfall ist ein Befund, keine
+    // Sperre (5.3.3) — sie darf den Übergang nicht verhindern.
+    concretizationComplete: ergebnis.offen.length === 0,
+    offeneKriterien: ergebnis.offen,
+    nichtPruefbareKriterien: ergebnis.nichtPruefbar,
+    rahmenvertragEndetAm: alsDatum(ergebnis.laufzeitendeImEinsatz),
     meldung: ergebnis.meldung,
   }
 }

@@ -5,6 +5,160 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-05 — P7 und P8: alle elf AÜG-Prüfungen rechnen
+
+### Gemacht
+
+Die letzten beiden Prüfungen aus SPEC 5.3 sind umgesetzt: **P7** (Einsatzverbot
+bei Arbeitskampf, 5.3.2) und **P8** (Kennzeichnungs- und
+Konkretisierungspflicht, 5.3.3). Damit hat **jede** der elf Prüfungen aus der
+Querschnittstabelle 4.7 einen Rechenweg.
+
+**P7 kehrt den Grundsatz aus 5.0 um — als einzige Regel des Kapitels.** Sonst
+wirkt eine fehlende Angabe wie ein Treffer. Hier nicht: ohne Arbeitskampfanzeige
+gibt es **keinen** Treffer. 5.3.2 begründet das ausdrücklich — eine fehlende
+Anzeige bedeutet im Regelfall, dass kein Arbeitskampf läuft, und der Grundsatz
+würde jeden Einsatzstart sperren. Der Preis steht in 5.5.1: die Regel ist nur so
+gut wie die Meldedisziplin des Entleihers. Das steht nicht nur im Kommentar,
+sondern im **Befund**, damit wer das Ergebnis liest weiß, was es nicht sagt.
+Eine Mutation, die diese Ausnahme entfernt, macht genau die drei Szenarien rot,
+die sie zusichern.
+
+Zwei Milderungen senken die Sperre auf eine Warnung, und nur nach unten: die
+**Zusicherung nach § 11 Abs. 5 Satz 2 AÜG** (die gesetzliche Ausnahme, sie geht
+vor) und die **Teilbetroffenheit** — nennt die Anzeige Bereiche, die die
+Tätigkeit des Einsatzes nicht abdecken, entscheidet der Entleiher über die
+unmittelbare Betroffenheit, nicht das System. Der Textvergleich, der dahinter
+steht, kann deshalb nie eine Sperre erzeugen, nur eine aufheben.
+
+**P8 ist formal, und das ist die Entscheidung.** Die Regel mit der schärfsten
+Rechtsfolge im AÜG (§ 9 Abs. 1 Nr. 1a, § 10 Abs. 1) hat die schwächste
+Datengrundlage: das System kann die Form eines Vertrags nicht beurteilen.
+Deshalb prüft P8 die fünf Kriterien K1 bis K5 und sagt **nie**, die
+Konkretisierung sei inhaltlich erfüllt — es sagt, was geprüft wurde (5.3.3
+Nr. 4). Drei Prüfstufen, weil drei Zeitpunkte verschieden viel können: die
+Bedarfsanfrage (nur die Vorläufer von K3, Information bzw. Warnung), das Anlegen
+(K1 bis K4, Sperre) und der Start (K5 und K1 bis K4 erneut, Sperre — der letzte
+Zeitpunkt, an dem die Prüfung etwas verhindern kann).
+
+**Neue Dateien:** `lib/aueg/regeln/p7Arbeitskampf.ts(.test.ts)`,
+`p8Konkretisierung.ts(.test.ts)`, `lib/aueg/lesen/arbeitskampflage.ts(.test.ts)`,
+`konkretisierungslage.ts(.test.ts)`. Dazu die sieben Querschnittzeilen Q01, Q02,
+Q05, Q22, Q45, Q46 und N4 in `querschnitt.ts`, fünf Adressatenlisten in
+`regelwerk.ts` und `konkretisierungsstand` in `anbindung.ts`.
+
+**P8 greift am Übergang, P7 nicht — und das ist kein Zeitmangel.** 5.3.2 hält
+fest, dass Kapitel 3 für die Arbeitskampfanzeige **kein Feld** am Standort und
+für die Zusicherung **kein Objekt** führt; beides ist behelfsweise ein
+`document`. Die SPEC sagt dazu selbst: „damit ist die Regel prüfbar, aber
+**nicht auswertbar**". Ein Feld zu erfinden hieße, *offene Frage 30* im Code zu
+entscheiden. `noIndustrialActionAtSite` bleibt deshalb in
+`RULE_CHECKS_PENDING` — mit dieser Begründung an der Stelle, nicht als Lücke.
+
+`concretizationComplete` dagegen wird gerechnet. K1 führt über
+`agreedRateCardItemRef` → `rateCard.masterAgreementRef` zum Rahmenvertrag der
+Lieferantenseite, K5 vergleicht den Tag der Anlage mit dem ersten
+Überlassungstag.
+
+### Entscheidungen
+
+1. **`createdAt` ist der Tag des Übergangs nach `planned` (K5).** 4.3.1 kennt
+   genau einen Weg dorthin — „— → `planned`" —, der Einsatz **entsteht** also in
+   diesem Zustand. Das ist keine Annäherung an den Audit-Eintrag aus 3.12,
+   sondern derselbe Tag; 3.12 ist nur noch nicht als Tabelle modelliert.
+2. **Der Gherkin-Leser belegt die Kriterien vor, der Rechenweg nicht.** Die
+   Grundlage der Feature-Datei sagt: „die Angaben dieser Grundlage gelten,
+   soweit ein Szenario nichts anderes sagt", und ein Szenariogrundriss, der
+   **ein** nicht erfülltes Kriterium nennt, behauptet damit, dass die anderen
+   erfüllt sind. `konkretisierungslage.ts` liest deshalb eine **erzählte** Lage
+   und setzt an, bis ein Satz wegnimmt. `p8Konkretisierung.ts` hält sich ohne
+   Ausnahme an 5.0: ein `null` ist dort ein Treffer. Gegen echte Daten läuft
+   dieselbe Regel in `staffing.ts`, und dort gibt es keine Vorbelegung — belegt
+   durch vier neue Dienst-Tests gegen PostgreSQL.
+3. **Adressaten werden abgeleitet, nicht geraten.** 5.3.2 und 5.3.3 nennen für
+   die Sperren keine; 2.4 führt für „AÜG-Sperre blockiert einen Vorgang" `MD`
+   mit Eskalation an `MA`. Für P7 steht die Kundenseite **nicht** in der Liste:
+   wer die Zusicherung abgeben darf, ist *offene Frage 30*, und eine Rolle zu
+   raten hieße, die Frage zu entscheiden (CLAUDE.md, Regel 5).
+4. **Die Bremse bleibt, obwohl sie leer läuft.** „Ein Vorgang, zu dem eine
+   Prüfung ohne Rechenweg gehört, bleibt ganz unbeurteilt" (5.5.2 Nr. 2) fängt
+   jetzt nichts mehr. Sie bleibt stehen und wird über
+   `pruefungenOhneRechenweg()` weiter geprüft: sie ist die Haltung, nicht eine
+   Übergangslösung, und die nächste Prüfung braucht sie wieder.
+
+### Drei Fehleinordnungen im Runner — gefunden, nicht vermutet
+
+Die Gegenprobe ohne cucumbers Überspringen hat drei Zusicherungsarten gefunden,
+die **nie** geprüft wurden:
+
+1. **`kriterium` war als auswertbar geführt, hatte aber keinen
+   Auswertungszweig** und fiel in den Vorgabefall. Bei P8 sind K1 bis K5 die
+   ganze Prüfung — jede Zusicherung über sie blieb stillschweigend ausstehend.
+   Verglichen wird jetzt auf der **Nummer** des Kriteriums: die Szenarien kürzen
+   („K2 Person"), 5.3.3 schreibt aus („K2 Konkretisierung der Person"). Die
+   Spanne „K1 bis K4" wird aufgelöst, sonst prüfte der Satz nur die Ränder.
+2. **„ist der 20.09.2026 ein betroffener Tag" galt als Prosa.** Der Befund führt
+   die geprüften Tage; die neue Art `betroffenheit` vergleicht sie.
+3. **Der Protokolleintrag war erfüllt, sobald irgendein Befund irgendeine
+   Begründung trug.** „mit der Prüfung »industrialActionCheck« und dem Ergebnis
+   »blocked«" nennt zwei Felder des Audit-Eintrags (3.12); sie werden jetzt
+   verglichen. Das betrifft **alle** Feature-Dateien, nicht nur 5.3.
+
+### Zwei Fixtures waren nicht rechtmäßig
+
+Nach der Anbindung fielen 18 von 25 Dienst-Tests aus — zu Recht:
+
+- Die Einsätze des Fixtures entstanden **nach** ihrem eigenen ersten
+  Überlassungstag (`createdAt` = jetzt, Beginn im Januar). Das ist genau der
+  Verstoß, den K5 verhindert. `legeEinsatzAn` setzt `createdAt` deshalb auf den
+  ersten Überlassungstag; der Seed tat das über `SEED_DATE` schon, bis auf einen
+  Einsatz, der vor dem Stichtag der Demonstrationsdaten begann.
+- Der Einsatz über den **zweiten** Lieferanten verwies auf den Rahmenvertrag des
+  ersten. 5.3.3 sagt im Grenzfall „Lieferantenwechsel": der neue Einsatz braucht
+  einen eigenen aktiven Rahmenvertrag des neuen Lieferanten. Das Fixture hat
+  jetzt einen.
+
+Beide Male war das Fixture der Fehler, nicht die Regel — dieselbe Lage wie bei
+der fehlenden Verleiher-Tarifzuordnung in der Arbeitseinheit davor.
+
+### Gemessen
+
+- `npm run test:aueg`: **267 Szenarien — 120 grün, 0 rot, 147 ausstehend**
+  (vorher 105/0/162). P7 5 von 14, P8 10 von 20.
+- Gegenprobe ohne Überspringen: **559 Zusicherungen erfüllt, 0 verletzt, 239
+  ausstehend**. Nur noch **13** Szenarien haben überhaupt keinen Befund, und das
+  sind genau die ohne Prüfungszuordnung.
+- `npm test`: **706 grün** in 34 Dateien, weiter ohne Datenbank.
+- `npm run test:services`: **29 grün** gegen PostgreSQL, davon vier neue zu P8.
+- `npm run typecheck` und `npm run build`: fehlerfrei.
+- Keine der vier Dateien in `tests/aueg/` wurde angefasst.
+- **Fünf Mutationen**, jede von genau den richtigen Tests gefangen: die
+  P7-Ausnahme entfernt (3 Szenarien rot), K5 auch beim Anlegen geprüft (2
+  Szenarien rot), K3 ohne Titelvergleich (1 Szenario rot, darunter durch die
+  neue `kriterium`-Auswertung), ein falscher `ruleRef` (1 Szenario rot durch die
+  neue Protokollprüfung), `concretizationComplete` fest auf `true` (3
+  Dienst-Tests rot).
+- Durch die Oberfläche belegt: E-2026-0002 lässt sich mit aktivem Rahmenvertrag
+  starten; nach dessen Kündigung meldet die Seite „Vorbedingung nicht erfüllt:
+  P8: Konkretisierung vollständig und rechtzeitig (5.3.3)" und der Einsatz
+  bleibt `planned`. Danach neu geseedet.
+
+### Offen
+
+- **P7 ist nicht an die Übergänge gebunden**, weil Kapitel 3 das Feld dafür
+  nicht führt (*offene Frage 30*). Das ist die nächste Entscheidung, die vom
+  Auftraggeber kommen muss, nicht aus dem Code.
+- P4 am Eintrag des Standorts (Q18, Q36), die Zuschlagsstufe aus P5 und P9/P10
+  am Einsatz rechnen, ihre Eingangsdaten sind an den Übergängen nicht geladen.
+- Drei P5-Szenarien hängen an der Stufenfolge des `industryPremiumScheme` —
+  Konfiguration nach 3.3, im Prototyp nicht gepflegt.
+- `demand.ts` und `masterData.ts` haben weiter keine Dienst-Tests.
+- SPEC Kapitel 6 (Datenschutz, Löschfristen) ist Gliederung; das Glossar 1.5
+  kennt seine Begriffe nicht. 32 der 41 Fragen sind offen, vier davon für eine
+  anwaltliche Prüfung.
+
+---
+
 ## 2026-11-05 — Equal Pay: P3, P4 und P5 rechnen, P3 greift am Übergang
 
 ### Gemacht

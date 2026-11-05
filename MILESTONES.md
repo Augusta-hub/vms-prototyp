@@ -62,12 +62,12 @@ Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
 ## M4 — Klickbare Demo: Besetzung 🟨
 
 Fortschrittsmesser steht: `npm run test:aueg` führt die 267 Szenarien aus und
-berichtet je Prüfung P1 bis P11. Stand 05.11.2026: **105 grün, 0 rot, 162
+berichtet je Prüfung P1 bis P11. Stand 05.11.2026: **120 grün, 0 rot, 147
 ausstehend** — jede implementierte Prüfung schlägt sich unmittelbar in der
 Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 
 - ✅ Gherkin-Runner angebunden, AÜG-Suite läuft (getrennt von `npm test`)
-- 🟨 AÜG-Prüfungen umgesetzt — **neun von elf laufen:**
+- ✅ AÜG-Prüfungen umgesetzt — **alle elf laufen:**
   - **P1 Höchstüberlassungsdauer** (5.1): 22 von 56 grün. Kalendarische
     Zählung über Lieferanten und Kunden hinweg entlang der **bestätigten**
     Personenidentität, Tarifabweichung als Konfiguration, Schwellen und
@@ -91,6 +91,16 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     ein Tarifwert im Code
   - **P6 Drehtürklausel** (5.3.1): 8 von 23 grün. Nicht übersteuerbar, die
     zugehörigen Szenarien erwarten den zurückgewiesenen Versuch
+  - **P7 Einsatzverbot bei Arbeitskampf** (5.3.2): 5 von 14 grün. Die
+    **einzige** Regel des Kapitels, die den Grundsatz aus 5.0 umkehrt: ohne
+    Arbeitskampfanzeige gibt es **keinen** Treffer, weil der Grundsatz sonst
+    jeden Einsatzstart sperren würde. Zusicherung nach § 11 Abs. 5 Satz 2 AÜG
+    und Teilbetroffenheit mildern die Sperre zur Warnung; nicht übersteuerbar
+  - **P8 Kennzeichnung und Konkretisierung** (5.3.3): 10 von 20 grün. Die
+    Regel mit der schärfsten Rechtsfolge auf der schwächsten Datengrundlage —
+    deshalb eine **formale** Prüfung von K1 bis K5 in drei Stufen, die nie
+    behauptet, die Konkretisierung sei inhaltlich erfüllt. Nicht
+    übersteuerbar: die Konkretisierung wird nachgetragen
   - **P9 AÜG-Erlaubnis** (5.4.1): 29 von 44 grün. Tagesgenaue Deckung,
     Lücken, Anerkennungsstatus, befristete gegen unbefristete Erlaubnis,
     Datenfehler, nächtlicher Lauf N1
@@ -98,10 +108,10 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     Konfiguration, Sammelergebnis als strengstes Einzelergebnis, fehlende
     Pflichtangaben wie „ja", nächtlicher Lauf N5
   - **P11 Arbeitsverhältnis beim Verleiher** (5.3.4): 7 von 18 grün
-  - P7 und P8 stehen aus — sie stehen ohne Rechenweg in der
-    Registry und liefern deshalb **keinen** Befund. Eine Zeile der 4.7 mit
-    zwei Prüfungen, von denen eine fehlt, bleibt **unbeurteilt**: ohne beide
-    Einzelergebnisse ist das strengste nach 5.5.2 Nr. 2 nicht bestimmbar
+  - Die Bremse aus 5.5.2 Nr. 2 — ein Vorgang mit einer Prüfung ohne
+    Rechenweg bleibt **ganz** unbeurteilt — fängt damit nichts mehr und bleibt
+    trotzdem stehen. Sie ist die Haltung, nicht eine Übergangslösung, und
+    `pruefwerk.test.ts` hält fest, dass sie jetzt leer läuft
   - Die ausstehenden Szenarien der laufenden Prüfungen scheitern nicht am
     Rechenweg, sondern an Prosa-Zusicherungen, die der Runner nicht
     maschinell prüft. Der Runner hat seit 05.11.2026 **eigene Tests**
@@ -109,13 +119,16 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     Prosa bleiben **müssen** — ein stillschweigend grünes Szenario ist
     schlimmer als ein rotes
 - 🟨 Anbindung an die Übergänge — **Q04 und Q06** (Erlaubnis, 4.1 und 4.2.1)
-  sowie **P1, P3, P6 und P11 am Einsatz und an der Verlängerung** (4.2.3 und
-  4.3) sind angebunden. `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
+  sowie **P1, P3, P6, P8 und P11 am Einsatz und an der Verlängerung** (4.2.3
+  und 4.3) sind angebunden. `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
   Datenmodell und Regelwerk ohne Prisma; `lib/services/staffing.ts` lädt die
   Kette, die Tarifzuordnungen und den Konzernverbund. Der Stichtag kommt aus
   der Tabelle in 5.0, nie aus dem Tag des Aufrufs. In `RULE_CHECKS_PENDING`
-  bleiben P7 und P8 (kein Rechenweg) und P9/P10 am Einsatz — die rechnen, ihre
-  Eingangsdaten sind dort nur nicht geladen. Dasselbe gilt für den Teil von P4,
+  bleiben P9 und P10 am Einsatz — die rechnen, ihre Eingangsdaten sind dort nur
+  nicht geladen — und **P7**: für die Arbeitskampfanzeige führt Kapitel 3 kein
+  Feld und für die Zusicherung kein Objekt, 5.3.2 nennt die Regel deshalb
+  selbst „prüfbar, aber nicht auswertbar" (*offene Frage 30*). Ein Feld dafür
+  zu erfinden hieße, die Frage im Code zu entscheiden. Dasselbe gilt für den Teil von P4,
   der den Vergleichsentgelt-**Eintrag** des Standorts prüft (Q18, Q36), und für
   die Zuschlagsstufe aus P5: beide rechnen, ihre Eingangsdaten sind an den
   Übergängen nicht geladen. Die Sperre aus **Q48** greift dagegen, weil sie nur

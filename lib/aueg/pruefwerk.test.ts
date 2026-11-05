@@ -8,8 +8,23 @@
  * warnt nur am Einkaufsbeleg (Q38) — das muss prüfbar sein.
  */
 import { describe, expect, it } from 'vitest'
-import { pruefe, umgesetztePruefungen } from './pruefwerk'
+import { pruefe, pruefungenOhneRechenweg, umgesetztePruefungen } from './pruefwerk'
 import type { Ausloeser, Pruefauftrag, Pruefung, Sachverhalt } from './typen'
+
+/** Die elf Prüfungen aus 4.7, in der Reihenfolge der Tabelle. */
+const ALLE: readonly Pruefung[] = [
+  'P1',
+  'P2',
+  'P3',
+  'P4',
+  'P5',
+  'P6',
+  'P7',
+  'P8',
+  'P9',
+  'P10',
+  'P11',
+]
 
 const LEERE_WERTE = {
   datumsangaben: [],
@@ -55,7 +70,7 @@ function auftrag(
 }
 
 describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
-  it('hat bisher neun Rechenwege: nur P7 und P8 fehlen', () => {
+  it('führt alle elf Prüfungen mit Rechenweg', () => {
     expect(umgesetztePruefungen()).toEqual([
       'P1',
       'P2',
@@ -63,29 +78,36 @@ describe('Registry der elf Prüfungen (SPEC 4.7)', () => {
       'P4',
       'P5',
       'P6',
+      'P7',
+      'P8',
       'P9',
       'P10',
       'P11',
     ])
   })
 
-  it('liefert keinen Befund, solange eine erwartete Prüfung keinen Rechenweg hat', () => {
-    const befunde = pruefe(
-      auftrag(
-        ['ein Einsatz von "Miriam Falk" steht im Status "planned" mit tatsächlichem Beginn 01.03.2026'],
-        { satz: 'der MSP-Disponent den Einsatz in den Status "active" überführt', objektart: 'einsatz', zielstatus: 'active' },
-        ['P9', 'P8'],
-      ),
-    )
-    // Eine nicht umgesetzte Prüfung darf nicht wie eine erfüllte aussehen.
-    expect(befunde).toEqual([])
+  it('hat keine Prüfung mehr, an der die Bremse greifen könnte', () => {
+    // Die Bedingung aus 5.5.2 Nr. 2 bleibt im Code, obwohl sie nichts mehr
+    // fängt: sie ist die Haltung, nicht eine Übergangslösung. Dieser Test hält
+    // fest, dass sie **jetzt** leer läuft — und schlägt an, wenn eine Prüfung
+    // ihren Rechenweg verliert.
+    expect(pruefungenOhneRechenweg(ALLE)).toEqual([])
+  })
+
+  it('lässt einen Vorgang ganz unbeurteilt, wenn eine erwartete Prüfung keinen Rechenweg hat', () => {
+    // Die Bremse selbst: ein halb beurteilter Übergang sieht aus wie ein
+    // zulässiger, und das ist gefährlicher als ein ausstehender (5.0, 5.5.2
+    // Nr. 2). Geprüft an der Aussage, die `pruefe()` dafür auswertet — über
+    // `pruefe()` ist sie seit P7 und P8 nicht mehr erreichbar.
+    const erfunden = 'P12' as Pruefung
+    expect(pruefungenOhneRechenweg(['P9', erfunden])).toEqual([erfunden])
   })
 
   it('rechnet P9 nur, wenn der Vorgang sie erwartet', () => {
     const ohneP9 = pruefe(
       auftrag([], { satz: 'der Betreiber die Erlaubnis prüft', art: 'berechnung' }, ['P8']),
     )
-    expect(ohneP9).toEqual([])
+    expect(ohneP9.map((befund) => befund.pruefung)).not.toContain('P9')
   })
 })
 
@@ -418,5 +440,225 @@ describe('Rückwirkende Änderung (SPEC 5.5.3, R3)', () => {
     expect(befund?.adressaten).toEqual(['MA'])
     expect(befund?.meldung).toMatch(/nicht gesperrt/)
     expect(befund?.werte.tageUngedeckt).toBe(31)
+  })
+})
+
+describe('P7 und P8: dieselbe Feststellung, andere Wirkung (SPEC 5.5.1 a)', () => {
+  /** Die Grundlage der Feature-Datei zu 5.3, gekürzt auf P7 und P8. */
+  const GRUNDLAGE_53: readonly string[] = [
+    'der Entleiher "Nordwerk Metall GmbH" führt den Standort "Werk Süd"',
+    'zwischen Betreiber und "Rheinpersonal GmbH" besteht der Rahmenvertrag "RV-L-2026-004" im Status "active" mit Laufzeit vom 01.01.2026 bis 31.12.2027',
+    'zu diesem Rahmenvertrag ist die Preisposition "PP-14" vereinbart',
+    'der Kandidat "Miriam Falk" bei "Rheinpersonal GmbH" ist beschäftigt seit dem 01.08.2026',
+  ]
+
+  function auftrag53(
+    eigene: readonly string[],
+    anlass: Partial<Ausloeser> & { satz: string },
+    erwartetePruefungen: readonly Pruefung[],
+  ): Pruefauftrag {
+    return {
+      ausloeser: {
+        art: 'statusuebergang',
+        rolle: 'MSP-Disponent',
+        objektart: 'einsatz',
+        zielstatus: null,
+        stichtag: null,
+        werte: LEERE_WERTE,
+        ...anlass,
+      },
+      sachverhalte: [
+        ...GRUNDLAGE_53.map((satz) => ({ art: 'sonstiges', satz, werte: LEERE_WERTE })),
+        { art: 'rahmenaussage', satz: 'die Angaben dieser Grundlage gelten', werte: LEERE_WERTE },
+        ...eigene.map((satz) => ({ art: 'sonstiges', satz, werte: LEERE_WERTE })),
+      ],
+      erwartetePruefungen,
+      szenario: { name: 'Einheitentest 5.3', tags: [] },
+    }
+  }
+
+  const imArbeitskampf: readonly string[] = [
+    'ein Einsatz von "Miriam Falk" am Standort "Werk Süd" steht im Status "planned" mit tatsächlichem Beginn 15.09.2026',
+    'für den Standort ist eine Arbeitskampfanzeige vom 10.09.2026 bis 20.09.2026 erfasst',
+  ]
+
+  it('sperrt den Einsatzstart im Arbeitskampf (Q22)', () => {
+    const [befund] = pruefe(
+      auftrag53(
+        imArbeitskampf,
+        {
+          satz: 'der MSP-Disponent den Einsatz in den Status "active" überführen will',
+          art: 'statusuebergangsversuch',
+          zielstatus: 'active',
+        },
+        ['P7'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('sperre')
+    expect(befund?.uebergangVollzogen).toBe(false)
+    expect(befund?.werte).toMatchObject({
+      qZeile: 'Q22',
+      ruleRef: 'industrialActionCheck',
+      result: 'blocked',
+      statusNachher: 'planned',
+      betroffeneTage: '2026-09-15',
+    })
+    expect(befund?.adressaten).toEqual(['MD', 'MA'])
+  })
+
+  it('warnt beim Ausschreiben über **denselben** Arbeitskampf (Q05)', () => {
+    // Der Rechenweg stellt in beiden Fällen dasselbe fest. Was es bewirkt, sagt
+    // 4.7: beim Ausschreiben steht nicht fest, ob der Arbeitskampf beim
+    // Einsatzstart noch läuft.
+    const [befund] = pruefe(
+      auftrag53(
+        [
+          'die Bedarfsanfrage "BA-2026-011" für den Standort "Werk Süd" steht im Status "approved"',
+          'der Übergang wird am 10.08.2026 ausgelöst und die Angebotsfrist endet am 20.08.2026',
+          'für den Standort "Werk Süd" ist eine Arbeitskampfanzeige vom 12.08.2026 bis 18.08.2026 erfasst',
+        ],
+        {
+          satz: 'der MSP-Disponent die Bedarfsanfrage in den Status "tendered" überführt',
+          objektart: 'bedarfsanfrage',
+          zielstatus: 'tendered',
+        },
+        ['P7'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('warnung')
+    expect(befund?.uebergangVollzogen).toBe(true)
+    expect(befund?.werte).toMatchObject({
+      qZeile: 'Q05',
+      pruefzeitraumVon: '2026-08-10',
+      pruefzeitraumBis: '2026-08-20',
+      treffer: 'ja',
+    })
+  })
+
+  it('lässt den Einsatzstart mit Zusicherung zu — Warnung statt Sperre (5.3.2 Schritt 3)', () => {
+    const [befund] = pruefe(
+      auftrag53(
+        [
+          ...imArbeitskampf,
+          'für diesen Einsatz liegt eine Zusicherung nach § 11 Abs. 5 Satz 2 AÜG mit Datum und erklärender Person vor, die den 15.09.2026 abdeckt',
+        ],
+        {
+          satz: 'der MSP-Disponent den Einsatz in den Status "active" überführt',
+          zielstatus: 'active',
+        },
+        ['P7'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('warnung')
+    expect(befund?.uebergangVollzogen).toBe(true)
+    expect(befund?.werte.milderung).toBe('zusicherung')
+  })
+
+  it('weist die Übersteuerung der Arbeitskampfsperre zurück (5.3.6)', () => {
+    const [befund] = pruefe(
+      auftrag53(
+        ['der Einsatzstart am 15.09.2026 ist durch die Prüfung P7 gesperrt'],
+        {
+          satz: 'der MSP-Administrator die Sperre zu übersteuern versucht',
+          art: 'uebersteuerungsversuch',
+          rolle: 'MSP-Administrator',
+          objektart: 'unbekannt',
+        },
+        ['P7'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('sperre')
+    expect(befund?.uebergangVollzogen).toBe(false)
+    expect(befund?.werte.uebersteuerung).toBe('zurückgewiesen')
+    expect(befund?.meldung).toMatch(/§ 11 Abs. 5 Satz 2/)
+  })
+
+  it('warnt im nächtlichen Lauf und eskaliert an MD und MA (N4)', () => {
+    const [befund] = pruefe(
+      auftrag53(
+        [
+          'ein Einsatz von "Miriam Falk" am Standort "Werk Süd" steht im Status "active"',
+          'für den Standort ist eine Arbeitskampfanzeige ab dem 10.09.2026 erfasst',
+        ],
+        {
+          satz: 'der nächtliche Lauf am 10.09.2026 läuft',
+          art: 'nachtlauf',
+          rolle: 'System',
+          stichtag: '2026-09-10',
+        },
+        ['P7'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('warnung')
+    // Der nächtliche Lauf erzeugt keinen Statuswechsel (5.5.1 c): der Einsatz
+    // bleibt `active`, und die Unterbrechung wird nur **vorgeschlagen**.
+    expect(befund?.uebergangVollzogen).toBe(false)
+    expect(befund?.werte).toMatchObject({ qZeile: 'N4', statusNachher: 'active' })
+    expect(befund?.adressaten).toEqual(['MD', 'MA'])
+    expect(befund?.meldung).toMatch(/unterbricht den Einsatz nicht selbst/)
+  })
+
+  it('sperrt das Anlegen bei einem offenen Kriterium (Q45)', () => {
+    const [befund] = pruefe(
+      auftrag53(
+        [
+          'für "Miriam Falk" soll ein Einsatz mit geplantem Beginn 01.09.2026 angelegt werden',
+          'das Kriterium "K2 Person" ist nicht erfüllt, weil am Einsatz ist kein Kandidat gesetzt',
+        ],
+        {
+          satz: 'der MSP-Disponent den Einsatz in den Status "planned" überführen will',
+          art: 'statusuebergangsversuch',
+          zielstatus: 'planned',
+        },
+        ['P8'],
+      ),
+    )
+    expect(befund?.ergebnisart).toBe('sperre')
+    expect(befund?.werte).toMatchObject({
+      qZeile: 'Q45',
+      ruleRef: 'concretizationCheck',
+      result: 'blocked',
+      kriterienOffen: 'K2',
+      stufe: 'anlage',
+    })
+  })
+
+  it('warnt an der Bedarfsanfrage vor der Freigabe, informiert beim Einreichen (Q01, Q02)', () => {
+    // Dieselbe Feststellung — Titel und Tätigkeitsbeschreibung sind identisch —
+    // an zwei Übergängen: 4.7 gibt ihr erst Information, dann Warnung.
+    const identisch = [
+      'ihr Titel und ihre Tätigkeitsbeschreibung lauten beide "Zerspanung Werk Süd"',
+    ]
+    const [einreichen] = pruefe(
+      auftrag53(
+        ['die Bedarfsanfrage "BA-2026-021" steht im Status "draft"', ...identisch],
+        {
+          satz: 'der Bedarfsträger die Bedarfsanfrage in den Status "submitted" überführt',
+          rolle: 'Bedarfsträger',
+          objektart: 'bedarfsanfrage',
+          zielstatus: 'submitted',
+        },
+        ['P8'],
+      ),
+    )
+    const [freigeben] = pruefe(
+      auftrag53(
+        ['die Bedarfsanfrage "BA-2026-021" steht im Status "submitted"', ...identisch],
+        {
+          satz: 'der Genehmiger die Bedarfsanfrage in den Status "approved" überführt',
+          rolle: 'Genehmiger',
+          objektart: 'bedarfsanfrage',
+          zielstatus: 'approved',
+        },
+        ['P8'],
+      ),
+    )
+    expect(einreichen?.werte).toMatchObject({ qZeile: 'Q01', treffer: 'ja' })
+    expect(einreichen?.ergebnisart).toBe('information')
+    expect(freigeben?.werte).toMatchObject({ qZeile: 'Q02', treffer: 'ja' })
+    expect(freigeben?.ergebnisart).toBe('warnung')
+    // Beide vollziehen den Übergang: die Anfrage ist kein Überlassungsvertrag.
+    expect(einreichen?.uebergangVollzogen).toBe(true)
+    expect(freigeben?.uebergangVollzogen).toBe(true)
   })
 })

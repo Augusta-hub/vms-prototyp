@@ -36,6 +36,10 @@ export function werteAus(erwartung: Erwartung, befunde: readonly Befund[]): Ausw
       return werteDeckung(erwartung, befunde)
     case 'vorgangsstatus':
       return werteVorgangsstatus(erwartung, befunde)
+    case 'kriterium':
+      return werteKriterium(erwartung, befunde)
+    case 'betroffenheit':
+      return werteBetroffenheit(erwartung, befunde)
     case 'uebersteuerung_zurueckgewiesen':
       return werteUebersteuerung(befunde)
     case 'protokolleintrag':
@@ -138,6 +142,129 @@ function wertePruefbarkeit(erwartung: Erwartung, befunde: readonly Befund[]): Au
     : {
         ergebnis: 'verletzt',
         grund: 'kein Befund führt eine Pflichtangabe, die als „ja" gerechnet wurde',
+      }
+}
+
+/**
+ * Kriterien der Konkretisierungspflicht K1 bis K5 (SPEC 5.3.3).
+ *
+ * Die Art war in `erwartung.ts` seit der ersten Fassung als auswertbar
+ * geführt, hatte hier aber keinen Zweig und fiel in den Vorgabefall — jede
+ * Zusicherung über ein Kriterium blieb damit **ungeprüft** ausstehend. Das ist
+ * die gefährlichere Hälfte: K1 bis K5 sind die ganze Prüfung P8.
+ *
+ * Verglichen wird auf der **Nummer** des Kriteriums, nicht auf seiner
+ * Bezeichnung: die Szenarien kürzen („K2 Person"), SPEC 5.3.3 schreibt aus
+ * („K2 Konkretisierung der Person"). Ein Textvergleich wäre ein Fehlalarm über
+ * Wortwahl.
+ */
+function werteKriterium(erwartung: Erwartung, befunde: readonly Befund[]): Auswertung {
+  const genannt = genannteKriterien(erwartung)
+  if (genannt.length === 0) {
+    return { ergebnis: 'ausstehend', grund: 'der Satz nennt kein Kriterium' }
+  }
+  if (!befunde.some((befund) => 'kriterienGeprueft' in befund.werte)) {
+    return { ergebnis: 'ausstehend', grund: 'kein Befund führt kriterienGeprueft' }
+  }
+
+  const liste = (schluessel: string): readonly string[] =>
+    befunde.flatMap((befund) => {
+      const wert = befund.werte[schluessel]
+      return typeof wert === 'string' && wert.length > 0 ? wert.split(',') : []
+    })
+
+  const geprueft = liste('kriterienGeprueft')
+  const [erwartet, menge] =
+    // Die Reihenfolge zählt: „nicht erfüllt" enthält „erfüllt".
+    /nicht prüfbar/.test(erwartung.satz)
+      ? (['nicht prüfbar', liste('kriterienNichtPruefbar')] as const)
+      : /nicht erfüllt/.test(erwartung.satz)
+        ? (['nicht erfüllt', liste('kriterienOffen')] as const)
+        : /\berfüllt\b/.test(erwartung.satz)
+          ? (['erfüllt', liste('kriterienErfuellt')] as const)
+          : // „die Sperre nennt das Kriterium »K1 Kennzeichnung«", „eine Sperre
+            // wegen des Kriteriums K1": genannt wird, was **nicht** trägt.
+            /nennt das Kriterium|wegen des Kriteriums/.test(erwartung.satz)
+            ? (['von der Sperre genannt', liste('kriterienOffen')] as const)
+            : // „werden die Kriterien K1 bis K4 erneut geprüft", „prüft das
+              // Kriterium K3 nur …": zugesichert ist, **dass** geprüft wird.
+              (['geprüft', geprueft] as const)
+
+  const fehlend = genannt.filter((kriterium) => !menge.includes(kriterium))
+  return fehlend.length === 0
+    ? ERFUELLT
+    : {
+        ergebnis: 'verletzt',
+        grund:
+          `${fehlend.join(', ')} ist nicht "${erwartet}"; der Befund führt geprüft: ` +
+          `${geprueft.join(', ') || 'keines'}, erfüllt: ${liste('kriterienErfuellt').join(', ') || 'keines'}, ` +
+          `offen: ${liste('kriterienOffen').join(', ') || 'keines'}, nicht prüfbar: ` +
+          `${liste('kriterienNichtPruefbar').join(', ') || 'keines'}`,
+      }
+}
+
+/**
+ * Die genannten Kriterien, mit aufgelöster Spanne: „die Kriterien K1 bis K4"
+ * nennt vier, `leseWerte` findet aber nur die beiden Ränder.
+ */
+function genannteKriterien(erwartung: Erwartung): readonly string[] {
+  const spanne = /\bK(\d)\s+bis\s+K(\d)\b/.exec(erwartung.satz)
+  if (spanne?.[1] !== undefined && spanne[2] !== undefined) {
+    const von = Number(spanne[1])
+    const bis = Number(spanne[2])
+    if (von <= bis) {
+      return Array.from({ length: bis - von + 1 }, (_, i) => `K${von + i}`)
+    }
+  }
+  return erwartung.werte.kriterien
+}
+
+/**
+ * Betroffenheit durch eine Arbeitskampfanzeige (SPEC 5.3.2). Der Befund führt
+ * die geprüften Tage als `betroffeneTage` und das offene Ende als
+ * `anzeigeOffen` — beides wird hier wirklich verglichen und nicht nur auf
+ * Vorhandensein geprüft.
+ */
+function werteBetroffenheit(erwartung: Erwartung, befunde: readonly Befund[]): Auswertung {
+  if (!befunde.some((befund) => 'betroffeneTage' in befund.werte)) {
+    return { ergebnis: 'ausstehend', grund: 'kein Befund führt betroffeneTage' }
+  }
+
+  const betroffene = befunde.flatMap((befund) => {
+    const wert = befund.werte['betroffeneTage']
+    return typeof wert === 'string' && wert.length > 0 ? wert.split(',') : []
+  })
+
+  // „bis auf Weiteres betroffen" ist eine Aussage über die **offene** Anzeige
+  // (5.3.2, Grenzfall „Anzeige ohne Bis-Datum"), nicht über einen Tag.
+  if (/bis auf Weiteres/.test(erwartung.satz)) {
+    const offen = befunde.some((befund) => befund.werte['anzeigeOffen'] === 'ja')
+    if (!offen) {
+      return {
+        ergebnis: 'verletzt',
+        grund: 'der Befund führt die Anzeige nicht als offen (anzeigeOffen ≠ ja)',
+      }
+    }
+    return betroffene.length > 0
+      ? ERFUELLT
+      : { ergebnis: 'verletzt', grund: 'die offene Anzeige deckt keinen geprüften Tag' }
+  }
+
+  const genannt = erwartung.werte.datumsangaben
+  if (genannt.length === 0) {
+    return { ergebnis: 'ausstehend', grund: 'der Satz nennt keinen Tag' }
+  }
+  const verneint = /\bnicht betroffen\b|\bkein betroffener\b/.test(erwartung.satz)
+  const falsch = verneint
+    ? genannt.filter((tag) => betroffene.includes(tag))
+    : genannt.filter((tag) => !betroffene.includes(tag))
+  return falsch.length === 0
+    ? ERFUELLT
+    : {
+        ergebnis: 'verletzt',
+        grund: verneint
+          ? `${falsch.join(', ')} ist betroffen, erwartet war das Gegenteil`
+          : `${falsch.join(', ')} ist nicht betroffen; betroffen: ${betroffene.join(', ') || 'kein Tag'}`,
       }
 }
 
@@ -304,10 +431,33 @@ function werteProtokoll(erwartung: Erwartung, befunde: readonly Befund[]): Auswe
     }
   }
 
+  // „ein Protokolleintrag mit der Prüfung »industrialActionCheck« und dem
+  // Ergebnis »blocked« liegt vor" nennt zwei Felder des Audit-Eintrags
+  // (SPEC 3.12): `ruleRef` und `result`. Der Befund führt beide. Ohne diesen
+  // Vergleich war der Satz erfüllt, sobald **irgendein** Befund irgendeine
+  // Begründung trug — eine Zusicherung, die nichts einlöst.
+  for (const [schluessel, werte] of [
+    ['ruleRef', erwartung.werte.zitate.filter((zitat) => /Check$/.test(zitat))],
+    ['result', erwartung.werte.zitate.filter((zitat) => ERGEBNISWERTE.includes(zitat))],
+  ] as const) {
+    for (const wert of werte) {
+      if (!befunde.some((befund) => befund.werte[schluessel] === wert)) {
+        const gefuehrt = [...new Set(befunde.map((befund) => String(befund.werte[schluessel])))]
+        return {
+          ergebnis: 'verletzt',
+          grund: `kein Befund führt ${schluessel} = "${wert}" (geführt: ${gefuehrt.join(', ') || 'nichts'})`,
+        }
+      }
+    }
+  }
+
   return befunde.every((befund) => befund.meldung.trim().length > 0)
     ? ERFUELLT
     : { ergebnis: 'verletzt', grund: 'ein Befund trägt keine Begründung' }
 }
+
+/** `result` des Audit-Eintrags (SPEC 3.12). */
+const ERGEBNISWERTE: readonly string[] = ['success', 'denied', 'blocked']
 
 /**
  * Gerechnete Werte: der Satz nennt ein Datum oder eine Tageszahl, der Befund

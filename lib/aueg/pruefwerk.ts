@@ -31,19 +31,33 @@
  *    Befund (`uebergangVollzogen`), vollziehen muss ihn der Aufrufer über die
  *    Übergangsmenge in `lib/status/` (4.0, Regel 1).
  *
- * **Stand:** umgesetzt sind **P1** (Höchstüberlassungsdauer, SPEC 5.1) mit dem
- * nächtlichen Lauf N2, **P2** (Unterbrechung, 5.1.4) mit N6, **P3**
- * (Equal-Pay-Fälligkeit, 5.2.3), **P4** (Vergleichsentgelt, 5.2.4) und **P5**
- * (Branchenzuschlag, 5.2.5) — P3 und P4 zusammen mit N3 —, **P6**
- * (Drehtürklausel, 5.3.1), **P9** (AÜG-Erlaubnis, 5.4.1) mit N1, **P10**
- * (Pflichtnachweise, 5.4.4) mit N5 und **P11** (Arbeitsverhältnis beim
- * Verleiher, 5.3.4). Übersteuerbar nach 5.5.4 sind P1, P2, P9, P10 und P11;
- * P4 und P6 sind es nicht (5.5.4, 5.3.6), P3 und P5 sperren nicht. P7 und P8
- * sind eingetragen, aber ohne Rechenweg — sie melden nichts.
+ * **Stand:** alle **elf** Prüfungen aus 4.7 haben einen Rechenweg — **P1**
+ * (Höchstüberlassungsdauer, SPEC 5.1) mit dem nächtlichen Lauf N2, **P2**
+ * (Unterbrechung, 5.1.4) mit N6, **P3** (Equal-Pay-Fälligkeit, 5.2.3), **P4**
+ * (Vergleichsentgelt, 5.2.4) und **P5** (Branchenzuschlag, 5.2.5) — P3 und P4
+ * zusammen mit N3 —, **P6** (Drehtürklausel, 5.3.1), **P7** (Arbeitskampf,
+ * 5.3.2) mit N4, **P8** (Kennzeichnung und Konkretisierung, 5.3.3), **P9**
+ * (AÜG-Erlaubnis, 5.4.1) mit N1, **P10** (Pflichtnachweise, 5.4.4) mit N5 und
+ * **P11** (Arbeitsverhältnis beim Verleiher, 5.3.4). Übersteuerbar nach 5.5.4
+ * sind P1, P2, P9, P10 und P11; P4, P6, P7 und P8 sind es nicht (5.5.4,
+ * 5.3.6), P3 und P5 sperren nicht.
+ *
+ * Die Bremse oben — „ein Vorgang mit einer Prüfung ohne Rechenweg bleibt ganz
+ * unbeurteilt" — greift damit nirgends mehr. Sie bleibt stehen: sie ist die
+ * Haltung, nicht eine Übergangslösung, und die nächste Prüfung, die
+ * hinzukommt, braucht sie wieder.
  */
 
+import {
+  leseArbeitskampflage,
+  type Arbeitskampfprueflage,
+} from './lesen/arbeitskampflage'
 import { leseEntgeltlage, type Entgeltprueflage } from './lesen/entgeltlage'
 import { leseErlaubnislage, type Prueflage } from './lesen/erlaubnislage'
+import {
+  leseKonkretisierungslage,
+  type Konkretisierungsprueflage,
+} from './lesen/konkretisierungslage'
 import { leseKettenlage, type Kettenprueflage } from './lesen/kettenlage'
 import {
   leseBeschaeftigungslage,
@@ -69,6 +83,11 @@ import {
   type Nachweisergebnis,
 } from './regeln/p10Nachweise'
 import { pruefeEqualPayFrist, type EqualPayergebnis } from './regeln/p3EqualPayFrist'
+import { pruefeArbeitskampf, type Arbeitskampfergebnis } from './regeln/p7Arbeitskampf'
+import {
+  pruefeKonkretisierung,
+  type Konkretisierungsergebnis,
+} from './regeln/p8Konkretisierung'
 import {
   pruefeVergleichsentgelt,
   type Entgeltergebnis,
@@ -126,8 +145,8 @@ const REGELN: Readonly<Record<Pruefung, Rechenweg | null>> = {
   P4: pruefeP4,
   P5: pruefeP5,
   P6: pruefeP6,
-  P7: null,
-  P8: null,
+  P7: pruefeP7,
+  P8: pruefeP8,
   P9: pruefeP9,
   P10: pruefeP10,
   P11: pruefeP11,
@@ -145,10 +164,7 @@ export function pruefe(auftrag: Pruefauftrag): readonly Befund[] {
   // bestimmen, solange ein Einzelergebnis fehlt. Nur die vorhandenen Prüfungen
   // zu melden wäre die gefährlichere Hälfte: ein halb beurteilter Übergang sieht
   // aus wie ein zulässiger (5.0, „kein stilles Durchlassen").
-  const ohneRechenweg = auftrag.erwartetePruefungen.filter(
-    (pruefung) => REGELN[pruefung] === null,
-  )
-  if (ohneRechenweg.length > 0) return []
+  if (pruefungenOhneRechenweg(auftrag.erwartetePruefungen).length > 0) return []
 
   const befunde: Befund[] = []
   for (const pruefung of auftrag.erwartetePruefungen) {
@@ -170,6 +186,27 @@ export function pruefe(auftrag: Pruefauftrag): readonly Befund[] {
 /** Die Prüfungen, für die ein Rechenweg vorliegt. */
 export function umgesetztePruefungen(): readonly Pruefung[] {
   return (Object.keys(REGELN) as Pruefung[]).filter((pruefung) => REGELN[pruefung] !== null)
+}
+
+/**
+ * Die erwarteten Prüfungen, zu denen `REGELN` keinen Rechenweg führt — die
+ * Bremse aus `pruefe()` als eigene Aussage.
+ *
+ * Sie ist **exportiert**, weil sie seit P7 und P8 über `pruefe()` nicht mehr
+ * erreichbar ist: alle elf Prüfungen haben einen Rechenweg. Eine Bedingung, die
+ * niemand mehr prüfen kann, verfällt — und sie ist zu wichtig, um zu verfallen.
+ * Sie entscheidet, ob ein halb beurteilter Übergang wie ein zulässiger
+ * aussieht (5.5.2 Nr. 2).
+ */
+export function pruefungenOhneRechenweg(
+  erwartetePruefungen: readonly Pruefung[],
+): readonly Pruefung[] {
+  // `== null` und nicht `=== null`: eine Prüfung, die `REGELN` überhaupt nicht
+  // führt, hat erst recht keinen Rechenweg. Das Typsystem schließt den Fall
+  // aus, die Eingangsseite dieses Moduls ist aber absichtlich weit getypt
+  // (`typen.ts`) — und ein Vorgang, dessen Prüfung niemand kennt, darf nicht
+  // als beurteilt gelten.
+  return erwartetePruefungen.filter((pruefung) => REGELN[pruefung] == null)
 }
 
 /** Zielstatus einer Einladung nach 4.7, Zeile Q06 (3.5, 4.2.1). */
@@ -1287,4 +1324,217 @@ function rahmenbefund(
     adressaten: zusatz.adressaten,
     meldung: zusatz.meldung,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* P7 und P8 — Arbeitskampf und Kennzeichnung (SPEC 5.3.2, 5.3.3)      */
+/* ------------------------------------------------------------------ */
+
+/** P7 — Einsatzverbot bei Arbeitskampf (SPEC 5.3.2). */
+function pruefeP7(auftrag: Pruefauftrag): readonly Befund[] {
+  const lage = leseArbeitskampflage(auftrag.sachverhalte, auftrag.ausloeser)
+
+  // 5.3.6: die Sperre aus P7 ist **nicht übersteuerbar**. Die gesetzliche
+  // Ausnahme ist allein die Zusicherung nach § 11 Abs. 5 Satz 2 AÜG — ein
+  // eigener, dokumentierter Sachverhalt, keine Abweichung von der Regel. Eine
+  // Übersteuerung wäre eine dokumentierte Rechtsverletzung.
+  if (lage.uebersteuerung.beantragt) {
+    return [
+      arbeitskampfbefund(lage, 'sperre', false, {
+        ergaenzung: { uebersteuerung: 'zurückgewiesen', uebersteuerbar: 'nein' },
+        adressaten: REGELWERK.adressatenArbeitskampf,
+        meldung:
+          'P7: Die Übersteuerung wird zurückgewiesen, weil die Prüfung P7 nicht übersteuerbar ' +
+          'ist (SPEC 5.3.6, 5.5.4). Die gesetzliche Ausnahme ist allein die Zusicherung nach ' +
+          '§ 11 Abs. 5 Satz 2 AÜG, dass der Leiharbeitnehmer keine Tätigkeiten der ' +
+          'Arbeitskampfbetroffenen übernimmt — oder ein späterer Start. Eine Übersteuerung ' +
+          'wäre eine dokumentierte Rechtsverletzung.',
+      }),
+    ]
+  }
+
+  const ergebnis = pruefeArbeitskampf(lage.lage)
+  const zeile = lage.zeile
+  const roh: Ergebnisart = !ergebnis.treffer
+    ? 'information'
+    : ergebnis.milderung !== null
+      ? // 5.3.2 Schritt 3 und Grenzfall „Nur ein Teil des Betriebs betroffen":
+        // „Warnung **statt** Treffer". Die Milderung schlägt die Ergebnisart aus
+        // 4.7 — und nur nach unten.
+        'warnung'
+      : (zeile?.trefferart ?? 'warnung')
+
+  // 5.3.2, Grenzfall „Rückwirkende Anzeige": wird ein Arbeitskampf nachträglich
+  // für einen vergangenen Zeitraum angezeigt, in dem ein Einsatz lief, ist das
+  // Ergebnis eine Warnung mit Pflicht-Eskalation an `MA`. Eine Sperre greift
+  // nicht mehr; genehmigte Zeiten werden nicht entwertet (5.5.3).
+  const rueckwirkend =
+    (lage.anlass === 'erfassung' || lage.anlass === 'berichtigung') && ergebnis.treffer
+  const ergebnisart: Ergebnisart = rueckwirkend && roh === 'sperre' ? 'warnung' : roh
+  const kennStatuswechsel = lage.anlass === 'uebergang' || lage.anlass === 'uebergangsversuch'
+
+  const adressaten =
+    lage.anlass === 'nachtlauf' && ergebnis.treffer
+      ? REGELWERK.adressatenArbeitskampfNachtlauf
+      : rueckwirkend
+        ? [...new Set([...ergebnis.adressaten, ...REGELWERK.adressatenRueckwirkenderBefund])]
+        : ergebnis.adressaten
+
+  return [
+    arbeitskampfbefund(lage, ergebnisart, kennStatuswechsel && ergebnisart !== 'sperre', {
+      ergaenzung: {
+        // Bei → `tendered` ist der **Zeitraum** der Prüfgegenstand, nicht ein
+        // Stichtag (5.3.2 Schritt 1); er gehört deshalb in den Befund.
+        pruefzeitraumVon: lage.lage.zeitraum?.von ?? null,
+        pruefzeitraumBis: lage.lage.zeitraum?.bis ?? null,
+        standort: lage.lage.standort,
+        taetigkeit: lage.lage.taetigkeit,
+        ...arbeitskampfwerte(ergebnis),
+      },
+      adressaten,
+      meldung: `${ergebnis.meldung}${nachsatzP7(lage.anlass, rueckwirkend, ergebnis)}`,
+    }),
+  ]
+}
+
+/**
+ * Was der nächtliche Lauf und die nachgetragene Anzeige dem Befund hinzufügen
+ * (SPEC 5.5.1 Zeile N4 und 5.3.2, Grenzfall „Rückwirkende Anzeige").
+ */
+function nachsatzP7(
+  anlass: string,
+  rueckwirkend: boolean,
+  ergebnis: Arbeitskampfergebnis,
+): string {
+  if (!ergebnis.treffer) return ''
+  if (anlass === 'nachtlauf') {
+    return (
+      ' Der nächtliche Lauf führt den Befund als Warnung mit Pflicht-Eskalation an den ' +
+      'MSP-Disponenten und den MSP-Administrator und **schlägt die Unterbrechung vor**. Das ' +
+      'System unterbricht den Einsatz nicht selbst: ein Systemstatuswechsel am laufenden ' +
+      'Einsatz hätte arbeits- und vertragsrechtliche Folgen, und 4.0 Regel 4 lässt ' +
+      'zeitgesteuerte Übergänge nur dort zu, wo sie entziehen. Der Übergang `active` → ' +
+      '`interrupted` liegt in 4.3.1 bereit und wird von `MD` ausgelöst (SPEC 5.3.2, 5.5.1 N4).'
+    )
+  }
+  if (rueckwirkend) {
+    return (
+      ' Die Anzeige ist nachgetragen und betrifft einen Zeitraum, in dem der Einsatz lief. Das ' +
+      'Ergebnis ist eine Warnung mit Pflicht-Eskalation an den MSP-Administrator; eine Sperre ' +
+      'greift nicht mehr, und genehmigte Zeiten werden nicht entwertet (SPEC 5.3.2, 5.5.3 R3 ' +
+      'und R4).'
+    )
+  }
+  return ''
+}
+
+/** P8 — Kennzeichnungs- und Konkretisierungspflicht (SPEC 5.3.3). */
+function pruefeP8(auftrag: Pruefauftrag): readonly Befund[] {
+  const lage = leseKonkretisierungslage(auftrag.sachverhalte, auftrag.ausloeser)
+
+  // 5.3.6: **keine** Übersteuerung. Die Konkretisierung wird nachgetragen, nicht
+  // übersteuert — und nach dem ersten Überlassungstag hilft auch keine
+  // Übersteuerung mehr (§ 1 Abs. 1 Sätze 5, 6; § 9 Abs. 1 Nr. 1a AÜG).
+  if (lage.uebersteuerung.beantragt) {
+    return [
+      konkretisierungsbefund(lage, 'sperre', false, {
+        ergaenzung: { uebersteuerung: 'zurückgewiesen', uebersteuerbar: 'nein' },
+        adressaten: REGELWERK.adressatenKonkretisierung,
+        meldung:
+          'P8: Die Übersteuerung wird zurückgewiesen, weil die Prüfung P8 nicht übersteuerbar ' +
+          'ist (SPEC 5.3.6, 5.5.4). Die Konkretisierung wird nachgetragen, nicht übersteuert; ' +
+          'nach dem ersten Überlassungstag ist der Verstoß nicht mehr heilbar.',
+      }),
+    ]
+  }
+
+  const ergebnis = pruefeKonkretisierung(lage.lage, lage.stufe)
+  const zeile = lage.zeile
+  const roh: Ergebnisart = !ergebnis.treffer
+    ? 'information'
+    : ergebnis.nurWarnung
+      ? // 5.3.3, Grenzfall „Rahmenvertrag läuft im Einsatzzeitraum ab": Warnung
+        // mit Nennung des Enddatums, nicht Sperre — die Kennzeichnung lag bei
+        // Beginn vor, und der Vertrag kann verlängert werden.
+        'warnung'
+      : (zeile?.trefferart ?? 'warnung')
+
+  // 5.3.3, Grenzfall „Rückwirkende Korrektur": ein in der Vergangenheit
+  // erfüllter Verstoß wird festgestellt und eskaliert, nicht rückwirkend
+  // gesperrt (5.5.3 R3, R4).
+  const rueckwirkend = lage.anlass === 'berichtigung' && ergebnis.treffer
+  const ergebnisart: Ergebnisart = rueckwirkend && roh === 'sperre' ? 'warnung' : roh
+  const kennStatuswechsel = lage.anlass === 'uebergang' || lage.anlass === 'uebergangsversuch'
+
+  return [
+    konkretisierungsbefund(lage, ergebnisart, kennStatuswechsel && ergebnisart !== 'sperre', {
+      ergaenzung: konkretisierungswerte(ergebnis),
+      adressaten: rueckwirkend
+        ? [...new Set([...ergebnis.adressaten, ...REGELWERK.adressatenRueckwirkenderBefund])]
+        : ergebnis.adressaten,
+      meldung: rueckwirkend
+        ? `${ergebnis.meldung} Die Änderung legt den Mangel nachträglich offen. Der Befund wird ` +
+          'festgestellt und eskaliert, nicht rückwirkend gesperrt; abgerechnete Zeiträume ' +
+          'werden nicht entwertet (SPEC 5.3.3, 5.5.3 R3 und R4). P4 läuft ebenfalls erneut: die ' +
+          'Tätigkeit bestimmt das Vergleichsentgelt (5.2.4).'
+        : ergebnis.meldung,
+    }),
+  ]
+}
+
+function arbeitskampfwerte(
+  ergebnis: Arbeitskampfergebnis,
+): Record<string, string | number | null> {
+  return {
+    treffer: ergebnis.treffer ? 'ja' : 'nein',
+    anzeigeVorhanden: ergebnis.anzeigeVorhanden ? 'ja' : 'nein',
+    betroffen: ergebnis.betroffen ? 'ja' : 'nein',
+    betroffeneTage: ergebnis.betroffeneTage.join(','),
+    anzahlBetroffeneTage: ergebnis.betroffeneTage.length,
+    anzeigeVon: ergebnis.anzeigeVon,
+    anzeigeBis: ergebnis.anzeigeBis,
+    anzeigeOffen: ergebnis.offenesEnde ? 'ja' : 'nein',
+    milderung: ergebnis.milderung,
+    zusicherung: ergebnis.milderung === 'zusicherung' ? 'ja' : 'nein',
+    vermerke: ergebnis.vermerke.join(' | '),
+  }
+}
+
+function konkretisierungswerte(
+  ergebnis: Konkretisierungsergebnis,
+): Record<string, string | number | null> {
+  return {
+    treffer: ergebnis.treffer ? 'ja' : 'nein',
+    stufe: ergebnis.stufe,
+    kriterienGeprueft: ergebnis.kriterien.map((befund) => befund.kriterium).join(','),
+    kriterienErfuellt: ergebnis.kriterien
+      .filter((befund) => befund.erfuellt === true)
+      .map((befund) => befund.kriterium)
+      .join(','),
+    kriterienOffen: ergebnis.offen.join(','),
+    kriterienNichtPruefbar: ergebnis.nichtPruefbar.join(','),
+    pruefbar: ergebnis.nichtPruefbar.length === 0 ? 'ja' : 'nein',
+    mangel: ergebnis.offen.length === 0 ? null : ergebnis.offen.join(','),
+    laufzeitende: ergebnis.laufzeitendeImEinsatz,
+    fehlendeFelder: ergebnis.fehlendeFelder.join(','),
+    vermerke: ergebnis.vermerke.join(' | '),
+  }
+}
+
+function arbeitskampfbefund(
+  lage: Arbeitskampfprueflage,
+  ergebnisart: Ergebnisart,
+  uebergangVollzogen: boolean,
+  zusatz: Befundzusatz,
+): Befund {
+  return rahmenbefund('P7', lage, ergebnisart, uebergangVollzogen, zusatz, 'SPEC 5.3.2')
+}
+
+function konkretisierungsbefund(
+  lage: Konkretisierungsprueflage,
+  ergebnisart: Ergebnisart,
+  uebergangVollzogen: boolean,
+  zusatz: Befundzusatz,
+): Befund {
+  return rahmenbefund('P8', lage, ergebnisart, uebergangVollzogen, zusatz, 'SPEC 5.3.3')
 }

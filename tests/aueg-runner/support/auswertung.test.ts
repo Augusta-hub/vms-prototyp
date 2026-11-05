@@ -141,3 +141,172 @@ describe('Ergebnisart mit Verneinung', () => {
     ).toBe('verletzt')
   })
 })
+
+describe('Kriterien K1 bis K5 (SPEC 5.3.3)', () => {
+  // Die Art `kriterium` war in `erwartung.ts` als auswertbar geführt, hatte in
+  // `auswertung.ts` aber keinen Zweig: jede Zusicherung über ein Kriterium
+  // blieb ungeprüft ausstehend. Bei P8 sind K1 bis K5 die ganze Prüfung.
+  const konkretisierung = (teile: Record<string, string>) =>
+    werte(
+      {
+        kriterienGeprueft: 'K1,K2,K3,K4',
+        kriterienErfuellt: 'K1,K2,K3,K4',
+        kriterienOffen: '',
+        kriterienNichtPruefbar: '',
+        ...teile,
+      },
+      { pruefung: 'P8' },
+    )
+
+  it('löst die Spanne „K1 bis K4" auf — vier Kriterien, nicht zwei', () => {
+    // `leseWerte` findet nur die Ränder. Ohne die Auflösung bliebe K2 und K3
+    // ungeprüft, und ein Befund, der nur K1 und K4 trägt, käme durch.
+    expect(
+      auswerten('sind die Kriterien K1 bis K4 erfüllt', konkretisierung({})).ergebnis,
+    ).toBe('erfuellt')
+    expect(
+      auswerten(
+        'sind die Kriterien K1 bis K4 erfüllt',
+        konkretisierung({ kriterienErfuellt: 'K1,K4', kriterienOffen: 'K2,K3' }),
+      ).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('liest „nicht erfüllt" vor „erfüllt"', () => {
+    // "nicht erfüllt" enthält "erfüllt"; die Reihenfolge der Prüfung entscheidet.
+    const offen = konkretisierung({
+      kriterienGeprueft: 'K1,K2,K3,K4,K5',
+      kriterienErfuellt: 'K1,K2,K3,K4',
+      kriterienOffen: 'K5',
+    })
+    expect(auswerten('ist das Kriterium K5 nicht erfüllt', offen).ergebnis).toBe('erfuellt')
+    expect(auswerten('ist das Kriterium K5 erfüllt', offen).ergebnis).toBe('verletzt')
+  })
+
+  it('unterscheidet „nicht prüfbar" von „nicht erfüllt"', () => {
+    // SPEC 5.3.3, Grenzfall „Fehlende Preisposition": K1 ist nicht prüfbar und
+    // wirkt wie ein Treffer. Beides steht im Befund, und es ist nicht dasselbe.
+    const unpruefbar = konkretisierung({
+      kriterienErfuellt: 'K2,K3,K4',
+      kriterienOffen: 'K1',
+      kriterienNichtPruefbar: 'K1',
+    })
+    expect(auswerten('ist das Kriterium K1 nicht prüfbar', unpruefbar).ergebnis).toBe('erfuellt')
+    expect(
+      auswerten(
+        'ist das Kriterium K2 nicht prüfbar',
+        konkretisierung({ kriterienNichtPruefbar: 'K1' }),
+      ).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('liest „die Sperre nennt das Kriterium" als offenes Kriterium', () => {
+    expect(
+      auswerten(
+        'die Sperre nennt das Kriterium "K2 Person" und den offenen Weg, die Angabe nachzutragen',
+        konkretisierung({ kriterienErfuellt: 'K1,K3,K4', kriterienOffen: 'K2' }),
+      ).ergebnis,
+    ).toBe('erfuellt')
+  })
+
+  it('liest „erneut geprüft" als Zusicherung über den Umfang, nicht über das Ergebnis', () => {
+    // „werden die Kriterien K1 bis K4 erneut geprüft" sagt nichts darüber, ob
+    // sie erfüllt sind — im Szenario sind sie es gerade nicht.
+    expect(
+      auswerten(
+        'werden die Kriterien K1 bis K4 erneut geprüft',
+        konkretisierung({ kriterienErfuellt: 'K2,K3,K4', kriterienOffen: 'K1' }),
+      ).ergebnis,
+    ).toBe('erfuellt')
+  })
+
+  it('bleibt ausstehend, wenn kein Befund Kriterien führt', () => {
+    expect(
+      auswerten('sind die Kriterien K1 bis K4 erfüllt', werte({ tagebudget: 546 })).ergebnis,
+    ).toBe('ausstehend')
+  })
+})
+
+describe('Betroffenheit durch eine Arbeitskampfanzeige (SPEC 5.3.2)', () => {
+  const arbeitskampf = (teile: Record<string, string>) =>
+    werte(
+      { betroffeneTage: '2026-09-15', anzeigeOffen: 'nein', ...teile },
+      { pruefung: 'P7' },
+    )
+
+  it('prüft den genannten Tag, nicht nur die Zahl der Tage', () => {
+    // „ist der 20.09.2026 ein betroffener Tag" ist eine Aussage über **diesen**
+    // Tag. SPEC 5.3.2 prüft tagesgenau: der erste und der letzte Tag der
+    // Anzeige sind betroffen, der Tag danach nicht mehr.
+    expect(
+      auswerten(
+        'ist der 20.09.2026 ein betroffener Tag',
+        arbeitskampf({ betroffeneTage: '2026-09-20' }),
+      ).ergebnis,
+    ).toBe('erfuellt')
+    expect(
+      auswerten(
+        'ist der 20.09.2026 ein betroffener Tag',
+        arbeitskampf({ betroffeneTage: '2026-09-15' }),
+      ).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('liest „bis auf Weiteres betroffen" als offene Anzeige', () => {
+    expect(
+      auswerten(
+        'ist der Prüfzeitraum bis auf Weiteres betroffen',
+        arbeitskampf({ betroffeneTage: '2026-09-25', anzeigeOffen: 'ja' }),
+      ).ergebnis,
+    ).toBe('erfuellt')
+    // Eine Anzeige mit Enddatum ist nicht „bis auf Weiteres".
+    expect(
+      auswerten('ist der Prüfzeitraum bis auf Weiteres betroffen', arbeitskampf({})).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('bleibt ausstehend, wenn kein Befund betroffene Tage führt', () => {
+    expect(
+      auswerten('ist der 20.09.2026 ein betroffener Tag', werte({ tagebudget: 546 })).ergebnis,
+    ).toBe('ausstehend')
+  })
+})
+
+describe('Protokolleintrag: Prüfung und Ergebnis (SPEC 3.12)', () => {
+  // Der Satz nennt zwei Felder des Audit-Eintrags, `ruleRef` und `result`.
+  // Verglichen wurden sie nicht: der Satz galt als erfüllt, sobald irgendein
+  // Befund irgendeine Begründung trug.
+  const satz =
+    'ein Protokolleintrag mit der Prüfung "industrialActionCheck" und dem Ergebnis "blocked" liegt vor'
+
+  it('vergleicht ruleRef und result mit dem Befund', () => {
+    expect(
+      auswerten(
+        satz,
+        werte({ ruleRef: 'industrialActionCheck', result: 'blocked' }, { pruefung: 'P7' }),
+      ).ergebnis,
+    ).toBe('erfuellt')
+  })
+
+  it('schlägt an, wenn der Befund eine andere Prüfung protokolliert', () => {
+    expect(
+      auswerten(
+        satz,
+        werte({ ruleRef: 'concretizationCheck', result: 'blocked' }, { pruefung: 'P8' }),
+      ).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('schlägt an, wenn das Ergebnis nicht "blocked" ist', () => {
+    expect(
+      auswerten(
+        satz,
+        werte({ ruleRef: 'industrialActionCheck', result: 'success' }, { pruefung: 'P7' }),
+      ).ergebnis,
+    ).toBe('verletzt')
+  })
+
+  it('prüft weiter nur die Begründung, wo der Satz keine Werte nennt', () => {
+    expect(auswerten('das Ergebnis wird protokolliert', werte({})).ergebnis).toBe('erfuellt')
+  })
+})

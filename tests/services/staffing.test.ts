@@ -99,6 +99,9 @@ describe('P1: die Überlassungskette wird geladen und fortgeschrieben (SPEC 5.1,
       plannedStartDate: tag('2026-06-01'),
       lieferant: welt.zweiterLieferant,
       kandidat: welt.kandidatZweiterLieferant,
+      // Der neue Einsatz verweist auf den **eigenen** Rahmenvertrag des neuen
+      // Lieferanten (K1, SPEC 5.3.3, Grenzfall „Lieferantenwechsel").
+      einkaufsposition: welt.zweiteEinkaufsposition,
     })
 
     const ergebnis = await starte(zweiter, tag('2026-06-01'))
@@ -586,5 +589,111 @@ describe('Die Kette hängt an der bestätigten Personenidentität (SPEC 5.0, Fra
     expect(await fristenstand('E-2')).toEqual({ fristende: '2027-11-30', angerechnet: 1 })
     // Der erste Einsatz gehört nicht zur Kette und wird nicht fortgeschrieben.
     expect((await fristenstand('E-1')).fristende).toBeNull()
+  })
+})
+
+describe('P8: Kennzeichnung und Konkretisierung am Übergang (SPEC 5.3.3)', () => {
+  /** Eine rechtmäßige Lage: Tarifzuordnung und Vergleichsentgelt liegen vor. */
+  async function grundlage(): Promise<void> {
+    await legeTarifzuordnungAn(welt, {
+      ebene: 'site',
+      monate: 18,
+      validFrom: tag('2025-01-01'),
+      validTo: tag('2028-12-31'),
+    })
+  }
+
+  it('lässt den Einsatzstart zu, wenn K1 bis K5 tragen (Q46)', async () => {
+    await grundlage()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+    })
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+  })
+
+  it('sperrt den Einsatzstart, wenn der Rahmenvertrag nicht mehr aktiv ist (K1)', async () => {
+    await grundlage()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+    })
+    // Der Rahmenvertrag der Lieferantenseite wird gekündigt — die Kennzeichnung
+    // trägt nicht mehr, und 5.3.3 Nr. 3 prüft K1 am Start **erneut**.
+    await prisma.masterAgreement.updateMany({
+      where: { agreementNumber: 'RV-L-1' },
+      data: { status: 'terminated' },
+    })
+
+    const ergebnis = await starte(einsatz, tag('2026-01-15'))
+    expect(ergebnis.ok).toBe(false)
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: 'E-1' } })
+    expect(zeile.status).toBe('planned')
+  })
+
+  it('sperrt den Einsatzstart, wenn die Konkretisierung erst nach dem ersten Tag vorlag (K5)', async () => {
+    await grundlage()
+    // Der Einsatz entsteht am 05.02.2026, der erste Überlassungstag ist der
+    // 15.01.2026: die Konkretisierung lag bei Beginn der Überlassung nicht vor
+    // (§ 1 Abs. 1 Sätze 5 und 6 AÜG). `createdAt` ist der Tag des Übergangs
+    // nach `planned` — 4.3.1 kennt keinen anderen Weg dorthin.
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+      angelegtAm: tag('2026-02-05'),
+    })
+
+    const ergebnis = await starte(einsatz, tag('2026-01-15'))
+    expect(ergebnis.ok).toBe(false)
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: 'E-1' } })
+    expect(zeile.status).toBe('planned')
+    // Und nichts ist geschrieben: eine Sperre schreibt keine abgeleiteten Felder.
+    expect(zeile.actualStartDate).toBeNull()
+    expect(zeile.maxDurationEndDate).toBeNull()
+  })
+
+  it('sperrt den Einsatzstart, wenn die Tätigkeitsbeschreibung nur der Titel der Anfrage ist (K3)', async () => {
+    await grundlage()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+    })
+    // Eine Bedarfsanfrage, deren Titel die Tätigkeitsbeschreibung des Einsatzes
+    // ist: damit ist die Beschreibung ein Verweis und keine eigenständige
+    // Konkretisierung (5.3.3, K3).
+    const anfrage = await prisma.demandRequest.create({
+      data: {
+        tenantId: welt.kundenMandant,
+        requestNumber: 'BA-K3',
+        customerId: welt.kunde,
+        siteId: welt.standort,
+        costCenterId: welt.kostenstelle,
+        title: 'Montage von Baugruppen an der Linie 2',
+        activityDescription: 'Montage von Baugruppen an der Linie 2, Dreischicht',
+        startDate: tag('2026-01-15'),
+        weeklyHours: '35.00',
+        headcount: 1,
+        status: 'approved',
+        requestedById: welt.genehmiger,
+      },
+    })
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { demandRequestId: anfrage.id },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
   })
 })

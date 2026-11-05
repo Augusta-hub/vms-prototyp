@@ -8,11 +8,10 @@
  * Rechenwege in `regeln/` greifen auf sie zu, statt eine Ergebnisart selbst zu
  * wählen. Weicht eine Zeile von 4.7 ab, ist das ein Fehler in dieser Datei.
  *
- * **Abgeschrieben sind die Zeilen zu P1, P2, P3, P4, P5, P6, P9, P10 und P11**
- * (SPEC 5.1 bis 5.4, bestätigt in 5.5.5) und die Zeilen N1, N2, N3, N5 und N6
- * des nächtlichen Laufs (5.5.1). Die Zeilen zu P7 und P8 kommen mit ihrem
- * Rechenweg; eine Zeile ohne Rechenweg wäre eine Zusicherung, die nichts
- * einlöst.
+ * **Abgeschrieben sind die Zeilen zu allen elf Prüfungen** (SPEC 5.1 bis 5.4,
+ * bestätigt in 5.5.5) und die Zeilen N1 bis N6 des nächtlichen Laufs (5.5.1).
+ * Eine Zeile kommt mit ihrem Rechenweg und nicht vorher: eine Zeile ohne
+ * Rechenweg wäre eine Zusicherung, die nichts einlöst.
  *
  * **Eine Besonderheit bei P10:** 4.7 ordnet Q21, Q42, Q43 und Q44 eine Sperre
  * zu, der Pflichtkatalog in 5.4.4 gibt der einzelnen Nachweisart aber teils
@@ -725,6 +724,101 @@ export const QUERSCHNITT: readonly Querschnittzeile[] = [
     weiterePruefungen: ['P3'],
     trefferart: 'warnung',
     specReference: 'SPEC 5.5.1, Zeile N3; 5.0, Festwerte',
+  },
+  /* ---------------------------------------------------------------- */
+  /* P7 — Einsatzverbot bei Arbeitskampf (SPEC 5.3.2)                  */
+  /* ---------------------------------------------------------------- */
+  {
+    nummer: 'Q05',
+    objekt: 'bedarfsanfrage',
+    von: 'approved',
+    nach: 'tendered',
+    pruefung: 'P7',
+    gegenstand: 'Arbeitskampf am Standort angezeigt',
+    // „Zum Zeitpunkt der Ausschreibung steht nicht fest, ob der Arbeitskampf
+    // beim Einsatzstart noch läuft. Die Sperre greift beim Start (Q22)" (4.7,
+    // Ableitungsmuster).
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q05; 5.3.2',
+  },
+  {
+    nummer: 'Q22',
+    objekt: 'einsatz',
+    von: 'planned',
+    nach: 'active',
+    pruefung: 'P7',
+    gegenstand: 'Arbeitskampf am Einsatzort',
+    trefferart: 'sperre',
+    // 5.3.6 und 5.5.4: **keine** Übersteuerung. Die gesetzliche Ausnahme ist
+    // die Zusicherung nach § 11 Abs. 5 Satz 2 AÜG — ein eigener, dokumentierter
+    // Sachverhalt, keine Abweichung von der Regel. Eine Übersteuerung wäre eine
+    // dokumentierte Rechtsverletzung.
+    nichtUebersteuerbar: true,
+    specReference: 'SPEC 4.7 Q22; 5.3.2, 5.3.6',
+  },
+  {
+    nummer: 'N4',
+    objekt: 'einsatz',
+    von: null,
+    nach: null,
+    pruefung: 'P7',
+    gegenstand: 'Arbeitskampfanzeige deckt den Tag des Laufs',
+    // 5.5.1, Zeile N4: Warnung mit Pflicht-Eskalation; die Unterbrechung wird
+    // **vorgeschlagen**, nicht vollzogen (5.5.1 c, 4.0 Regel 4).
+    trefferart: 'warnung',
+    specReference: 'SPEC 5.5.1, Zeile N4; 5.3.2',
+  },
+  /* ---------------------------------------------------------------- */
+  /* P8 — Kennzeichnung und Konkretisierung (SPEC 5.3.3)               */
+  /* ---------------------------------------------------------------- */
+  {
+    nummer: 'Q01',
+    objekt: 'bedarfsanfrage',
+    von: 'draft',
+    nach: 'submitted',
+    pruefung: 'P8',
+    gegenstand: 'Tätigkeitsbeschreibung vorhanden und konkret',
+    // „Die Anfrage ist kein Überlassungsvertrag; die formale Vorprüfung ist
+    // richtig platziert. Die Sperre gehört an den Einsatz" (4.7).
+    trefferart: 'information',
+    specReference: 'SPEC 4.7 Q01; 5.3.3',
+  },
+  {
+    nummer: 'Q02',
+    objekt: 'bedarfsanfrage',
+    von: 'submitted',
+    nach: 'approved',
+    pruefung: 'P8',
+    gegenstand: 'dito, vor der Freigabe',
+    trefferart: 'warnung',
+    specReference: 'SPEC 4.7 Q02; 5.3.3',
+  },
+  {
+    nummer: 'Q45',
+    objekt: 'einsatz',
+    von: null,
+    nach: 'planned',
+    pruefung: 'P8',
+    gegenstand:
+      'Kennzeichnung und Konkretisierung: aktiver Rahmenvertrag der Lieferantenseite, Kandidat, eigene `activityDescription`, Standort und Beginn (K1–K4)',
+    trefferart: 'sperre',
+    // 5.3.6: die Konkretisierung wird **nachgetragen**, nicht übersteuert.
+    nichtUebersteuerbar: true,
+    specReference: 'SPEC 4.7 Q45; 5.5.5, Tabelle „Neu"',
+  },
+  {
+    nummer: 'Q46',
+    objekt: 'einsatz',
+    von: 'planned',
+    nach: 'active',
+    pruefung: 'P8',
+    gegenstand:
+      'Konkretisierung liegt **vor** dem ersten Überlassungstag vollständig vor (K5); K1 bis K4 erneut',
+    trefferart: 'sperre',
+    // 5.3.6: nach dem ersten Überlassungstag ist der Verstoß nicht heilbar —
+    // und dann hilft auch keine Übersteuerung.
+    nichtUebersteuerbar: true,
+    specReference: 'SPEC 4.7 Q46; 5.5.5, Tabelle „Neu"',
   },
 ]
 

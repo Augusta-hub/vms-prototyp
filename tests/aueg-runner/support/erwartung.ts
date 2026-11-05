@@ -25,6 +25,8 @@ export type Erwartungsart =
   | 'deckung'
   /** Kriterium der Konkretisierungspflicht K1 bis K5 (SPEC 5.3.3). */
   | 'kriterium'
+  /** Betroffenheit durch eine Arbeitskampfanzeige (SPEC 5.3.2). */
+  | 'betroffenheit'
   /** Pruefbarkeit: fehlende Daten wirken wie ein Treffer (SPEC 5.0). */
   | 'pruefbarkeit'
   /** Adressat, Benachrichtigung, Eskalationsstufe (SPEC 5.5.2 Nummer 6). */
@@ -62,6 +64,13 @@ const SIGNATUREN: ReadonlyArray<readonly [Erwartungsart, RegExp]> = [
   ['ergebnisart', /Ergebnis(?:se)? (?:der Prüfung|der Prüfungen|der Bewertung|des Prüfung)?.*(?:Information|Warnung|Sperre|Treffer)|ist eine (?:Information|Warnung|Sperre)|ist ein Treffer|ist (?:eine|das) Sperre|Einzelergebnis|Sammelergebnis|Ergebnis ist "/],
   ['kriterium', /Kriterium|Kriterien K\d/],
   ['pruefbarkeit', /nicht prüfbar|nicht ausführbar|wirkt (?:hier )?(?:nicht )?wie ein Treffer|nicht bildbar|nicht bestimmbar|wie "ja" gerechnet|wie "kein Eintrag" behandelt/],
+  // SPEC 5.3.2: „ist der 20.09.2026 ein betroffener Tag", „ist der Prüfzeitraum
+  // bis auf Weiteres betroffen". Beides sichert zu, welche Tage die
+  // Arbeitskampfanzeige deckt — der Befund fuehrt sie als `betroffeneTage`.
+  // Steht **vor** `deckung` und `berechneter_wert`: die eine Signatur faengt
+  // „deckt", die andere „Prüfzeitraum", und keine von beiden prueft, ob ein
+  // genannter Tag betroffen ist.
+  ['betroffenheit', /betroffene(?:r|n|s)? Tag\b|betroffene Tage\b|Prüfzeitraum[^.]*betroffen/],
   ['deckung', /gedeckt|deckt (?:keinen|nichts|den|mit)|umschließt/],
   ['berechneter_wert', /Kettenbeginn|Tagebudget|Fristbudget|angerechnete Dauer|Restbudget|Fristende|Fälligkeit|Rückschaufenster|Lückenbeginn|Lückenende|Prüfzeitraum|Dreimonatsfrist|beträgt \d+|zählt (?:jeder|einmal)|Zählgrundlage|zählwirksam|Zählwirksamkeit|Ergebnis der Bewertung ist "|Frist von \d+ Monaten|beträgt die Frist \d+|gilt die (?:Frist|Grenze|gesetzliche)|mit (?:höchstens )?\d+ Monaten gerechnet|Regelgrenze von \d+ Monaten|neue Kette beginnt|Zählung (?:nicht )?zurück|entsteht keine Überlassungskette/],
   ['vorgangsstatus', /Status (?:des|der) .* ist|entsteht kein|Status .* bleibt|Status .* unverändert|entstehen im Status|steht im Status|findet (?:der Übergang|nicht) statt|Übergang statt|erscheint im Einladungskreis/],
@@ -102,6 +111,7 @@ export function istAuswertbar(art: Erwartungsart): boolean {
     art === 'berechneter_wert' ||
     art === 'deckung' ||
     art === 'kriterium' ||
+    art === 'betroffenheit' ||
     art === 'uebersteuerung_zurueckgewiesen'
   )
 }

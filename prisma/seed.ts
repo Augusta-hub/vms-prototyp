@@ -35,6 +35,7 @@ const prisma = new PrismaClient()
 /** Stichtag der Demo-Daten: fest, damit Zeiträume reproduzierbar bleiben. */
 const SEED_DATE = new Date('2026-01-01T00:00:00.000Z')
 const day = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`)
+const frueherer = (a: Date, b: Date): Date => (a <= b ? a : b)
 const hour = (iso: string): Date => new Date(`${iso}:00.000Z`)
 
 interface TenantSeed {
@@ -2238,7 +2239,14 @@ async function main(): Promise<void> {
           assignment.terminationApprovedByKey === null ? null : day('2026-11-12'),
         status: assignment.status,
         createdById: userId('operatorCoordinator'),
-        createdAt: SEED_DATE,
+        // K5 aus SPEC 5.3.3: die Konkretisierung muss **vor** dem ersten
+        // Überlassungstag vorliegen, und 4.3.1 kennt genau einen Weg nach
+        // `planned` — der Einsatz entsteht dort, `createdAt` ist also der Tag
+        // dieses Übergangs. Ein Einsatz, der vor dem Stichtag dieser
+        // Demonstrationsdaten begann, ist deshalb auch vorher angelegt: sonst
+        // wäre er erst nach seinem eigenen Beginn konkretisiert, und das ist
+        // ein Verstoß gegen § 1 Abs. 1 Sätze 5 und 6 AÜG.
+        createdAt: frueherer(SEED_DATE, assignment.actualStartDate ?? assignment.plannedStartDate),
       },
     })
     assignmentIds.set(assignment.assignmentNumber, created.id)

@@ -49,12 +49,37 @@ describe('Suche nach der Zeile eines Übergangs', () => {
     expect(zeileFuerUebergang('P9', 'stundenzettel', 'inApproval', 'approved')).toBeNull()
   })
 
-  it('liefert keine Zeile für eine Prüfung ohne abgeschriebene Zeilen', () => {
-    // P7 und P8 sind in 4.7 geführt, hier aber noch nicht abgeschrieben: ihre
-    // Zeilen kommen mit ihrem Rechenweg. Die Zeilen zu P3, P4 und P5 sind mit
-    // SPEC 5.2 dazugekommen.
-    expect(zeileFuerUebergang('P8', 'einsatz', 'planned', 'active')).toBeNull()
-    expect(zeileFuerUebergang('P7', 'einsatz', 'planned', 'active')).toBeNull()
+  it('liefert nichts für einen Übergang, den 4.7 einer Prüfung nicht zuordnet', () => {
+    // Mit P7 und P8 sind alle elf Prüfungen abgeschrieben. Geprüft wird jetzt
+    // die andere Richtung: eine Zeile entsteht nicht dadurch, dass es die
+    // Prüfung gibt. 4.7 nennt P8 nicht am Stundenzettel und P7 nicht an der
+    // Bedarfsanfrage `draft` → `submitted`.
+    expect(zeileFuerUebergang('P8', 'stundenzettel', 'inApproval', 'approved')).toBeNull()
+    expect(zeileFuerUebergang('P7', 'bedarfsanfrage', 'draft', 'submitted')).toBeNull()
+    expect(zeileFuerUebergang('P7', 'profilvorschlag', null, 'accepted')).toBeNull()
+  })
+
+  it('findet die Zeilen zu P7 und P8 (SPEC 5.3.2, 5.3.3)', () => {
+    expect(zeileFuerUebergang('P7', 'bedarfsanfrage', 'approved', 'tendered')?.nummer).toBe('Q05')
+    expect(zeileFuerUebergang('P7', 'einsatz', 'planned', 'active')?.nummer).toBe('Q22')
+    expect(zeileFuerUebergang('P8', 'bedarfsanfrage', 'draft', 'submitted')?.nummer).toBe('Q01')
+    expect(zeileFuerUebergang('P8', 'bedarfsanfrage', 'submitted', 'approved')?.nummer).toBe('Q02')
+    expect(zeileFuerUebergang('P8', 'einsatz', null, 'planned')?.nummer).toBe('Q45')
+    expect(zeileFuerUebergang('P8', 'einsatz', 'planned', 'active')?.nummer).toBe('Q46')
+  })
+
+  it('führt die Sperren aus P7 und P8 als nicht übersteuerbar (SPEC 5.3.6)', () => {
+    // 5.3.6: bei P7 ist die gesetzliche Ausnahme die Zusicherung nach
+    // § 11 Abs. 5 Satz 2 AÜG, bei P8 wird die Konkretisierung nachgetragen.
+    // Beides ist kein Abweichen von der Regel, also keine Übersteuerung.
+    for (const zeile of [
+      zeileFuerUebergang('P7', 'einsatz', 'planned', 'active'),
+      zeileFuerUebergang('P8', 'einsatz', null, 'planned'),
+      zeileFuerUebergang('P8', 'einsatz', 'planned', 'active'),
+    ]) {
+      expect(zeile?.trefferart).toBe('sperre')
+      expect(zeile?.nichtUebersteuerbar).toBe(true)
+    }
   })
 
   it('findet die Zeilen zu P3, P4 und P5 (SPEC 5.2)', () => {

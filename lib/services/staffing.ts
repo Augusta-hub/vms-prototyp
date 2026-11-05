@@ -30,6 +30,15 @@
  * P5 braucht die Stufenfolge des Schemas (3.3) und ist ebenfalls nicht
  * angebunden.
  *
+ * **`concretizationComplete` ist P8** (5.3.3) und wird aus den Kriterien K1 bis
+ * K5 gerechnet. K1 führt über `agreedRateCardItemRef` →
+ * `rateCard.masterAgreementRef` zum Rahmenvertrag der Lieferantenseite, K5
+ * vergleicht den Tag der Anlage mit dem ersten Überlassungstag — 4.3.1 kennt
+ * genau einen Weg nach `planned`, der Einsatz entsteht dort, und `createdAt`
+ * ist deshalb der Tag dieses Übergangs. `noIndustrialActionAtSite` (P7) bleibt
+ * dagegen ein benannter Wert: dafür fehlt in Kapitel 3 das Feld, siehe die
+ * Begründung an `RULE_CHECKS_PENDING`.
+ *
  * Die Nebenwirkungen aus Kapitel 4, die der Prototyp noch nicht hat
  * (Benachrichtigungen, Fristenlauf, Audit-Eintrag aus 3.12), sind an ihrer
  * Stelle als Kommentar benannt — nicht stillschweigend weggelassen.
@@ -40,9 +49,12 @@ import {
   equalPaystand,
   haeltVerlaengerungDieFrist,
   hoechstdauerstand,
+  konkretisierungsstand,
   type Einsatzzeile,
   type EqualPaystand,
   type Hoechstdauerstand,
+  type Konkretisierungsstand,
+  type Rahmenvertragszeile,
   type Tarifzeile,
   type Verleiherzeile,
 } from '../aueg/anbindung'
@@ -104,8 +116,17 @@ const RULE_CHECKS_PENDING = {
   hasBlockingRuleCheck: false,
   mandatoryDocumentsChecked: true,
   mandatoryDocumentsPresent: true,
+  /**
+   * P7 (5.3.2). Dieser Wert bleibt hier, und zwar **nicht** aus Zeitmangel: für
+   * die Arbeitskampfanzeige führt 3.1 kein Feld und für die Zusicherung nach
+   * § 11 Abs. 5 Satz 2 AÜG kein Objekt. 5.3.2 sagt dazu selbst, die Regel sei
+   * damit „prüfbar, aber **nicht auswertbar**", und verweist auf *offene Frage
+   * 30*. Der Rechenweg steht in `lib/aueg/regeln/p7Arbeitskampf.ts` und läuft
+   * gegen die Gherkin-Suite; angebunden wird er, sobald das Feld entschieden
+   * ist. Bis dahin sperrt dieser Wert nichts — die Lücke ist benannt, nicht
+   * geschlossen.
+   */
   noIndustrialActionAtSite: true,
-  concretizationComplete: true,
   hasAcceptedValidPermit: true,
   hasAcceptedValidPermitForNewPeriod: true,
 } as const
@@ -1252,8 +1273,13 @@ const ASSIGNMENT_INCLUDE = {
   candidate: true,
   workerIdentity: true,
   candidateSubmission: true,
-  agreedRateCardItem: true,
+  // K1 aus 5.3.3 führt über `agreedRateCardItemRef` → `rateCard.masterAgreementRef`
+  // zum Rahmenvertrag der Lieferantenseite (3.3). Ohne diesen Weg ist die
+  // Kennzeichnung nicht prüfbar.
+  agreedRateCardItem: { include: { rateCard: { include: { masterAgreement: true } } } },
   customerRateCardItem: true,
+  // K3 vergleicht die Tätigkeitsbeschreibung mit dem Titel der Anfrage (5.3.3).
+  demandRequest: true,
   // Der Mandant des Antragstellers entscheidet, ob die Genehmigung der
   // Kundenseite nötig ist ([26], 4.3.1).
   terminationRequestedBy: { include: { tenant: true } },
@@ -1333,13 +1359,77 @@ function assignmentFacts(
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
     // P1 (5.1) und P6 (5.3.1): gerechnet, siehe `Regelstand`.
     maxDurationExceeded: regelstand.maxDurationExceeded,
-    concretizationComplete: RULE_CHECKS_PENDING.concretizationComplete,
+    // P8 (5.3.3): gerechnet aus den Kriterien K1 bis K5.
+    concretizationComplete: konkretisierungFuerEinsatz(assignment, overrides.actualStartDate)
+      .concretizationComplete,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(assignment.candidate),
     employmentRelationshipOnFirstDay: employmentOnFirstDay(assignment),
     equalPayDueFromFirstDay: regelstand.equalPayDueFromFirstDay,
     comparableWagePresent: assignment.comparableWage !== null,
     evaluationDate,
     ...overrides,
+  }
+}
+
+/**
+ * P8 für einen geladenen Einsatz (SPEC 5.3.3).
+ *
+ * **Die Prüfstufe hängt am Zustand, nicht am Aufruf.** Ein Einsatz in `planned`
+ * steht vor dem Übergang nach `active`, und das ist der Zeitpunkt, an dem K5
+ * gilt (Q46). Ein Einsatz, der noch angelegt wird, kennt K5 nicht (Q45) — der
+ * Fall steht in `createAssignment`.
+ *
+ * `uebergebenerStart` ist der `actualStartDate`, den der Übergang **mitbringt**:
+ * er ist zur Prüfzeit noch nicht gespeichert, gilt aber schon (5.0).
+ */
+function konkretisierungFuerEinsatz(
+  assignment: LoadedAssignment,
+  uebergebenerStart: Date | null | undefined,
+): Konkretisierungsstand {
+  const start = uebergebenerStart ?? assignment.actualStartDate
+  return konkretisierungsstand({
+    einsatz: {
+      candidateId: assignment.candidateId,
+      activityDescription: assignment.activityDescription,
+      siteId: assignment.siteId,
+      supplierId: assignment.supplierId,
+      agreedRateCardItemId: assignment.agreedRateCardItemId,
+      plannedStartDate: assignment.plannedStartDate,
+      plannedEndDate: assignment.plannedEndDate,
+      actualStartDate: start,
+      // 4.3.1 kennt genau einen Weg nach `planned` — „— → `planned`". Der
+      // Einsatz entsteht dort, also ist seine Anlage der Übergang, den K5
+      // datiert.
+      createdAt: assignment.createdAt,
+    },
+    rahmenvertrag: alsRahmenvertragszeile(assignment.agreedRateCardItem),
+    titelDerAnfrage: assignment.demandRequest?.title ?? null,
+    stufe: assignment.status === 'planned' || start !== null ? 'start' : 'anlage',
+  })
+}
+
+/** Der Rahmenvertrag hinter der Preisposition (3.3) — der Weg aus K1. */
+function alsRahmenvertragszeile(position: {
+  readonly rateCard: {
+    readonly masterAgreement: {
+      readonly agreementNumber: string
+      readonly agreementType: string
+      readonly status: string
+      readonly supplierId: string | null
+      readonly validFrom: Date
+      readonly validTo: Date | null
+    }
+  }
+} | null): Rahmenvertragszeile | null {
+  if (position === null) return null
+  const vertrag = position.rateCard.masterAgreement
+  return {
+    agreementNumber: vertrag.agreementNumber,
+    agreementType: vertrag.agreementType,
+    status: vertrag.status,
+    supplierId: vertrag.supplierId,
+    validFrom: vertrag.validFrom,
+    validTo: vertrag.validTo,
   }
 }
 
@@ -1646,6 +1736,17 @@ export async function createAssignment(
   const comparableWage: number | string | null =
     input.comparableWage ?? wageEntry?.comparableWage.toString() ?? null
 
+  // K1 aus 5.3.3: der Weg von der Preisposition zum Rahmenvertrag der
+  // Lieferantenseite (3.3). Fehlt die Preisposition, ist K1 **nicht prüfbar**
+  // und wirkt wie ein Treffer (5.0) — geraten wird nichts.
+  const preisposition =
+    input.agreedRateCardItemId === ''
+      ? null
+      : await prisma.rateCardItem.findUnique({
+          where: { id: input.agreedRateCardItemId },
+          include: { rateCard: { include: { masterAgreement: true } } },
+        })
+
   // P1 und P6 für den Einsatz, der **noch nicht** gespeichert ist: seine
   // vorgesehenen Tage gehen als eigene Zeile in die Kette (5.1.3, Schritt 6).
   const neueZeile: Einsatzzeile = {
@@ -1694,7 +1795,24 @@ export async function createAssignment(
     mandatoryDocumentsPresent: RULE_CHECKS_PENDING.mandatoryDocumentsPresent,
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
     maxDurationExceeded: regelstand.maxDurationExceeded,
-    concretizationComplete: RULE_CHECKS_PENDING.concretizationComplete,
+    // P8 (5.3.3) am Anlegen: K1 bis K4, nicht K5 — der Einsatz entsteht erst.
+    concretizationComplete: konkretisierungsstand({
+      einsatz: {
+        candidateId: submission.candidateId,
+        activityDescription: input.activityDescription,
+        siteId: submission.demandRequest.siteId,
+        supplierId: submission.candidate.supplierId,
+        agreedRateCardItemId:
+          input.agreedRateCardItemId === '' ? null : input.agreedRateCardItemId,
+        plannedStartDate: input.plannedStartDate,
+        plannedEndDate: input.plannedEndDate,
+        actualStartDate: null,
+        createdAt: evaluationDate,
+      },
+      rahmenvertrag: alsRahmenvertragszeile(preisposition),
+      titelDerAnfrage: submission.demandRequest.title,
+      stufe: 'anlage',
+    }).concretizationComplete,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(submission.candidate),
     employmentRelationshipOnFirstDay: employmentOnFirstDay({
       candidate: submission.candidate,

@@ -163,6 +163,33 @@ export interface Regelwerkkonfiguration {
   readonly adressatenKonzernUnbekannt: readonly Rollenkuerzel[]
   /** Arbeitsverhältnis beim Verleiher fehlt oder beginnt zu spät (5.3.4). */
   readonly adressatenArbeitsverhaeltnis: readonly Rollenkuerzel[]
+  /**
+   * Arbeitskampf am Einsatzort, **ohne** Zusicherung (5.3.2, Schritt 3). 5.3.2
+   * nennt für diesen Fall keine Adressaten; 2.4 führt für den Anlass
+   * „AÜG-Sperre blockiert einen Vorgang" `MD` mit Eskalation an `MA`.
+   *
+   * **Nicht** eingetragen ist die Kundenseite. Die Zusicherung nach § 11 Abs. 5
+   * Satz 2 ist der offene Weg, und wer sie abgeben darf — `KE` oder `KB` —, ist
+   * *offene Frage 30*. Eine Rolle zu raten hieße, die Frage im Code zu
+   * entscheiden (CLAUDE.md, Regel 5).
+   */
+  readonly adressatenArbeitskampf: readonly Rollenkuerzel[]
+  /**
+   * Arbeitskampf, aber der Einsatz ist zulässig: Zusicherung vorhanden oder nur
+   * ein anderer Betriebsteil betroffen. „Der Sachverhalt bleibt sichtbar und
+   * wird eskaliert, solange der Arbeitskampf läuft" (5.3.2, Schritt 3).
+   */
+  readonly adressatenArbeitskampfZulaessig: readonly Rollenkuerzel[]
+  /** Zeile N4: „Warnung mit Pflicht-Eskalation an `MD` und `MA`" (5.3.2). */
+  readonly adressatenArbeitskampfNachtlauf: readonly Rollenkuerzel[]
+  /** Kriterium K1 bis K5 am Einsatz nicht erfüllt (5.3.3; 2.4 für die Stufen). */
+  readonly adressatenKonkretisierung: readonly Rollenkuerzel[]
+  /**
+   * Vorläufer von K3 an der Bedarfsanfrage nicht erfüllt (5.3.3 Nr. 1).
+   * Zusätzlich `KB`: 4.1 macht die Anfrage zur Sache des Bedarfsträgers, und
+   * das Feld, das nicht trägt, ist eines, das er pflegt.
+   */
+  readonly adressatenKonkretisierungAnfrage: readonly Rollenkuerzel[]
   readonly vorlauf: Readonly<Record<Nachweisart, Vorlauf>>
   readonly stufenadressaten: Readonly<Record<Nachweisart, Stufenadressaten>>
   /** Wer erfährt von einem Datenfehler am Erlaubnissatz (5.4.6). */
@@ -234,6 +261,13 @@ export const REGELWERK: Regelwerkkonfiguration = {
   adressatenErklaerungFehlt: ['MD', 'LD'],
   adressatenKonzernUnbekannt: ['MA'],
   adressatenArbeitsverhaeltnis: ['MD', 'LD'],
+  // 2.4, Anlass „AÜG-Sperre blockiert einen Vorgang": `MD`, Eskalation `MA`.
+  adressatenArbeitskampf: ['MD', 'MA'],
+  adressatenArbeitskampfZulaessig: ['MD'],
+  // 5.3.2: „eine Warnung mit Pflicht-Eskalation an `MD` und `MA`".
+  adressatenArbeitskampfNachtlauf: ['MD', 'MA'],
+  adressatenKonkretisierung: ['MD', 'MA'],
+  adressatenKonkretisierungAnfrage: ['KB', 'MD'],
   // SPEC 5.4.4, Spalte „Vorlauf (Information / Warnung / Eskalation)".
   vorlauf: {
     permitCertificate: { information: 90, warnung: 30, eskalation: 14 },

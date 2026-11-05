@@ -37,6 +37,8 @@ export interface Welt {
   readonly kandidatZweiterLieferant: string
   readonly personenidentitaet: string
   readonly einkaufsposition: string
+  /** Preisposition zum **eigenen** Rahmenvertrag des zweiten Lieferanten (K1). */
+  readonly zweiteEinkaufsposition: string
   readonly verkaufsposition: string
 }
 
@@ -246,6 +248,38 @@ export async function baueWelt(): Promise<Welt> {
     data: { rateCardId: verkaufsliste.id, itemType: 'baseRate' },
   })
 
+  // Ein **eigener** Rahmenvertrag des zweiten Lieferanten mit eigener
+  // Preisposition. SPEC 5.3.3, Grenzfall „Lieferantenwechsel": der neue Einsatz
+  // braucht einen aktiven Rahmenvertrag des **neuen** Lieferanten; die Übernahme
+  // der Angaben aus dem alten Einsatz ist eine Änderung, keine Fortschreibung.
+  // Eine Welt, in der ein Einsatz über „Elbe Zeitarbeit" auf den Rahmenvertrag
+  // von „Rheinpersonal" verweist, ist nicht gekennzeichnet (K1) — das ist ein
+  // Datenfehler und keine Grundlage.
+  const zweiterRahmenvertrag = await prisma.masterAgreement.create({
+    data: {
+      tenantId: betreiber.id,
+      agreementNumber: 'RV-L-2',
+      agreementType: 'supplierAgreement',
+      supplierId: zweiterLieferant.id,
+      validFrom: tag('2025-01-01'),
+      status: 'active',
+    },
+  })
+  const zweiteEinkaufsliste = await prisma.rateCard.create({
+    data: {
+      tenantId: betreiber.id,
+      rateCardNumber: 'PL-EK-2',
+      masterAgreementId: zweiterRahmenvertrag.id,
+      rateCardScope: 'supplierRateCard',
+      validFrom: tag('2025-01-01'),
+      currency: 'EUR',
+      status: 'active',
+    },
+  })
+  const zweiteEinkaufsposition = await prisma.rateCardItem.create({
+    data: { rateCardId: zweiteEinkaufsliste.id, itemType: 'baseRate' },
+  })
+
   // Die Tarifzuordnung der **Verleiherseite**. Sie ist nach SPEC 3.2 ab Status
   // `active` Pflicht, und 5.2.2 liest aus ihr die Equal-Pay-Frist. Ohne sie
   // gilt Fall 1: Equal Pay ab dem ersten Überlassungstag — dann sperrt Q48
@@ -341,6 +375,7 @@ export async function baueWelt(): Promise<Welt> {
     kandidatZweiterLieferant: kandidatZweiterLieferant.id,
     personenidentitaet: personenidentitaet.id,
     einkaufsposition: einkaufsposition.id,
+    zweiteEinkaufsposition: zweiteEinkaufsposition.id,
     verkaufsposition: verkaufsposition.id,
   }
 }
@@ -360,10 +395,32 @@ export async function legeEinsatzAn(
     readonly mitPersonenidentitaet?: boolean
     /** `comparableWage` (3.7) — ab `equalPayDueDate` Pflicht (5.2.4). */
     readonly vergleichsentgelt?: string | null
+    /**
+     * Tag des Übergangs nach `planned` — das Kriterium K5 aus SPEC 5.3.3.
+     *
+     * Ohne Angabe wird der **erste Überlassungstag** gesetzt. Das ist keine
+     * Bequemlichkeit: `createdAt` ist der Tag dieses Übergangs (4.3.1 kennt nur
+     * „— → `planned`"), und eine Zeile, die nach ihrem eigenen Beginn entsteht,
+     * ist ein Verstoß gegen § 1 Abs. 1 Sätze 5 und 6 AÜG. Ließe man hier die
+     * Vorbelegung `now()` stehen, wäre jeder Einsatz des Fixtures mit einem
+     * Beginn in der Vergangenheit nicht konkretisiert — und das ist keine
+     * rechtmäßige Grundlage, sondern der Fall, den P8 verhindert.
+     */
+    readonly angelegtAm?: Date
+    /**
+     * `agreedRateCardItemRef` (3.7). Ohne Angabe die Preisposition zum
+     * Rahmenvertrag des ersten Lieferanten; bei einem anderen Lieferanten ist
+     * **dessen** Position zu nennen, sonst trägt die Kennzeichnung nicht (K1).
+     */
+    readonly einkaufsposition?: string
   },
 ): Promise<string> {
+  const ersterTag = eigenes.actualStartDate ?? eigenes.plannedStartDate
   const einsatz = await prisma.assignment.create({
     data: {
+      createdAt:
+        eigenes.angelegtAm ??
+        (ersterTag < eigenes.plannedStartDate ? ersterTag : eigenes.plannedStartDate),
       tenantId: welt.betreiberMandant,
       assignmentNumber: eigenes.nummer,
       customerId: welt.kunde,
@@ -381,7 +438,7 @@ export async function legeEinsatzAn(
       weeklyHours: '35.00',
       comparableWage: eigenes.vergleichsentgelt ?? null,
       comparableWageCurrency: eigenes.vergleichsentgelt === undefined ? null : 'EUR',
-      agreedRateCardItemId: welt.einkaufsposition,
+      agreedRateCardItemId: eigenes.einkaufsposition ?? welt.einkaufsposition,
       customerRateCardItemId: welt.verkaufsposition,
       status: eigenes.status,
     },
