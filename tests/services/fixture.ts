@@ -12,6 +12,7 @@
  * behandelt werden als von der Spezifikation (5.0).
  */
 
+import { pruefeDokumentOderWirf } from '../../lib/masterdata/invariants'
 import { prisma } from '../../lib/prisma'
 
 /** Ein Kalendertag als UTC-Mitternacht — so führt Prisma die Datumsfelder. */
@@ -39,6 +40,8 @@ export interface Welt {
   readonly einkaufsposition: string
   /** Preisposition zum **eigenen** Rahmenvertrag des zweiten Lieferanten (K1). */
   readonly zweiteEinkaufsposition: string
+  /** Die Urkunde zur AÜG-Erlaubnis des ersten Lieferanten (3.2, 3.10). */
+  readonly erlaubnisurkunde: string
   readonly verkaufsposition: string
 }
 
@@ -248,6 +251,54 @@ export async function baueWelt(): Promise<Welt> {
     data: { rateCardId: verkaufsliste.id, itemType: 'baseRate' },
   })
 
+  // Die AÜG-Erlaubnis beider Lieferanten mit ihrer **Urkunde** (3.2, 3.10).
+  // Nach 5.4.1 deckt eine Erlaubnis nur, wenn sie anerkannt ist **und** eine
+  // hinterlegte Urkunde trägt (E25, 5.4.5). Ein Lieferant im Status `active`
+  // ohne das ist nach 3.2 ein Datenfehler — und keine Grundlage, sondern der
+  // Fall, den P9 verhindert.
+  const erlaubnisurkunden = new Map<string, string>()
+  for (const [nummer, lieferantId, mandantId] of [
+    ['AZ-TEST-1', lieferant.id, lieferantMandant.id],
+    ['AZ-TEST-2', zweiterLieferant.id, zweiterLieferantMandant.id],
+  ] as const) {
+    const urkunde = await prisma.document.create({
+      data: {
+        tenantId: mandantId,
+        documentNumber: `DOK-${nummer}`,
+        documentCategory: 'permitCertificate',
+        subjectType: 'supplier',
+        supplierId: lieferantId,
+        fileRef: `ablage://synthetisch/${nummer}`,
+        fileName: `${nummer}.pdf`,
+        mimeType: 'application/pdf',
+        uploadedAt: tag('2025-01-02'),
+        uploadedById: administrator.id,
+        verificationStatus: 'accepted',
+        verifiedAt: tag('2025-01-03'),
+        verifiedById: administrator.id,
+        // Der Kunde sieht an der Erlaubnis nur den Gültigkeitsstatus, nicht den
+        // Urkundeninhalt ([36], 3.10).
+        confidentiality: 'operatorAndOwner',
+      },
+    })
+    erlaubnisurkunden.set(lieferantId, urkunde.id)
+    await prisma.supplierPermit.create({
+      data: {
+        tenantId: mandantId,
+        supplierId: lieferantId,
+        permitNumber: nummer,
+        issuingAuthority: 'Agentur für Arbeit (synthetisch)',
+        permitType: 'unlimited',
+        issuedOn: tag('2025-01-01'),
+        validFrom: tag('2025-01-01'),
+        certificateDocumentRef: urkunde.id,
+        verificationStatus: 'accepted',
+        verifiedAt: tag('2025-01-03'),
+        verifiedById: administrator.id,
+      },
+    })
+  }
+
   // Ein **eigener** Rahmenvertrag des zweiten Lieferanten mit eigener
   // Preisposition. SPEC 5.3.3, Grenzfall „Lieferantenwechsel": der neue Einsatz
   // braucht einen aktiven Rahmenvertrag des **neuen** Lieferanten; die Übernahme
@@ -376,6 +427,7 @@ export async function baueWelt(): Promise<Welt> {
     personenidentitaet: personenidentitaet.id,
     einkaufsposition: einkaufsposition.id,
     zweiteEinkaufsposition: zweiteEinkaufsposition.id,
+    erlaubnisurkunde: erlaubnisurkunden.get(lieferant.id) ?? '',
     verkaufsposition: verkaufsposition.id,
   }
 }
@@ -413,6 +465,13 @@ export async function legeEinsatzAn(
      * **dessen** Position zu nennen, sonst trägt die Kennzeichnung nicht (K1).
      */
     readonly einkaufsposition?: string
+    /**
+     * Unterweisung am Standort (`safetyBriefing`, 3.10). Ohne Angabe wird sie
+     * angelegt: der Standort des Fixtures verlangt sie (`safetyBriefingRequired`,
+     * 3.1), und ohne sie sperrt P10 den Einsatzstart (Q21, 5.4.4). `false`
+     * lässt sie weg — die Lage, die diese Sperre prüft.
+     */
+    readonly mitUnterweisung?: boolean
   },
 ): Promise<string> {
   const ersterTag = eigenes.actualStartDate ?? eigenes.plannedStartDate
@@ -443,7 +502,127 @@ export async function legeEinsatzAn(
       status: eigenes.status,
     },
   })
+
+  if (eigenes.mitUnterweisung !== false) {
+    await legeNachweisAn(welt, {
+      nummer: `UW-${eigenes.nummer}`,
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz.id },
+      // Die Unterweisung gilt ab dem ersten Überlassungstag; sie **vor** dem
+      // Einsatz zu datieren wäre genauso synthetisch, aber weniger wahr.
+      gueltigVon: ersterTag,
+    })
+  }
+
   return einsatz.id
+}
+
+/**
+ * Eine freigegebene Bedarfsanfrage (SPEC 3.4, Statusmodell 4.1). Sie ist der
+ * Ausgangspunkt der Ausschreibung und damit von Q04 und Q06.
+ */
+export async function legeBedarfsanfrageAn(
+  welt: Welt,
+  eigenes: {
+    readonly nummer: string
+    readonly status?: 'draft' | 'submitted' | 'approved' | 'tendered'
+    readonly startDate: Date
+    readonly endDate?: Date | null
+  },
+): Promise<string> {
+  const anfrage = await prisma.demandRequest.create({
+    data: {
+      tenantId: welt.kundenMandant,
+      requestNumber: eigenes.nummer,
+      customerId: welt.kunde,
+      siteId: welt.standort,
+      costCenterId: welt.kostenstelle,
+      title: 'Montage Linie 2',
+      activityDescription:
+        'Montage von Baugruppen an der Linie 2, Zweischichtbetrieb, Werk Süd',
+      startDate: eigenes.startDate,
+      endDate: eigenes.endDate ?? null,
+      weeklyHours: '35.00',
+      headcount: 1,
+      status: eigenes.status ?? 'approved',
+      requestedById: welt.genehmiger,
+      approvedById: (eigenes.status ?? 'approved') === 'draft' ? null : welt.genehmiger,
+      approvedAt: (eigenes.status ?? 'approved') === 'draft' ? null : tag('2025-12-01'),
+      qualificationRequirements: {
+        create: [{ qualification: 'Montageerfahrung', requirementKind: 'mandatory' }],
+      },
+    },
+  })
+  return anfrage.id
+}
+
+/** Nachweisarten aus 3.10, soweit die Tests sie brauchen. */
+export type Nachweisart =
+  | 'permitCertificate'
+  | 'safetyBriefing'
+  | 'qualificationCertificate'
+  | 'workPermit'
+  | 'clearanceCertificate'
+  | 'agreementDocument'
+  | 'other'
+
+/**
+ * Ein Dokument nach SPEC 3.10. Der Mandant folgt dem Bezugsobjekt; die
+ * Invarianten aus 3.10 prüft `lib/masterdata/invariants.ts`, und dieser Helfer
+ * ruft sie auf — ein Fixture, das sie verletzt, soll beim Anlegen auffallen und
+ * nicht erst in einem Rechenergebnis.
+ */
+export async function legeNachweisAn(
+  welt: Welt,
+  eigenes: {
+    readonly nummer: string
+    readonly art: Nachweisart
+    readonly bezug:
+      | { readonly art: 'supplier' | 'candidate' | 'assignment' | 'site'; readonly id: string }
+    readonly gueltigVon?: Date | null
+    readonly gueltigBis?: Date | null
+    readonly anerkennung?: 'submitted' | 'accepted' | 'rejected'
+    /** Leer lassen heißt: Nachweis ohne hinterlegte Datei (5.4.5). */
+    readonly ablage?: string
+  },
+): Promise<string> {
+  const anerkennung = eigenes.anerkennung ?? 'accepted'
+  const felder = {
+    documentCategory: eigenes.art,
+    subjectType: eigenes.bezug.art,
+    supplierId: eigenes.bezug.art === 'supplier' ? eigenes.bezug.id : null,
+    customerId: null,
+    candidateId: eigenes.bezug.art === 'candidate' ? eigenes.bezug.id : null,
+    assignmentId: eigenes.bezug.art === 'assignment' ? eigenes.bezug.id : null,
+    siteId: eigenes.bezug.art === 'site' ? eigenes.bezug.id : null,
+    masterAgreementId: null,
+    fileRef: eigenes.ablage ?? `ablage://synthetisch/${eigenes.nummer}`,
+    fileName: `${eigenes.nummer}.pdf`,
+    mimeType: 'application/pdf',
+    verificationStatus: anerkennung,
+    verifiedAt: anerkennung === 'accepted' ? tag('2025-12-01') : null,
+    verifiedById: anerkennung === 'accepted' ? welt.administrator : null,
+    rejectionReason: anerkennung === 'rejected' ? 'synthetischer Testfall' : null,
+    validFrom: eigenes.gueltigVon ?? null,
+    validTo: eigenes.gueltigBis ?? null,
+  } as const
+
+  // Eine leere Ablage ist eine **zulässige** Testlage (5.4.5 rechnet sie als
+  // Datenfehler), aber keine zulässige Zeile nach 3.10. Dann wird die Invariante
+  // bewusst übergangen und der Fall im Test benannt.
+  if ((eigenes.ablage ?? 'x') !== '') pruefeDokumentOderWirf(felder, eigenes.nummer)
+
+  const dokument = await prisma.document.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      documentNumber: `DOK-${eigenes.nummer}`,
+      ...felder,
+      uploadedAt: tag('2025-11-30'),
+      uploadedById: welt.administrator,
+      confidentiality: 'operatorAndOwner',
+    },
+  })
+  return dokument.id
 }
 
 /** Eine Tarifzuordnung (SPEC 3.3) — die Grenze aus 5.1.2, die Frist aus 5.2.2. */

@@ -56,15 +56,16 @@ export default async function Home() {
     <>
       <h1>Identität und Rechte</h1>
       <p>
-        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.7 und 3.11. Umgesetzt sind
-        Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat und
-        Profilvorschlag sowie der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3. Noch nicht
-        umgesetzt: Zeiten (3.8), Abrechnung (3.9), Nachweise (3.10) und das Protokoll (3.12). Aus
-        Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen P1 bis P11. An den Übergängen des
-        Einsatzes greifen P1, P3, P6, P8 und P11 und schreiben Fristende, angerechnete Dauer und
-        Equal-Pay-Fälligkeit fort. Nicht angebunden sind P7 — für die Arbeitskampfanzeige führt
-        Kapitel 3 kein Feld (offene Frage 30) —, der Teil von P4 am Eintrag des Standorts und die
-        Zuschlagsstufe aus P5.
+        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.7, 3.10 und 3.11. Umgesetzt
+        sind Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat
+        und Profilvorschlag, der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3 sowie Dokumente
+        und Nachweise (3.10) als Datenmodell. Noch nicht umgesetzt: Zeiten (3.8), Abrechnung
+        (3.9) und das Protokoll (3.12). Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen
+        P1 bis P11. An den Übergängen greifen P1, P3, P6, P8, P9, P10 und P11: sie schreiben
+        Fristende, angerechnete Dauer und Equal-Pay-Fälligkeit fort und sperren Ausschreibung,
+        Anlage und Einsatzstart, wo Erlaubnis oder Pflichtnachweis fehlen. Nicht angebunden sind
+        P7 — für die Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene Frage 30) —, der Teil
+        von P4 am Eintrag des Standorts und die Zuschlagsstufe aus P5.
       </p>
 
       <h2>Testidentität</h2>

@@ -77,6 +77,8 @@ enum ScopeType {
 /// nicht ausdrücken kann; die Invariante wird in lib/tenants/invariants.ts
 /// geprüft und vom Seed eingehalten.
 model Tenant {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents         Document[]
   id                String     @id @default(cuid())
   tenantNumber      String     @unique
   tenantType        TenantType
@@ -133,15 +135,20 @@ model Tenant {
 /// (3.11). Mehrfachrollen gibt es nur innerhalb dieser einen Organisation
 /// (Kapitel 2).
 model User {
-  id                String  @id @default(cuid())
-  userNumber        String
-  tenantId          String
-  tenant            Tenant  @relation("TenantUsers", fields: [tenantId], references: [id])
-  loginIdentifier   String  @unique
-  givenName         String
-  familyName        String
-  language          String?
-  externalReference String?
+  uploadedDocuments    Document[] @relation("DocumentUploadedBy")
+  verifiedDocuments    Document[] @relation("DocumentVerifiedBy")
+  createdDocuments     Document[] @relation("DocumentCreatedBy")
+  updatedDocuments     Document[] @relation("DocumentUpdatedBy")
+  deactivatedDocuments Document[] @relation("DocumentDeactivatedBy")
+  id                   String     @id @default(cuid())
+  userNumber           String
+  tenantId             String
+  tenant               Tenant     @relation("TenantUsers", fields: [tenantId], references: [id])
+  loginIdentifier      String     @unique
+  givenName            String
+  familyName           String
+  language             String?
+  externalReference    String?
 
   createdAt       DateTime  @default(now())
   createdById     String?
@@ -668,6 +675,8 @@ enum SupplierOfferStatus {
 /// Rechtliche Fristen des AÜG, insbesondere die Höchstüberlassungsdauer
 /// (5.1), zählen **je Kunde** — nicht je Standort und nicht je Kostenstelle.
 model Customer {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents                     Document[]
   id                            String                         @id @default(cuid())
   tenantId                      String                         @unique
   tenant                        Tenant                         @relation("CustomerTenant", fields: [tenantId], references: [id])
@@ -753,6 +762,8 @@ model ContactPerson {
 /// des Überlassungsvertrags verlangt (§ 1 Abs. 1 AÜG, 5.3), und die Grundlage
 /// der Unterweisungspflicht (`safetyBriefingRequired`, 3.10 und 5.4).
 model Site {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents                       Document[]
   id                              String                         @id @default(cuid())
   tenantId                        String
   tenant                          Tenant                         @relation(fields: [tenantId], references: [id])
@@ -855,6 +866,8 @@ model CostCenter {
 /// `active`** — eine Bedingung über zwei Felder, die das Schema nicht
 /// erzwingen kann; sie steht in lib/masterdata/invariants.ts.
 model Supplier {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents                     Document[]
   id                            String                         @id @default(cuid())
   tenantId                      String                         @unique
   tenant                        Tenant                         @relation("SupplierTenant", fields: [tenantId], references: [id])
@@ -958,6 +971,8 @@ model SupplierPermit {
 /// `supplierId` ist gesetzt, passend zu `agreementType` — geprüft in
 /// lib/masterdata/invariants.ts.
 model MasterAgreement {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents         Document[]
   id                String          @id @default(cuid())
   tenantId          String
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
@@ -1486,6 +1501,8 @@ model SupplierOfferItem {
 ///
 /// Statusmodell: keines in Kapitel 4; `status` ist aktiv/inaktiv (3.6).
 model Candidate {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents                    Document[]
   id                           String                       @id @default(cuid())
   tenantId                     String
   tenant                       Tenant                       @relation(fields: [tenantId], references: [id])
@@ -1809,6 +1826,8 @@ model WorkerIdentityMergeEntry {
 ///
 /// Statusmodell 4.3.1, umgesetzt in lib/status/assignment.ts.
 model Assignment {
+  /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
+  documents                     Document[]
   id                            String               @id @default(cuid())
   tenantId                      String
   tenant                        Tenant               @relation(fields: [tenantId], references: [id])
@@ -2005,4 +2024,124 @@ model AssignmentInterruption {
   deactivatedBy   User?     @relation("InterruptionDeactivatedBy", fields: [deactivatedById], references: [id])
 
   @@index([assignmentId])
+}
+
+/// Nachweisart (`documentCategory`, SPEC 3.10). Der Katalog ist **fest**
+/// (Entscheidung zu vormals offener Frage 20); welche Art Pflicht ist und ob
+/// sie sperrt, steht im Pflichtkatalog in 5.4.4 und **nicht** am Dokument.
+enum DocumentCategory {
+  permitCertificate
+  safetyBriefing
+  qualificationCertificate
+  workPermit
+  clearanceCertificate
+  agreementDocument
+  other
+}
+
+/// Art des Bezugsobjekts (`subjectType`, SPEC 3.10). Genau einer der
+/// Verweise unten ist gesetzt, passend zu diesem Wert.
+enum DocumentSubjectType {
+  supplier
+  customer
+  candidate
+  assignment
+  site
+  masterAgreement
+}
+
+/// Sichtbarkeitsklasse (`confidentiality`, SPEC 3.10). Setzt die Fußnoten [35]
+/// und [36] um: der Kunde sieht einsatzbezogene Nachweise, nicht die
+/// Vertragsunterlagen des Lieferanten, und an der AÜG-Erlaubnis nur den
+/// Gültigkeitsstatus ohne Urkundeninhalte.
+enum DocumentConfidentiality {
+  operatorOnly
+  operatorAndOwner
+  assignmentParties
+}
+
+/// Dokument / Nachweis (`document`, SPEC 3.10) — ein hinterlegtes Schriftstück
+/// mit fachlicher Nachweisfunktion.
+///
+/// **Was hier nicht steht.** `mandatory` und `blocking` führt 3.10 als
+/// *abgeleitete* Felder: sie folgen aus dem Pflichtkatalog in 5.4.4 und werden
+/// „nicht am einzelnen Dokument gesetzt". Als Spalten wären sie eine zweite,
+/// frei setzbare Quelle neben dem Katalog — und zwei Quellen laufen
+/// auseinander. Gerechnet werden sie in `lib/aueg/regeln/p10Nachweise.ts`.
+///
+/// **Kein Dokumentenmanagement.** Die Datei selbst liegt nicht hier: `fileRef`
+/// ist ein undurchsichtiger Verweis, dessen Ablageort und -verfahren den
+/// *offenen Fragen 1 und 2* folgen (3.10). Der Prototyp speichert keine
+/// Dateiinhalte.
+///
+/// **Statusmodell.** Kapitel 4 führt keines. Die Anerkennung
+/// (`submitted` → `accepted` / `rejected`) gehört zu 5.4.3; der **Ablauf der
+/// Gültigkeit wechselt keinen Status** — die Anerkennung bezieht sich auf das
+/// Schriftstück, die Gültigkeit auf den Zeitraum.
+model Document {
+  id                String              @id @default(cuid())
+  /// Der Mandant folgt dem Bezugsobjekt (3.10).
+  tenantId          String
+  tenant            Tenant              @relation(fields: [tenantId], references: [id])
+  documentNumber    String              @unique
+  documentCategory  DocumentCategory
+  subjectType       DocumentSubjectType
+  /// Genau einer der folgenden Verweise ist gesetzt, passend zu `subjectType` —
+  /// geprüft in lib/masterdata/invariants.ts.
+  supplierId        String?
+  supplier          Supplier?           @relation(fields: [supplierId], references: [id])
+  customerId        String?
+  customer          Customer?           @relation(fields: [customerId], references: [id])
+  candidateId       String?
+  candidate         Candidate?          @relation(fields: [candidateId], references: [id])
+  assignmentId      String?
+  assignment        Assignment?         @relation(fields: [assignmentId], references: [id])
+  siteId            String?
+  site              Site?               @relation(fields: [siteId], references: [id])
+  masterAgreementId String?
+  masterAgreement   MasterAgreement?    @relation(fields: [masterAgreementId], references: [id])
+
+  issuer    String?
+  issuedOn  DateTime?
+  validFrom DateTime?
+  /// Leer heißt unbefristet; `validTo` steuert die Fristenüberwachung in 5.4.4.
+  validTo   DateTime?
+
+  /// Undurchsichtiger Verweis auf die Ablage (3.10, offene Fragen 1 und 2).
+  fileRef      String
+  fileName     String
+  mimeType     String
+  uploadedAt   DateTime
+  uploadedById String
+  uploadedBy   User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  /// Anerkennung durch `MD` ([34]); Änderung durch den Einsteller nur bis zur
+  /// Anerkennung ([37]). Der Fluss steht in 5.4.3.
+  verificationStatus VerificationStatus
+  /// Pflicht bei `accepted` — geprüft in lib/masterdata/invariants.ts.
+  verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?              @relation("DocumentVerifiedBy", fields: [verifiedById], references: [id])
+  /// Pflicht bei `rejected`.
+  rejectionReason    String?
+
+  confidentiality   DocumentConfidentiality
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("DocumentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("DocumentDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  @@index([tenantId])
+  @@index([supplierId])
+  @@index([candidateId])
+  @@index([assignmentId])
+  @@index([siteId])
+  @@index([documentCategory])
 }

@@ -15,7 +15,8 @@
  * und 4.3 nennen in ihren Vorbedingungen die Ergebnisse von P1, P4, P6 bis P11;
  * gerechnet werden sie in `lib/aueg/`, geladen hier. `RULE_CHECKS_PENDING`
  * unten ist die **eine** Stelle, an der die noch nicht gerechneten Ergebnisse
- * herkommen, und sie ist als solche benannt. Zwei Tatsachen sind davon
+ * herkommen, und sie ist als solche benannt — jeder verbliebene Eintrag trägt
+ * dort seine Begründung. Zwei Tatsachen sind davon
  * ausgenommen, weil sie reine Feldabfragen aus 3.6 sind und keine Regel: das
  * Vorliegen der Erklärung zur Vorbeschäftigung und das Bestehen des
  * Arbeitsverhältnisses am ersten Überlassungstag.
@@ -29,6 +30,15 @@
  * Warnung aus Q18 und die Sperre aus Q36 hängen daran und fehlen deshalb noch.
  * P5 braucht die Stufenfolge des Schemas (3.3) und ist ebenfalls nicht
  * angebunden.
+ *
+ * **P9 und P10 rechnen seit 3.10.** Die Erlaubnissätze (3.2) lagen immer vor;
+ * was fehlte, war das **Dokument** aus 3.10 — die Urkunde zur Erlaubnis (E25)
+ * und die Pflichtnachweise des Katalogs in 5.4.4. Beides wird jetzt geladen:
+ * `hasAcceptedValidPermit` an Q16 und Q20, `hasAcceptedValidPermitForNewPeriod`
+ * an Q31, `mandatoryDocumentsPresent` an Q21 und `mandatoryDocumentsChecked`
+ * an Q10. Der Prüfbezug kommt in allen Fällen aus der Tabelle in 5.0 und nie
+ * aus dem Tag des Aufrufs: eine Erlaubnis, die im geplanten Zeitraum abläuft,
+ * deckt ihn nicht, auch wenn sie heute gültig ist.
  *
  * **`concretizationComplete` ist P8** (5.3.3) und wird aus den Kriterien K1 bis
  * K5 gerechnet. K1 führt über `agreedRateCardItemRef` →
@@ -47,13 +57,19 @@ import {
   bestehtArbeitsverhaeltnisAmErstenTag,
   drehtuerstand,
   equalPaystand,
+  erlaubnisstand,
   haeltVerlaengerungDieFrist,
   hoechstdauerstand,
+  alsNachweiszeile,
   konkretisierungsstand,
+  nachweisstand,
   type Einsatzzeile,
   type EqualPaystand,
+  type Erlaubnisstand,
   type Hoechstdauerstand,
   type Konkretisierungsstand,
+  type Nachweisstand,
+  type Nachweiszeile,
   type Rahmenvertragszeile,
   type Tarifzeile,
   type Verleiherzeile,
@@ -114,7 +130,19 @@ import {
  */
 const RULE_CHECKS_PENDING = {
   hasBlockingRuleCheck: false,
+  /**
+   * P10 beim **Einreichen** des Profilvorschlags (`— → submitted`). 4.7 führt
+   * dafür keine Zeile: Q10 prüft die Pflichtnachweise erst beim Sichten. Die
+   * Tatsache wird an dieser Stelle von keiner Vorbedingung gelesen.
+   */
   mandatoryDocumentsChecked: true,
+  /**
+   * P10 **beim Anlegen** des Einsatzes. Auch dafür führt 4.7 keine Zeile: die
+   * Pflichtnachweise sperren am Einsatzstart (Q21), nicht bei der Anlage — der
+   * Einsatz entsteht geplant, und bis zum ersten Überlassungstag ist der
+   * Nachweis beizubringen. Der Wert ist deshalb keine Lücke, sondern die
+   * Abwesenheit einer Prüfung an dieser Stelle.
+   */
   mandatoryDocumentsPresent: true,
   /**
    * P7 (5.3.2). Dieser Wert bleibt hier, und zwar **nicht** aus Zeitmangel: für
@@ -774,7 +802,8 @@ export interface SubmissionListEntry {
 }
 
 const SUBMISSION_INCLUDE = {
-  candidate: { include: { supplier: true, qualifications: true } },
+  // P10 an Q10 (5.4.4): die Pflichtnachweise des **Kandidaten**.
+  candidate: { include: { supplier: true, qualifications: true, documents: true } },
   supplierOffer: true,
   demandRequest: true,
   assignment: true,
@@ -853,7 +882,23 @@ function submissionFacts(
     // P1 (5.1): gerechnet über die Überlassungskette, siehe `Regelstand`.
     maxDurationExceeded: regelstand.maxDurationExceeded,
     hasPreviousEmploymentDeclaration: hasPreviousEmploymentDeclaration(submission.candidate),
-    mandatoryDocumentsChecked: RULE_CHECKS_PENDING.mandatoryDocumentsChecked,
+    // P10 an Q10 (5.4.4): die Pflichtnachweise des Kandidaten. 4.7 gibt der
+    // Zeile **Information** — der Vorschlag ist keine Überlassung, und der
+    // Katalog sperrt hier nicht. Die Tatsache sagt deshalb „geprüft", und die
+    // Sperre bleibt Q21 vorbehalten.
+    mandatoryDocumentsChecked: nachweisstand({
+      nachweise: submission.candidate.documents.map(alsNachweiszeile),
+      qZeile: 'Q10',
+      bezugsobjekt: submission.candidateId,
+      // 5.0 ordnet dem Vorschlag den **vorgesehenen** ersten Überlassungstag
+      // zu; `availableFrom` ist der Tag, den der Lieferant zusagt (3.6).
+      stichtag: submission.availableFrom,
+      zeitraum: null,
+      arbeitserlaubnisErforderlich: submission.candidate.workPermitRequired,
+      // Der Standort gehört zur Anfrage, nicht zum Vorschlag: die Unterweisung
+      // wird am **Einsatz** geprüft (Q21), nicht hier.
+      unterweisungVerlangt: null,
+    }).mandatoryDocumentsPresent,
     evaluationDate,
     ...overrides,
   }
@@ -1269,8 +1314,13 @@ const ASSIGNMENT_INCLUDE = {
   customer: true,
   site: true,
   costCenter: true,
-  supplier: true,
-  candidate: true,
+  // P9 (5.4.1) liest die Erlaubnissätze, P10 (5.4.4) die Nachweise. Die
+  // Urkunde zur Erlaubnis ist ein Dokument des **Lieferanten** (3.2, 3.10),
+  // deshalb kommen beide Mengen zusammen.
+  supplier: { include: { permits: true, documents: true } },
+  candidate: { include: { documents: true } },
+  /// Nachweise am Einsatz selbst — die Unterweisung am Standort (5.4.4).
+  documents: true,
   workerIdentity: true,
   candidateSubmission: true,
   // K1 aus 5.3.3 führt über `agreedRateCardItemRef` → `rateCard.masterAgreementRef`
@@ -1333,8 +1383,21 @@ function assignmentFacts(
   regelstand: Regelstand,
   evaluationDate: Date,
   overrides: Partial<AssignmentFacts> = {},
+  /**
+   * Stichtag bzw. Prüfzeitraum des **Übergangs**, der geprüft wird (5.0). Ohne
+   * Angabe gilt der Zustand des Einsatzes — das ist der Bezug, über den eine
+   * Übersicht sagt, welche Übergänge von hier aus offen sind.
+   */
+  bezug?: { stichtag: Date | null; zeitraum: { von: Date; bis: Date | null } | null },
 ): AssignmentFacts {
   const running = assignment.interruptions.find((entry) => entry.interruptionTo === null)
+  const pruefbezug =
+    bezug ??
+    dauerbezug({
+      ...assignment,
+      actualStartDate: overrides.actualStartDate ?? assignment.actualStartDate,
+      actualEndDate: overrides.actualEndDate ?? assignment.actualEndDate,
+    })
   return {
     submissionStatus: assignment.candidateSubmission?.status ?? null,
     supplierStatus: assignment.supplier.status,
@@ -1354,8 +1417,11 @@ function assignmentFacts(
     terminationRequestedById: assignment.terminationRequestedById,
     terminationRequestedBySide: terminationSide(assignment),
     terminationApprovedById: assignment.terminationApprovedById,
-    hasAcceptedValidPermit: RULE_CHECKS_PENDING.hasAcceptedValidPermit,
-    mandatoryDocumentsPresent: RULE_CHECKS_PENDING.mandatoryDocumentsPresent,
+    // P9 (5.4.1) und P10 (5.4.4): gerechnet über `lib/aueg/anbindung.ts`.
+    hasAcceptedValidPermit: erlaubnisFuerEinsatz(assignment, pruefbezug)
+      .hasAcceptedValidPermit,
+    mandatoryDocumentsPresent: nachweiseFuerEinsatz(assignment, pruefbezug)
+      .mandatoryDocumentsPresent,
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
     // P1 (5.1) und P6 (5.3.1): gerechnet, siehe `Regelstand`.
     maxDurationExceeded: regelstand.maxDurationExceeded,
@@ -1458,6 +1524,61 @@ function employmentOnFirstDay(assignment: {
     // 4.3 hier verlangt, ist dieselbe.
     amEinsatzstart: assignment.actualStartDate !== null,
   }).employmentRelationshipOnFirstDay
+}
+
+/**
+ * P9 für einen geladenen Einsatz (SPEC 5.4.1, Zeilen Q16 und Q20).
+ *
+ * **Der Prüfbezug hängt am Übergang, nicht am Tag des Aufrufs** (5.0): beim
+ * Anlegen der geplante Zeitraum (Q16), am Einsatzstart der `actualStartDate`
+ * (Q20). `bezug` ist derselbe, den P1 und P3 bekommen — zwei Rechnungen über
+ * denselben Vorgang dürfen nicht über verschiedene Tage laufen.
+ *
+ * Die laufenden Unterbrechungen fallen aus dem Prüfzeitraum: an ihren Tagen
+ * findet keine Überlassung statt, und eine Erlaubnislücke dort ist keine
+ * (5.4.5).
+ */
+function erlaubnisFuerEinsatz(
+  assignment: LoadedAssignment,
+  bezug: { stichtag: Date | null; zeitraum: { von: Date; bis: Date | null } | null },
+): Erlaubnisstand {
+  return erlaubnisstand({
+    lieferant: assignment.supplier.legalName,
+    erlaubnisse: assignment.supplier.permits,
+    urkunden: assignment.supplier.documents.map(alsNachweiszeile),
+    stichtag: bezug.stichtag,
+    zeitraum: bezug.zeitraum,
+    unterbrechungen: assignment.interruptions,
+  })
+}
+
+/**
+ * P10 für einen geladenen Einsatz (SPEC 5.4.4, Zeile Q21).
+ *
+ * Geprüft werden die Nachweise **dreier** Bezugsobjekte, weil der Katalog in
+ * 5.4.4 sie dort führt: die Unterweisung am Einsatz, Arbeitserlaubnis und
+ * Qualifikation am Kandidaten, die Unbedenklichkeitsbescheinigung am
+ * Lieferanten. `bezugsobjekt` bleibt dabei `null`: die Zeilen tragen ihren
+ * eigenen `subjectRef`, und eine Eingrenzung auf **ein** Objekt würde die
+ * Nachweise der anderen beiden verwerfen (5.4.5).
+ */
+function nachweiseFuerEinsatz(
+  assignment: LoadedAssignment,
+  bezug: { stichtag: Date | null; zeitraum: { von: Date; bis: Date | null } | null },
+): Nachweisstand {
+  return nachweisstand({
+    nachweise: [
+      ...assignment.documents,
+      ...assignment.candidate.documents,
+      ...assignment.supplier.documents,
+    ].map(alsNachweiszeile),
+    qZeile: 'Q21',
+    bezugsobjekt: null,
+    stichtag: bezug.stichtag,
+    zeitraum: bezug.zeitraum,
+    arbeitserlaubnisErforderlich: assignment.candidate.workPermitRequired,
+    unterweisungVerlangt: assignment.site.safetyBriefingRequired,
+  })
 }
 
 /**
@@ -1633,7 +1754,10 @@ function describeExtension(
 }
 
 function extensionFacts(
-  assignment: Pick<LoadedAssignment, 'status' | 'plannedEndDate'>,
+  assignment: Pick<
+    LoadedAssignment,
+    'status' | 'plannedEndDate' | 'supplier' | 'interruptions'
+  >,
   regelstand: Regelstand,
   extension: {
     readonly newEndDate: Date
@@ -1657,7 +1781,20 @@ function extensionFacts(
     rejectionReason: extension.rejectionReason,
     // P1 an der Verlängerung (Q28, Q30): `newEndDate` gegen das Fristende.
     newEndWithinMaxDuration: regelstand.newEndWithinMaxDuration,
-    hasAcceptedValidPermitForNewPeriod: RULE_CHECKS_PENDING.hasAcceptedValidPermitForNewPeriod,
+    // P9 an Q31 (5.4.1): die Erlaubnis muss den **verlängerten** Zeitraum
+    // decken, nicht den heutigen Tag. 5.0 führt ihn als `plannedEndDate` + 1
+    // Tag bis `newEndDate` — dieselbe Spanne, über die P1 und P3 rechnen.
+    hasAcceptedValidPermitForNewPeriod: erlaubnisstand({
+      lieferant: assignment.supplier.legalName,
+      erlaubnisse: assignment.supplier.permits,
+      urkunden: assignment.supplier.documents.map(alsNachweiszeile),
+      stichtag: null,
+      zeitraum: {
+        von: folgetagVon(assignment.plannedEndDate) ?? extension.newEndDate,
+        bis: extension.newEndDate,
+      },
+      unterbrechungen: assignment.interruptions,
+    }).hasAcceptedValidPermit,
     evaluationDate,
     ...overrides,
   }
@@ -1736,6 +1873,13 @@ export async function createAssignment(
   const comparableWage: number | string | null =
     input.comparableWage ?? wageEntry?.comparableWage.toString() ?? null
 
+  // P9 an Q16 (5.4.1): die Erlaubnissätze des Lieferanten und seine Dokumente
+  // — die Urkunde zur Erlaubnis ist ein Dokument des Lieferanten (3.2, 3.10).
+  const lieferantenlage = await prisma.supplier.findUniqueOrThrow({
+    where: { id: submission.candidate.supplierId },
+    include: { permits: true, documents: true },
+  })
+
   // K1 aus 5.3.3: der Weg von der Preisposition zum Rahmenvertrag der
   // Lieferantenseite (3.3). Fehlt die Preisposition, ist K1 **nicht prüfbar**
   // und wirkt wie ein Treffer (5.0) — geraten wird nichts.
@@ -1791,7 +1935,19 @@ export async function createAssignment(
     terminationRequestedById: null,
     terminationRequestedBySide: null,
     terminationApprovedById: null,
-    hasAcceptedValidPermit: RULE_CHECKS_PENDING.hasAcceptedValidPermit,
+    // P9 an Q16 (5.4.1): die Erlaubnis muss den **geplanten** Zeitraum decken,
+    // nicht den Tag des Anlegens — 4.7 Q16 nennt ihn ausdrücklich.
+    hasAcceptedValidPermit: erlaubnisstand({
+      lieferant: submission.candidate.supplier.legalName,
+      erlaubnisse: lieferantenlage.permits,
+      urkunden: lieferantenlage.documents.map(alsNachweiszeile),
+      stichtag: null,
+      zeitraum: { von: input.plannedStartDate, bis: input.plannedEndDate },
+      unterbrechungen: [],
+    }).hasAcceptedValidPermit,
+    // P10 am Anlegen: 4.7 führt dafür **keine** Zeile. Die Pflichtnachweise
+    // sperren am Einsatzstart (Q21), nicht beim Anlegen — der Einsatz entsteht
+    // geplant, und bis zum ersten Tag ist der Nachweis beizubringen.
     mandatoryDocumentsPresent: RULE_CHECKS_PENDING.mandatoryDocumentsPresent,
     noIndustrialActionAtSite: RULE_CHECKS_PENDING.noIndustrialActionAtSite,
     maxDurationExceeded: regelstand.maxDurationExceeded,
@@ -1962,7 +2118,7 @@ export async function transitionAssignment(
     currentStatus: status,
     subject: identity.subject,
     resource: assignmentResource(assignment),
-    facts: assignmentFacts(assignment, regelstand, evaluationDate, overrides),
+    facts: assignmentFacts(assignment, regelstand, evaluationDate, overrides, bezug),
   })
   if (!outcome.applied) return rejection(outcome)
 

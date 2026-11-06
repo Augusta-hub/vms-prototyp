@@ -20,6 +20,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../lib/prisma'
 import { loadIdentity, type LoadedIdentity } from '../../lib/identity/loadSubject'
+import { publishTender } from '../../lib/services/demand'
 import {
   requestExtension,
   transitionAssignment,
@@ -28,7 +29,9 @@ import {
 import {
   baueWelt,
   entferneVerleiherzuordnungen,
+  legeBedarfsanfrageAn,
   legeEinsatzAn,
+  legeNachweisAn,
   legeTarifzuordnungAn,
   leereDatenbank,
   tag,
@@ -695,5 +698,285 @@ describe('P8: Kennzeichnung und Konkretisierung am Übergang (SPEC 5.3.3)', () =
     })
 
     expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+})
+
+describe('P9: die AÜG-Erlaubnis erreicht den Übergang (SPEC 5.4.1)', () => {
+  async function tarif(): Promise<void> {
+    await legeTarifzuordnungAn(welt, {
+      ebene: 'site',
+      monate: 18,
+      validFrom: tag('2025-01-01'),
+      validTo: tag('2028-12-31'),
+    })
+  }
+
+  async function geplanterEinsatz(): Promise<string> {
+    await tarif()
+    return legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+    })
+  }
+
+  it('lässt den Einsatzstart mit anerkannter Erlaubnis und Urkunde zu (Q20)', async () => {
+    expect((await starte(await geplanterEinsatz(), tag('2026-01-15'))).ok).toBe(true)
+  })
+
+  it('sperrt den Einsatzstart, wenn die Erlaubnis am Starttag abgelaufen ist (Q20)', async () => {
+    const einsatz = await geplanterEinsatz()
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { permitType: 'fixedTerm', validTo: tag('2025-12-31') },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: 'E-1' } })
+    expect(zeile.status).toBe('planned')
+    expect(zeile.actualStartDate).toBeNull()
+  })
+
+  it('sperrt den Einsatzstart ohne Urkunde zur Erlaubnis (Q20, 3.2 E25)', async () => {
+    // Das ist der Fall, den die frühere Fassung in `demand.ts` **nicht** sah:
+    // sie prüfte Anerkennung und Gültigkeit, nicht die Urkunde. 5.4.1 verlangt
+    // beides, und 3.2 macht den Verweis zur Pflicht.
+    const einsatz = await geplanterEinsatz()
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { certificateDocumentRef: null },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+
+  it('sperrt den Einsatzstart, wenn die Urkunde keine Datei trägt (Q20, 5.4.5)', async () => {
+    const einsatz = await geplanterEinsatz()
+    await prisma.document.updateMany({
+      where: { id: welt.erlaubnisurkunde },
+      data: { fileRef: '' },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+
+  it('sperrt den Einsatzstart, solange die Erlaubnis nur eingereicht ist (Q20)', async () => {
+    const einsatz = await geplanterEinsatz()
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { verificationStatus: 'submitted', verifiedAt: null, verifiedById: null },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+
+  it('prüft an der Verlängerung den **verlängerten** Zeitraum, nicht den heutigen Tag (Q31)', async () => {
+    await tarif()
+    const einsatz = await legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'active',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      actualStartDate: tag('2026-01-15'),
+      vergleichsentgelt: '21.4000',
+    })
+    // Die Erlaubnis endet mitten im verlängerten Zeitraum. Am Tag des Aufrufs
+    // ist sie gültig — genau darauf fiele eine Prüfung „heute" herein.
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { permitType: 'fixedTerm', validTo: tag('2027-03-31') },
+    })
+
+    expect(
+      (
+        await requestExtension(disponent, {
+          assignmentId: einsatz,
+          newEndDate: tag('2027-06-30'),
+          reason: 'Anschlussbedarf',
+        })
+      ).ok,
+    ).toBe(true)
+    const verlaengerung = await prisma.assignmentExtension.findFirstOrThrow()
+    expect(
+      (
+        await transitionExtension(genehmiger, {
+          extensionId: verlaengerung.id,
+          transition: 'approve',
+          rejectionReason: null,
+        })
+      ).ok,
+    ).toBe(true)
+
+    const wirksam = await transitionExtension(disponent, {
+      extensionId: verlaengerung.id,
+      transition: 'makeEffective',
+      rejectionReason: null,
+    })
+    expect(wirksam.ok).toBe(false)
+    const stand = await prisma.assignmentExtension.findFirstOrThrow()
+    expect(stand.status).toBe('approved')
+  })
+})
+
+describe('P10: die Pflichtnachweise erreichen den Übergang (SPEC 5.4.4)', () => {
+  async function einsatzOhneUnterweisung(): Promise<string> {
+    await legeTarifzuordnungAn(welt, {
+      ebene: 'site',
+      monate: 18,
+      validFrom: tag('2025-01-01'),
+      validTo: tag('2028-12-31'),
+    })
+    return legeEinsatzAn(welt, {
+      nummer: 'E-1',
+      status: 'planned',
+      plannedStartDate: tag('2026-01-15'),
+      plannedEndDate: tag('2026-12-31'),
+      vergleichsentgelt: '21.4000',
+      mitUnterweisung: false,
+    })
+  }
+
+  it('sperrt den Einsatzstart ohne Unterweisung, wenn der Standort sie verlangt (Q21)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+    const zeile = await prisma.assignment.findFirstOrThrow({ where: { assignmentNumber: 'E-1' } })
+    expect(zeile.status).toBe('planned')
+  })
+
+  it('lässt ihn zu, sobald die Unterweisung anerkannt vorliegt (Q21)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    await legeNachweisAn(welt, {
+      nummer: 'UW-1',
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz },
+      gueltigVon: tag('2026-01-01'),
+    })
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+  })
+
+  it('sperrt, solange die Unterweisung nur eingereicht ist (5.4.3)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    await legeNachweisAn(welt, {
+      nummer: 'UW-1',
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz },
+      gueltigVon: tag('2026-01-01'),
+      anerkennung: 'submitted',
+    })
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+
+  it('sperrt, wenn die Unterweisung am Starttag abgelaufen ist (5.4.4)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    await legeNachweisAn(welt, {
+      nummer: 'UW-1',
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz },
+      gueltigVon: tag('2025-06-01'),
+      gueltigBis: tag('2025-12-31'),
+    })
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+
+  it('sperrt den Einsatzstart ohne Arbeitserlaubnis, wenn der Kandidat sie braucht (Q21)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    await legeNachweisAn(welt, {
+      nummer: 'UW-1',
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz },
+      gueltigVon: tag('2026-01-01'),
+    })
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { workPermitRequired: true },
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+
+    await legeNachweisAn(welt, {
+      nummer: 'AE-1',
+      art: 'workPermit',
+      bezug: { art: 'candidate', id: welt.kandidat },
+      gueltigVon: tag('2025-01-01'),
+      gueltigBis: tag('2027-12-31'),
+    })
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(true)
+  })
+
+  it('nimmt einen Nachweis eines **anderen** Kandidatensatzes nicht an (5.4.5)', async () => {
+    const einsatz = await einsatzOhneUnterweisung()
+    await legeNachweisAn(welt, {
+      nummer: 'UW-1',
+      art: 'safetyBriefing',
+      bezug: { art: 'assignment', id: einsatz },
+      gueltigVon: tag('2026-01-01'),
+    })
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { workPermitRequired: true },
+    })
+    // Die Arbeitserlaubnis liegt beim Kandidatensatz des **zweiten**
+    // Lieferanten. „Der Nachweis gehört dem Verleiher, der ihn eingestellt
+    // hat" — er deckt den Einsatz dieses Kandidatensatzes nicht.
+    await legeNachweisAn(welt, {
+      nummer: 'AE-FREMD',
+      art: 'workPermit',
+      bezug: { art: 'candidate', id: welt.kandidatZweiterLieferant },
+      gueltigVon: tag('2025-01-01'),
+      gueltigBis: tag('2027-12-31'),
+    })
+
+    expect((await starte(einsatz, tag('2026-01-15'))).ok).toBe(false)
+  })
+})
+
+describe('P9 an der Ausschreibung (SPEC 5.4.1, Q04 und Q06)', () => {
+  // Die Angebotsfrist liegt **nach** dem Tag des Laufs: nur dann ist der
+  // Prüfzeitraum aus 5.0 („bis zur Angebotsfrist") mehr als ein Tag, und nur
+  // dann prüft dieser Block, was er prüfen will.
+  async function anfrage(): Promise<string> {
+    return legeBedarfsanfrageAn(welt, { nummer: 'BA-1', startDate: tag('2028-03-01') })
+  }
+
+  const ausschreiben = (anfrageId: string) =>
+    publishTender(disponent, {
+      demandRequestId: anfrageId,
+      supplierIds: [welt.lieferant],
+      offerDeadline: tag('2028-02-15'),
+      distributionMode: 'simultaneous',
+    })
+
+  it('lässt die Ausschreibung zu, wenn die Erlaubnis den Zeitraum deckt', async () => {
+    expect((await ausschreiben(await anfrage())).ok).toBe(true)
+  })
+
+  it('sperrt die Einladung ohne Urkunde zur Erlaubnis (3.2 E25, 5.4.5)', async () => {
+    // Bis zu dieser Arbeitseinheit prüfte `demand.ts` hier eine **eigene**,
+    // mildere Fassung der Regel: Anerkennung und Gültigkeit an einem Tag, ohne
+    // Urkunde und ohne Datei. Dieser Fall wäre damit durchgegangen.
+    const id = await anfrage()
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { certificateDocumentRef: null },
+    })
+
+    expect((await ausschreiben(id)).ok).toBe(false)
+    const stand = await prisma.demandRequest.findFirstOrThrow({ where: { requestNumber: 'BA-1' } })
+    expect(stand.status).toBe('approved')
+  })
+
+  it('sperrt die Einladung, wenn die Erlaubnis vor dem Ende der Angebotsfrist abläuft', async () => {
+    // 5.0 gibt Q04 den Zeitraum **bis zur Angebotsfrist**, nicht den Stichtag.
+    // Am Tag des Übergangs ist die Erlaubnis gültig — eine Prüfung „heute"
+    // ließe die Einladung zu.
+    const id = await anfrage()
+    await prisma.supplierPermit.updateMany({
+      where: { permitNumber: 'AZ-TEST-1' },
+      data: { permitType: 'fixedTerm', validTo: tag('2028-02-01') },
+    })
+
+    expect((await ausschreiben(id)).ok).toBe(false)
   })
 })

@@ -5,6 +5,139 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-06 — P9 und P10 an den Übergängen; SPEC 3.10 modelliert
+
+### Gemacht
+
+**P9** (AÜG-Erlaubnis, 5.4.1) und **P10** (Pflichtnachweise, 5.4.4) greifen
+jetzt an den Übergängen, die 4.7 ihnen zuordnet und für die es ein Statusmodell
+gibt: P9 an **Q04, Q06, Q16, Q20 und Q31**, P10 an **Q10 und Q21**.
+
+**Dafür musste erst SPEC 3.10 modelliert werden.** P10 prüft Nachweise, und
+Nachweise gab es im Datenmodell nicht — das `document` aus 3.10 fehlte
+vollständig. Ohne es hätte P10 nichts zu lesen gehabt, und P9 hätte die
+**Urkunde** zur Erlaubnis nie prüfen können (3.2, E25). Neu sind deshalb das
+Prisma-Modell `Document` mit drei Enums, die Migration
+`20261106085004_nachweise_dokumente_3_10` und `lib/masterdata/invariants.ts`.
+
+`mandatory` und `blocking` sind **keine** Spalten geworden. 3.10 führt sie
+ausdrücklich als *abgeleitete* Felder: „sie folgen aus dem Katalog in 5.4 und
+werden nicht am einzelnen Dokument gesetzt". Als Spalten wären sie eine zweite,
+frei setzbare Quelle neben dem Pflichtkatalog — und zwei Quellen für dieselbe
+Aussage laufen auseinander. Gerechnet werden sie in `p10Nachweise.ts`.
+
+**Eine zweite Fassung des Gesetzes gefunden und entfernt.** `lib/services/
+demand.ts` prüfte die Erlaubnis an Q04 und Q06 mit einem **eigenen** Prädikat:
+drei Zeilen, die Anerkennung und Gültigkeit an einem Tag verglichen. Es war
+milder als 5.4.1 — ohne Urkunde, ohne hinterlegte Datei, ohne tagesgenaue
+Deckung des Prüfzeitraums, ohne Nachfolgesätze. `lib/aueg/anbindung.ts` trug
+die richtige Rechnung bereits, aber niemand rief sie: `hatErlaubnisAmStichtag`
+und `hatAnerkannteGueltigeErlaubnis` waren nur von Einheitentests benutzt. Die
+Dokumentation behauptete trotzdem, Q04 und Q06 seien angebunden. Beide Zeilen
+laufen jetzt über die Regel.
+
+**Neue Dateien:** `lib/masterdata/invariants.ts(.test.ts)`. Dazu
+`erlaubnisstand`, `nachweisstand` und `alsNachweiszeile` in `anbindung.ts`,
+die Nachweise im Seed und im Fixture, und zwölf neue Dienst-Tests.
+
+### Entscheidungen
+
+1. **Der Prüfbezug kommt aus 5.0, nie aus dem Tag des Aufrufs.** An Q16 der
+   geplante Zeitraum, an Q20 der `actualStartDate`, an Q31 der **verlängerte**
+   Zeitraum, an Q04 der Tag des Übergangs bis zur **Angebotsfrist**. Eine
+   Erlaubnis, die mitten im geplanten Zeitraum abläuft, deckt ihn nicht — auch
+   wenn sie heute gültig ist. Ein eigener Dienst-Test hält genau das fest.
+2. **Der Verweis auf die Urkunde ist kein Nachweis.** `certificateDocumentRef`
+   wird aufgelöst: zeigt er auf nichts oder auf ein Dokument ohne `fileRef`,
+   fehlt die Datei, und der Satz ist nach 5.4.5 nicht deckungsfähig. Das
+   Vorhandensein des Verweises dafür zu nehmen wäre die bequeme Hälfte.
+3. **P10 am Einsatz prüft drei Bezugsobjekte, nicht eines.** Der Katalog in
+   5.4.4 führt die Unterweisung am Einsatz, Arbeitserlaubnis und Qualifikation
+   am Kandidaten, die Unbedenklichkeitsbescheinigung am Lieferanten. Die Zeilen
+   tragen ihren eigenen `subjectRef` mit; eine Eingrenzung auf **ein**
+   Bezugsobjekt würde die Nachweise der anderen beiden verwerfen (5.4.5).
+4. **Eine Warnung aus dem Katalog sperrt nicht.** `mandatoryDocumentsPresent`
+   ist genau dann falsch, wenn das strengste Einzelergebnis eine **Sperre** ist.
+   Ein fehlender Qualifikationsnachweis ist ein Befund, der den Übergang
+   zulässt (5.4.4, 5.5.2) — ein eigener Test hält das fest.
+5. **Ein rückwärts laufender Prüfzeitraum wird auf den Tag des Übergangs
+   zurückgenommen.** Er enthält keinen Tag, und ein Zeitraum ohne Tage gilt als
+   gedeckt — die mildeste denkbare Antwort auf eine unsinnige Eingabe. Er
+   entsteht an Q04, wenn die Angebotsfrist schon verstrichen ist.
+6. **`certificateDocumentRef` bleibt ein Textfeld**, obwohl 3.10 jetzt
+   modelliert ist. Eine Relation daraus zu machen berührt Oberfläche,
+   Sichtbarkeitsprojektionen und Fußnoten; das ist ein eigener Schritt und
+   keine Nebenwirkung dieser Arbeitseinheit. Aufgelöst wird der Verweis
+   trotzdem — gegen die Dokumente, die geladen sind.
+
+### Zwei Fixtures und der Seed waren nicht rechtmäßig
+
+Nach der Anbindung fielen 18 von 29 Dienst-Tests aus. Der Grund war in beiden
+Fällen die Datenlage, nicht die Regel:
+
+- Das Fixture hatte **gar keine** AÜG-Erlaubnis, obwohl seine Lieferanten
+  `active` sind. Nach 3.2 ist das ein Datenfehler — und nach 5.4.1 darf ohne
+  anerkannte Erlaubnis niemand überlassen werden.
+- Der Standort des Fixtures verlangt eine Unterweisung
+  (`safetyBriefingRequired`), es gab aber keine. Der Pflichtkatalog in 5.4.4
+  sperrt dafür den Einsatzstart.
+
+Beide sind jetzt Teil der Grundlage; `legeEinsatzAn` legt die Unterweisung mit
+an und lässt sie auf Wunsch weg — das ist die Lage, die der Sperrtest braucht.
+Dasselbe im Seed: die beiden Erlaubnisse tragen ihre Urkunde, die Einsätze an
+Standorten mit Unterweisungspflicht ihre Unterweisung, und der eine Kandidat
+mit `workPermitRequired` seine Arbeitserlaubnis.
+
+### Gefunden, nicht behoben
+
+Das Schema verweist an sechs Stellen auf `lib/masterdata/invariants.ts` — an
+`customer`, `supplier`, `supplierPermit`, `masterAgreement` und `rateCardItem`.
+Die Datei gab es bis heute **nicht**; ihre Prüfungen stehen inline in
+`lib/services/masterData.ts`. Mit dem Dokument ist die Datei entstanden und
+trägt dessen Invarianten. Die älteren dorthin zu verschieben ist ein Umbau des
+Stammdatendienstes und gehört nicht nebenbei erledigt; der Kommentar in der
+neuen Datei benennt die Abweichung.
+
+### Gemessen
+
+- `npm test`: **734 grün** in 35 Dateien, weiter ohne Datenbank.
+- `npm run test:services`: **44 grün** gegen PostgreSQL, davon 15 neue zu P9,
+  P10 und der Ausschreibung.
+- `npm run test:aueg`: **267 Szenarien, 120 grün, 0 rot** — unverändert; diese
+  Arbeitseinheit hat die Anbindung geändert, nicht die Rechenwege.
+- `npm run typecheck`, `npm run build`, `npm run db:seed` (zweimal
+  hintereinander): fehlerfrei.
+- Keine der vier Dateien in `tests/aueg/` wurde angefasst.
+- **Fünf Mutationen**, jede von den richtigen Tests gefangen: P9 am Einsatz
+  fest auf `true` (4 Tests rot), P10 am Einsatz fest auf `true` (5 rot), die
+  Verlängerung auf „heute" statt auf den verlängerten Zeitraum (1 rot), und das
+  alte, mildere Prädikat in `demand.ts` wieder eingesetzt (erst **0** rot —
+  die Lücke, die dann zwei neue Tests zu Q04 und Q06 geschlossen haben, 2 rot).
+- Durch die Oberfläche belegt: E-2026-0002 startet mit Urkunde und ohne
+  Unterweisungspflicht; nach Entfernen der Urkunde meldet die Seite
+  „Vorbedingung nicht erfüllt: P9: AÜG-Erlaubnis des Lieferanten anerkannt und
+  gültig (5.4.1)", und mit Unterweisungspflicht am Standort „P10:
+  Pflichtnachweise vorhanden (5.4.4)". Danach neu geseedet.
+
+### Offen
+
+- **P7** bleibt ohne Anbindung: Kapitel 3 führt für die Arbeitskampfanzeige
+  kein Feld (*offene Frage 30*).
+- **Q37, Q38 und Q41 bis Q44** warten auf die Statusmodelle 4.4 (Stundenzettel),
+  4.5 (Beleg) und 4.6 (Lieferantenstatus). Die Rechenwege liegen bereit.
+- Für Nachweise gibt es **keinen Dienst und keine Oberfläche**: sie entstehen
+  im Seed und werden gelesen. Einstellen, Anerkennen und Zurückweisen (5.4.3)
+  sind der nächste Schritt, zusammen mit einer Sichtbarkeitsprojektion für
+  `confidentiality` ([35], [36]).
+- P4 am Eintrag des Standorts (Q18, Q36) und die Zuschlagsstufe aus P5 rechnen,
+  ihre Eingangsdaten sind an den Übergängen nicht geladen.
+- `demand.ts` und `masterData.ts` haben weiter keine eigenen Dienst-Tests; die
+  Ausschreibung ist seit heute über `tests/services/staffing.test.ts` gedeckt.
+- SPEC Kapitel 6 (Datenschutz, Löschfristen) ist Gliederung; 32 der 41 Fragen
+  sind offen, vier davon für eine anwaltliche Prüfung.
+
+---
+
 ## 2026-11-05 — P7 und P8: alle elf AÜG-Prüfungen rechnen
 
 ### Gemacht

@@ -14,7 +14,11 @@ import {
   hatAnerkannteGueltigeErlaubnis,
   hatErlaubnisAmStichtag,
   hoechstdauerstand,
+  erlaubnisstand,
+  nachweisstand,
   type Einsatzzeile,
+  type Erlaubniszeile,
+  type Nachweiszeile,
   type Tarifzeile,
 } from './anbindung'
 import type { Erlaubnissatz } from './regeln/p9Erlaubnis'
@@ -330,5 +334,183 @@ describe('P11 am Datenmodell: Arbeitsverhältnis beim Verleiher (SPEC 5.3.4)', (
         }).employmentRelationshipOnFirstDay,
       ).toBe(false)
     }
+  })
+})
+
+describe('erlaubnisstand: die Urkunde wird wirklich aufgelöst (SPEC 3.2 E25, 5.4.5)', () => {
+  const TAG = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+  function erlaubnis(abweichung: Partial<Erlaubniszeile> = {}): Erlaubniszeile {
+    return {
+      id: 'P-1',
+      permitNumber: 'AZ-1',
+      permitType: 'unlimited',
+      validFrom: TAG('2025-01-01'),
+      validTo: null,
+      verificationStatus: 'accepted',
+      certificateDocumentRef: 'DOK-1',
+      supersedesId: null,
+      ...abweichung,
+    }
+  }
+
+  function urkunde(abweichung: Partial<Nachweiszeile> = {}): Nachweiszeile {
+    return {
+      id: 'DOK-1',
+      documentCategory: 'permitCertificate',
+      validFrom: null,
+      validTo: null,
+      verificationStatus: 'accepted',
+      fileRef: 'ablage://synthetisch/1',
+      subjectRef: 'LI-1',
+      ...abweichung,
+    }
+  }
+
+  const stand = (
+    erlaubnisse: readonly Erlaubniszeile[],
+    urkunden: readonly Nachweiszeile[],
+    zeitraum: { von: Date; bis: Date | null } | null = {
+      von: TAG('2026-03-01'),
+      bis: TAG('2026-03-31'),
+    },
+  ) =>
+    erlaubnisstand({
+      lieferant: 'Rheinpersonal GmbH',
+      erlaubnisse,
+      urkunden,
+      stichtag: null,
+      zeitraum,
+      unterbrechungen: [],
+    })
+
+  it('deckt den Zeitraum mit anerkannter Erlaubnis und hinterlegter Urkunde', () => {
+    expect(stand([erlaubnis()], [urkunde()]).hasAcceptedValidPermit).toBe(true)
+  })
+
+  it('deckt nicht, wenn der Verweis auf **nichts** zeigt', () => {
+    // Der Verweis allein ist kein Nachweis. Zeigt er ins Leere, fehlt die
+    // Datei — und ohne Datei ist der Satz nicht deckungsfähig (5.4.5).
+    expect(stand([erlaubnis()], []).hasAcceptedValidPermit).toBe(false)
+  })
+
+  it('deckt nicht, wenn die Urkunde keine Ablage trägt', () => {
+    expect(stand([erlaubnis()], [urkunde({ fileRef: '  ' })]).hasAcceptedValidPermit).toBe(false)
+  })
+
+  it('deckt nicht ohne Urkundenverweis', () => {
+    expect(
+      stand([erlaubnis({ certificateDocumentRef: null })], [urkunde()]).hasAcceptedValidPermit,
+    ).toBe(false)
+  })
+
+  it('nennt den ersten ungedeckten Tag', () => {
+    const ergebnis = stand(
+      [erlaubnis({ permitType: 'fixedTerm', validTo: TAG('2026-03-15') })],
+      [urkunde()],
+    )
+    expect(ergebnis.hasAcceptedValidPermit).toBe(false)
+    expect(ergebnis.ersterUngedeckterTag?.toISOString().slice(0, 10)).toBe('2026-03-16')
+    expect(ergebnis.tageUngedeckt).toBe(16)
+  })
+
+  it('lässt eine laufende Unterbrechung ohne Ende den Zeitraum nicht verkürzen', () => {
+    // Eine Unterbrechung ohne `interruptionTo` sagt nicht, ab wann wieder
+    // überlassen wird. Sie als „bis ans Ende" zu lesen hieße, eine Erlaubnislücke
+    // wegzurechnen, die niemand belegt hat (5.4.5).
+    const ergebnis = erlaubnisstand({
+      lieferant: 'Rheinpersonal GmbH',
+      erlaubnisse: [erlaubnis({ permitType: 'fixedTerm', validTo: TAG('2026-03-15') })],
+      urkunden: [urkunde()],
+      stichtag: null,
+      zeitraum: { von: TAG('2026-03-01'), bis: TAG('2026-03-31') },
+      unterbrechungen: [{ interruptionFrom: TAG('2026-03-10'), interruptionTo: null }],
+    })
+    expect(ergebnis.hasAcceptedValidPermit).toBe(false)
+  })
+
+  it('macht aus einem rückwärts laufenden Zeitraum den Tag des Übergangs', () => {
+    // Ein Zeitraum ohne Tage gälte als gedeckt — die mildeste Antwort auf eine
+    // unsinnige Eingabe. Er entsteht, wo das Ende aus einer verstrichenen Frist
+    // kommt (Q04, „bis zur Angebotsfrist").
+    const ergebnis = stand([erlaubnis({ permitType: 'fixedTerm', validTo: TAG('2026-01-31') })], [urkunde()], {
+      von: TAG('2026-03-01'),
+      bis: TAG('2026-02-01'),
+    })
+    expect(ergebnis.hasAcceptedValidPermit).toBe(false)
+  })
+})
+
+describe('nachweisstand: der Pflichtkatalog entscheidet (SPEC 5.4.4)', () => {
+  const TAG = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
+
+  function nachweis(abweichung: Partial<Nachweiszeile> = {}): Nachweiszeile {
+    return {
+      id: 'DOK-UW',
+      documentCategory: 'safetyBriefing',
+      validFrom: TAG('2026-01-01'),
+      validTo: TAG('2026-12-31'),
+      verificationStatus: 'accepted',
+      fileRef: 'ablage://synthetisch/uw',
+      subjectRef: 'E-1',
+      ...abweichung,
+    }
+  }
+
+  const stand = (
+    nachweise: readonly Nachweiszeile[],
+    teile: { unterweisungVerlangt?: boolean | null; arbeitserlaubnis?: boolean | null } = {},
+  ) =>
+    nachweisstand({
+      nachweise,
+      qZeile: 'Q21',
+      bezugsobjekt: null,
+      stichtag: TAG('2026-03-01'),
+      zeitraum: null,
+      arbeitserlaubnisErforderlich: teile.arbeitserlaubnis ?? false,
+      unterweisungVerlangt: teile.unterweisungVerlangt ?? true,
+    })
+
+  it('ist erfüllt, wenn die verlangte Unterweisung anerkannt und gültig vorliegt', () => {
+    const ergebnis = stand([nachweis()])
+    expect(ergebnis.mandatoryDocumentsPresent).toBe(true)
+    expect(ergebnis.ergebnisart).toBe('information')
+  })
+
+  it('sperrt, wenn der Standort eine Unterweisung verlangt und keine vorliegt', () => {
+    const ergebnis = stand([])
+    expect(ergebnis.mandatoryDocumentsPresent).toBe(false)
+    expect(ergebnis.ergebnisart).toBe('sperre')
+    expect(ergebnis.fehlendeArten).toContain('safetyBriefing')
+  })
+
+  it('sperrt nicht, wo der Standort keine verlangt', () => {
+    expect(stand([], { unterweisungVerlangt: false }).mandatoryDocumentsPresent).toBe(true)
+  })
+
+  it('rechnet eine fehlende Angabe wie „ja" (5.4.6)', () => {
+    // `null` ist keine Verneinung: eine nicht gepflegte Unterweisungspflicht
+    // wird nach 5.4.6 wie „verlangt" gerechnet — die strengere Lesart.
+    expect(stand([], { unterweisungVerlangt: null }).mandatoryDocumentsPresent).toBe(false)
+  })
+
+  it('sperrt bei abgelaufener Unterweisung', () => {
+    expect(
+      stand([nachweis({ validTo: TAG('2026-02-01') })]).mandatoryDocumentsPresent,
+    ).toBe(false)
+  })
+
+  it('sperrt, solange die Unterweisung nur eingereicht ist (5.4.3)', () => {
+    expect(
+      stand([nachweis({ verificationStatus: 'submitted' })]).mandatoryDocumentsPresent,
+    ).toBe(false)
+  })
+
+  it('lässt eine Warnung aus dem Katalog den Übergang zu (5.4.4, 5.5.2)', () => {
+    // Der Qualifikationsnachweis ist nie Pflicht; sein Fehlen warnt und sperrt
+    // nicht. Die Vorbedingung des Übergangs scheitert nur an einer **Sperre**.
+    const ergebnis = stand([nachweis(), nachweis({ documentCategory: 'qualificationCertificate', verificationStatus: 'rejected', id: 'DOK-Q' })])
+    expect(ergebnis.ergebnisart).toBe('warnung')
+    expect(ergebnis.mandatoryDocumentsPresent).toBe(true)
   })
 })

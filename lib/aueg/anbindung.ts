@@ -16,7 +16,8 @@
  *
  * **Angebunden sind:**
  *
- *  - **P9** an Q04 und Q06 (4.1 Bedarfsanfrage, 4.2.1 Einladung),
+ *  - **P9** an Q04 und Q06 (4.1 Bedarfsanfrage, 4.2.1 Einladung) sowie an Q16,
+ *    Q20 und Q31 (Einsatz und Verlängerung),
  *  - **P1** an die Zeilen am Profilvorschlag, am Einsatz und an der
  *    Verlängerung (Q07, Q11, Q14, Q23, Q26, Q28, Q30) samt den abgeleiteten
  *    Feldern `maxDurationEndDate` und `countedDurationDays` (3.7),
@@ -28,14 +29,13 @@
  *    und die Tatsachengrundlage `hasPreviousEmploymentDeclaration`,
  *  - **P8** an Q45 und Q46 — die Tatsache `concretizationComplete` aus den
  *    Kriterien K1 bis K5 (5.3.3),
+ *  - **P10** an Q10 und Q21 — die Pflichtnachweise aus dem Katalog in 5.4.4,
  *  - **P11** an Q09, Q13, Q17 und Q47.
  *
- * **Nicht angebunden** sind P9 und P10 an den Zeilen am Einsatz, an der
- * Verlängerung, am Beleg und am Lieferantenstatus (Q16, Q20, Q21, Q31, Q37,
- * Q38, Q41 bis Q44): ihre Eingangsdaten — Erlaubnissätze und Nachweise — sind
- * an diesen Übergängen nicht geladen, und das Laden ist ein eigener Schritt.
- * Das Prüfwerk rechnet diese Zeilen bereits, nur hängt dort noch kein Übergang
- * daran.
+ * **Nicht angebunden** sind die Zeilen am Beleg und am Lieferantenstatus
+ * (Q37, Q38, Q41 bis Q44): sie hängen an den Statusmodellen 4.4, 4.5 und 4.6,
+ * die es noch nicht gibt. Das Prüfwerk rechnet sie bereits, nur gibt es dort
+ * keinen Übergang, an dem sie hängen könnten.
  *
  * **P7 ist nicht angebunden, und zwar nicht aus Zeitmangel.** 5.3.2 hält fest,
  * dass Kapitel 3 für die Arbeitskampfanzeige **kein Feld** am Standort und für
@@ -63,8 +63,15 @@ import { pruefeEqualPayFrist, type Fristfall } from './regeln/p3EqualPayFrist'
 import { pruefeDrehtuer } from './regeln/p6Drehtuer'
 import { pruefeKonkretisierung, type Pruefstufe } from './regeln/p8Konkretisierung'
 import { pruefeArbeitsverhaeltnis } from './regeln/p11Arbeitsverhaeltnis'
-import { pruefeErlaubnis, type Erlaubnissatz, type Zeitraum } from './regeln/p9Erlaubnis'
-import { REGELWERK } from './regelwerk'
+import {
+  pruefeErlaubnis,
+  type Anerkennung,
+  type Erlaubnissatz,
+  type Zeitraum,
+} from './regeln/p9Erlaubnis'
+import { pruefeNachweise } from './regeln/p10Nachweise'
+import { REGELWERK, type Nachweisart } from './regelwerk'
+import type { Ergebnisart } from './typen'
 
 /**
  * Deckt die AÜG-Erlaubnis des Lieferanten den ganzen Zeitraum — anerkannt, mit
@@ -573,6 +580,272 @@ export function konkretisierungsstand(eingabe: {
     rahmenvertragEndetAm: alsDatum(ergebnis.laufzeitendeImEinsatz),
     meldung: ergebnis.meldung,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* P9 und P10 — Erlaubnis und Pflichtnachweise (SPEC 5.4)              */
+/* ------------------------------------------------------------------ */
+
+/** Ein Erlaubnissatz, wie 3.2 ihn führt. */
+export interface Erlaubniszeile {
+  readonly id: string
+  readonly permitNumber: string
+  readonly permitType: string
+  readonly validFrom: Date
+  readonly validTo: Date | null
+  readonly verificationStatus: string
+  /** `certificateDocumentRef` (3.2) — der Verweis auf die Urkunde (3.10). */
+  readonly certificateDocumentRef: string | null
+  readonly supersedesId: string | null
+}
+
+/** Ein Dokument, wie 3.10 es führt. */
+export interface Nachweiszeile {
+  readonly id: string
+  readonly documentCategory: string
+  readonly validFrom: Date | null
+  readonly validTo: Date | null
+  readonly verificationStatus: string
+  readonly fileRef: string
+  /** Das Bezugsobjekt (`subjectRef`, 3.10) — der Verweis, der gesetzt ist. */
+  readonly subjectRef: string | null
+}
+
+/** Das Ergebnis von P9 für die Tatsachen aus 4.1, 4.2 und 4.3. */
+export interface Erlaubnisstand {
+  /** `hasAcceptedValidPermit` — die Tatsache, die die Statusmodelle führen. */
+  readonly hasAcceptedValidPermit: boolean
+  readonly ersterUngedeckterTag: Date | null
+  readonly tageUngedeckt: number
+  readonly mangel: string | null
+  readonly meldung: string
+}
+
+/**
+ * P9 für einen Vorgang (SPEC 5.4.1).
+ *
+ * **Der Prüfzeitraum ist nicht der Tag des Aufrufs.** 5.0 ordnet jedem
+ * Übergang seinen Stichtag oder Zeitraum zu: beim Anlegen des Einsatzes der
+ * **geplante** Zeitraum (Q16), am Einsatzstart der `actualStartDate` (Q20),
+ * bei der Verlängerung der **verlängerte** Zeitraum (Q31). Wer stattdessen
+ * „heute" prüft, lässt einen Einsatz zu, dessen Erlaubnis im Verlauf abläuft.
+ *
+ * **Die Urkunde ist Pflicht, und zwar die Datei.** 3.2 verlangt den Verweis,
+ * 3.10 die hinterlegte Datei; 5.4.5 nennt beides als Datenfehler, wenn es
+ * fehlt. Deshalb nimmt diese Funktion die Dokumente mit und löst den Verweis
+ * wirklich auf, statt sein Vorhandensein für den Nachweis zu halten.
+ */
+export function erlaubnisstand(eingabe: {
+  readonly lieferant: string
+  readonly erlaubnisse: readonly Erlaubniszeile[]
+  /** Die Dokumente des Lieferanten — gebraucht wird die Urkunde (3.10). */
+  readonly urkunden: readonly Nachweiszeile[]
+  readonly stichtag: Date | null
+  readonly zeitraum: { readonly von: Date; readonly bis: Date | null } | null
+  readonly unterbrechungen: readonly {
+    readonly interruptionFrom: Date
+    readonly interruptionTo: Date | null
+  }[]
+}): Erlaubnisstand {
+  const dateien = new Map(
+    eingabe.urkunden.map((zeile) => [zeile.id, zeile.fileRef.trim() !== '']),
+  )
+
+  const saetze: Erlaubnissatz[] = eingabe.erlaubnisse.map((zeile) => ({
+    id: zeile.permitNumber,
+    art: zeile.permitType === 'unlimited' ? 'unlimited' : 'fixedTerm',
+    gueltigVon: alsTag(zeile.validFrom),
+    gueltigBis: zeile.validTo === null ? null : alsTag(zeile.validTo),
+    anerkennung: alsAnerkennung(zeile.verificationStatus),
+    urkunde: zeile.certificateDocumentRef !== null,
+    // Der Verweis allein ist kein Nachweis: zeigt er auf nichts oder auf ein
+    // Dokument ohne Ablage, fehlt die Datei (5.4.5).
+    datei:
+      zeile.certificateDocumentRef !== null &&
+      dateien.get(zeile.certificateDocumentRef) === true,
+    vorgaenger: zeile.supersedesId,
+  }))
+
+  const zeitraum = alsPruefzeitraum(eingabe.stichtag, eingabe.zeitraum)
+  const ergebnis = pruefeErlaubnis({
+    lieferant: eingabe.lieferant,
+    saetze,
+    zeitraum,
+    unterbrechungen: eingabe.unterbrechungen
+      .map((pause) => ({
+        von: alsTag(pause.interruptionFrom),
+        bis: pause.interruptionTo === null ? null : alsTag(pause.interruptionTo),
+      }))
+      // Eine laufende Unterbrechung ohne Ende begrenzt den Prüfzeitraum nicht:
+      // sie sagt nichts darüber, ab wann wieder überlassen wird (5.4.5).
+      .filter((pause): pause is Zeitraum => pause.bis !== null),
+  })
+
+  return {
+    hasAcceptedValidPermit: ergebnis.gedeckt,
+    ersterUngedeckterTag: alsDatum(ergebnis.ersterUngedeckterTag),
+    tageUngedeckt: ergebnis.ungedeckteTage.length,
+    mangel: ergebnis.mangel,
+    meldung: ergebnis.meldung,
+  }
+}
+
+/** Das Ergebnis von P10 für die Tatsachen aus 4.2.3 und 4.3. */
+export interface Nachweisstand {
+  /** `mandatoryDocumentsPresent` — die Tatsache, die 4.3.1 führt. */
+  readonly mandatoryDocumentsPresent: boolean
+  /** Das strengste Einzelergebnis (5.4.4); eine Warnung sperrt nicht. */
+  readonly ergebnisart: Ergebnisart
+  readonly fehlendeArten: readonly string[]
+  readonly meldung: string
+}
+
+/**
+ * P10 für einen Vorgang (SPEC 5.4.4).
+ *
+ * **Der Pflichtkatalog entscheidet, nicht das Dokument.** 3.10 führt
+ * `mandatory` und `blocking` als *abgeleitete* Felder — welche Art an welchem
+ * Übergang Pflicht ist und ob sie sperrt, steht im Katalog in 5.4.4. Deshalb
+ * bekommt diese Funktion die Zeile aus 4.7 (`qZeile`) und nicht ein Flag am
+ * Dokument.
+ *
+ * **Ein Nachweis deckt nur sein eigenes Bezugsobjekt.** 5.4.5: „der Nachweis
+ * gehört dem Verleiher, der ihn eingestellt hat". Die Zeilen tragen deshalb
+ * ihren `subjectRef` mit, und `bezugsobjekt` sagt, gegen welches geprüft wird.
+ */
+export function nachweisstand(eingabe: {
+  readonly nachweise: readonly Nachweiszeile[]
+  /** Die Zeile aus 4.7: `Q10`, `Q21`, `Q37`, `Q42` oder `N5` (5.5.1). */
+  readonly qZeile: string
+  readonly bezugsobjekt: string | null
+  readonly stichtag: Date | null
+  readonly zeitraum: { readonly von: Date; readonly bis: Date | null } | null
+  /** `candidate.workPermitRequired` (3.6); `null` = nicht gesetzt (5.4.6). */
+  readonly arbeitserlaubnisErforderlich: boolean | null
+  /** `site.safetyBriefingRequired` (3.1); `null` = nicht gesetzt (5.4.6). */
+  readonly unterweisungVerlangt: boolean | null
+}): Nachweisstand {
+  const ergebnis = pruefeNachweise(
+    {
+      zeitraum: alsPruefzeitraum(eingabe.stichtag, eingabe.zeitraum),
+      nachweise: eingabe.nachweise.flatMap((zeile) => {
+        const art = alsNachweisart(zeile.documentCategory)
+        return art === null
+          ? []
+          : [
+              {
+                art,
+                anerkennung: alsAnerkennung(zeile.verificationStatus),
+                gueltigVon: zeile.validFrom === null ? null : alsTag(zeile.validFrom),
+                gueltigBis: zeile.validTo === null ? null : alsTag(zeile.validTo),
+                datei: zeile.fileRef.trim() !== '',
+                gehoertZu: zeile.subjectRef,
+              },
+            ]
+      }),
+      arbeitserlaubnisErforderlich: eingabe.arbeitserlaubnisErforderlich,
+      unterweisungVerlangt: eingabe.unterweisungVerlangt,
+      // Aus echten Daten lässt sich „ausdrücklich nicht erfasst" nicht lesen:
+      // eine Art, die nie Pflicht ist und nicht vorliegt, ist in der Datenbank
+      // schlicht abwesend. Diese Lesart gehört zum Gherkin-Vorgang, der sie
+      // aussprechen kann (5.4.4, Spalte „Pflicht, wenn" = „nie").
+      ausdruecklichAbwesend: [],
+      bezugsobjekt: eingabe.bezugsobjekt,
+    },
+    eingabe.qZeile,
+  )
+
+  return {
+    // Die **Vorbedingung** des Übergangs scheitert nur an einer Sperre. Eine
+    // Warnung aus dem Katalog (etwa ein fehlender Qualifikationsnachweis) ist
+    // ein Befund, der den Übergang zulässt (5.4.4, 5.5.2).
+    mandatoryDocumentsPresent: ergebnis.ergebnisart !== 'sperre',
+    ergebnisart: ergebnis.ergebnisart,
+    fehlendeArten: ergebnis.maengel.map((befund) => befund.art),
+    meldung: ergebnis.meldung,
+  }
+}
+
+/**
+ * Ein Dokument aus 3.10 als Zeile für das Regelwerk.
+ *
+ * `subjectRef` ist der **eine** gesetzte Verweis: 3.10 lässt genau einen zu,
+ * und `lib/masterdata/invariants.ts` prüft das. Welcher es ist, sagt
+ * `subjectType`; für die Regel zählt nur, **wem** der Nachweis gehört — ein
+ * Nachweis eines anderen Kandidatensatzes deckt nicht mit (5.4.5).
+ */
+export function alsNachweiszeile(dokument: {
+  readonly id: string
+  readonly documentCategory: string
+  readonly validFrom: Date | null
+  readonly validTo: Date | null
+  readonly verificationStatus: string
+  readonly fileRef: string
+  readonly supplierId: string | null
+  readonly customerId: string | null
+  readonly candidateId: string | null
+  readonly assignmentId: string | null
+  readonly siteId: string | null
+  readonly masterAgreementId: string | null
+}): Nachweiszeile {
+  return {
+    id: dokument.id,
+    documentCategory: dokument.documentCategory,
+    validFrom: dokument.validFrom,
+    validTo: dokument.validTo,
+    verificationStatus: dokument.verificationStatus,
+    fileRef: dokument.fileRef,
+    subjectRef:
+      dokument.supplierId ??
+      dokument.customerId ??
+      dokument.candidateId ??
+      dokument.assignmentId ??
+      dokument.siteId ??
+      dokument.masterAgreementId,
+  }
+}
+
+/**
+ * Stichtag oder Zeitraum als Prüfzeitraum (5.0). Ein Zeitraum ohne Ende wird
+ * **nicht** geraten: er bleibt bei seinem Beginn, und mehr behauptet die
+ * Rechnung dann auch nicht.
+ */
+function alsPruefzeitraum(
+  stichtag: Date | null,
+  zeitraum: { readonly von: Date; readonly bis: Date | null } | null,
+): Zeitraum | null {
+  if (zeitraum !== null) {
+    const von = alsTag(zeitraum.von)
+    if (zeitraum.bis === null) return { von, bis: von }
+    const bis = alsTag(zeitraum.bis)
+    // Ein **rückwärts** laufender Zeitraum enthält keinen Tag — und ein
+    // Zeitraum ohne Tage gilt als gedeckt, weil es nichts zu decken gibt. Das
+    // ist die mildeste denkbare Antwort auf eine unsinnige Eingabe. Er entsteht
+    // dort, wo das Ende aus einer Frist kommt, die schon verstrichen ist (Q04:
+    // „bis zur Angebotsfrist"); dann ist der Tag des Übergangs maßgeblich.
+    return { von, bis: istVorOderGleich(von, bis) ? bis : von }
+  }
+  if (stichtag === null) return null
+  const tag = alsTag(stichtag)
+  return { von: tag, bis: tag }
+}
+
+function alsAnerkennung(wert: string): Anerkennung {
+  return wert === 'accepted' || wert === 'rejected' ? wert : 'submitted'
+}
+
+const NACHWEISARTEN: readonly Nachweisart[] = [
+  'permitCertificate',
+  'workPermit',
+  'safetyBriefing',
+  'qualificationCertificate',
+  'clearanceCertificate',
+  'agreementDocument',
+  'other',
+]
+
+function alsNachweisart(wert: string): Nachweisart | null {
+  return NACHWEISARTEN.find((art) => art === wert) ?? null
 }
 
 /* ------------------------------------------------------------------ */

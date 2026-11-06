@@ -118,23 +118,31 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
     (`tests/aueg-runner/support/*.test.ts`): sie nageln fest, welche Sätze
     Prosa bleiben **müssen** — ein stillschweigend grünes Szenario ist
     schlimmer als ein rotes
-- 🟨 Anbindung an die Übergänge — **Q04 und Q06** (Erlaubnis, 4.1 und 4.2.1)
-  sowie **P1, P3, P6, P8 und P11 am Einsatz und an der Verlängerung** (4.2.3
-  und 4.3) sind angebunden. `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
+- 🟨 Anbindung an die Übergänge — **P1, P3, P6, P8, P9, P10 und P11** sind an
+  den Übergängen der Bedarfsanfrage, des Profilvorschlags, des Einsatzes und
+  der Verlängerung angebunden (4.1, 4.2.1, 4.2.3, 4.3). `lib/aueg/anbindung.ts` rechnet die Umrechnung zwischen
   Datenmodell und Regelwerk ohne Prisma; `lib/services/staffing.ts` lädt die
   Kette, die Tarifzuordnungen und den Konzernverbund. Der Stichtag kommt aus
   der Tabelle in 5.0, nie aus dem Tag des Aufrufs. In `RULE_CHECKS_PENDING`
-  bleiben P9 und P10 am Einsatz — die rechnen, ihre Eingangsdaten sind dort nur
-  nicht geladen — und **P7**: für die Arbeitskampfanzeige führt Kapitel 3 kein
-  Feld und für die Zusicherung kein Objekt, 5.3.2 nennt die Regel deshalb
-  selbst „prüfbar, aber nicht auswertbar" (*offene Frage 30*). Ein Feld dafür
-  zu erfinden hieße, die Frage im Code zu entscheiden. Dasselbe gilt für den Teil von P4,
+  bleibt **P7**: für die Arbeitskampfanzeige führt Kapitel 3 kein Feld und für
+  die Zusicherung kein Objekt, 5.3.2 nennt die Regel deshalb selbst „prüfbar,
+  aber nicht auswertbar" (*offene Frage 30*). Ein Feld dafür zu erfinden hieße,
+  die Frage im Code zu entscheiden. Die beiden übrigen Einträge dort sind
+  keine Lücken, sondern Stellen **ohne** Zeile in 4.7 — P10 beim Einreichen
+  des Vorschlags und beim Anlegen des Einsatzes; jeder trägt seine Begründung. Dasselbe gilt für den Teil von P4,
   der den Vergleichsentgelt-**Eintrag** des Standorts prüft (Q18, Q36), und für
   die Zuschlagsstufe aus P5: beide rechnen, ihre Eingangsdaten sind an den
   Übergängen nicht geladen. Die Sperre aus **Q48** greift dagegen, weil sie nur
   `equalPayDueDate` und `comparableWage` braucht. Ohne Statusmodell bleiben Q31,
   Q37, Q38 und Q41 bis Q44 — sie warten auf SPEC 3.9 und die Statusmodelle
   4.4, 4.5 und 4.6 (Lieferantenstatus)
+- ✅ **Dokument und Nachweis (SPEC 3.10) als Datenmodell** — ein `document` je
+  Bezugsobjekt mit Nachweisart, Gültigkeit, Ablageverweis, Anerkennung und
+  Sichtbarkeitsklasse. `mandatory` und `blocking` sind **keine** Spalten: 3.10
+  führt sie als abgeleitete Felder aus dem Pflichtkatalog in 5.4.4, und zwei
+  Quellen für dieselbe Aussage laufen auseinander. Die Invarianten, die Prisma
+  nicht erzwingen kann — genau **ein** Bezugsobjekt, Belege der Anerkennung —
+  stehen in `lib/masterdata/invariants.ts`
 - ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
   Kandidat, Profilvorschlag und Personenidentität (SPEC 3.6) mit dem
   Statusmodell 4.2.3; die Datenminimierung aus 6.4 über die Offenlegungsstufe

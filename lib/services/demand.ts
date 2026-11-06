@@ -14,6 +14,11 @@
  * (Benachrichtigungen, Fristenlauf, Audit-Eintrag aus 3.12), sind an ihrer
  * Stelle als Kommentar benannt — nicht stillschweigend weggelassen.
  */
+import {
+  alsNachweiszeile,
+  erlaubnisstand,
+  type Erlaubniszeile,
+} from '../aueg/anbindung'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
@@ -723,7 +728,7 @@ export async function publishTender(
 
   const suppliers = await prisma.supplier.findMany({
     where: { id: { in: [...input.supplierIds] } },
-    include: { permits: true },
+    include: { permits: true, documents: true },
   })
   if (suppliers.length !== input.supplierIds.length) {
     return failure('Unbekannter Lieferant in der Einladungsliste.')
@@ -733,9 +738,10 @@ export async function publishTender(
     (supplier): InvitedSupplierFact => ({
       supplierId: supplier.id,
       supplierStatus: supplier.status,
-      hasAcceptedValidPermit: supplier.permits.some((permit) =>
-        isAcceptedAndValid(permit, evaluationDate),
-      ),
+      hasAcceptedValidPermit: erlaubnisGedeckt(supplier, {
+        von: evaluationDate,
+        bis: input.offerDeadline,
+      }),
     }),
   )
 
@@ -839,13 +845,36 @@ export async function publishTender(
   )
 }
 
-function isAcceptedAndValid(
-  permit: { verificationStatus: string; validFrom: Date; validTo: Date | null },
-  evaluationDate: Date,
+/**
+ * Deckt die AÜG-Erlaubnis des Lieferanten den Zeitraum (P9, SPEC 5.4.1)?
+ *
+ * **Hier stand bis zu dieser Arbeitseinheit eine zweite Fassung der Regel** —
+ * drei Zeilen, die Anerkennung und Gültigkeit an **einem** Tag prüften. Sie war
+ * milder als 5.4.1: ohne Urkunde (3.2, E25), ohne hinterlegte Datei (5.4.5),
+ * ohne tagesgenaue Deckung des Prüfzeitraums und ohne Nachfolgesätze. Das
+ * Gesetz gehört an **eine** Stelle; zwei Fassungen laufen auseinander, und die
+ * mildere entscheidet dann den Übergang.
+ *
+ * Der Zeitraum ist der aus 5.0: für Q04 und Q06 der Tag des Übergangs bis zur
+ * **Angebotsfrist**, nicht nur der Stichtag — eine Einladung, deren Erlaubnis
+ * vor dem Ende der Frist abläuft, ist nach 4.7 gesperrt.
+ */
+function erlaubnisGedeckt(
+  supplier: {
+    readonly legalName: string
+    readonly permits: readonly Erlaubniszeile[]
+    readonly documents: readonly Parameters<typeof alsNachweiszeile>[0][]
+  },
+  zeitraum: { readonly von: Date; readonly bis: Date | null },
 ): boolean {
-  if (permit.verificationStatus !== 'accepted') return false
-  if (permit.validFrom.getTime() > evaluationDate.getTime()) return false
-  return permit.validTo === null || permit.validTo.getTime() >= evaluationDate.getTime()
+  return erlaubnisstand({
+    lieferant: supplier.legalName,
+    erlaubnisse: supplier.permits,
+    urkunden: supplier.documents.map(alsNachweiszeile),
+    stichtag: null,
+    zeitraum,
+    unterbrechungen: [],
+  }).hasAcceptedValidPermit
 }
 
 // ── Einladungen ────────────────────────────────────────────────────────────
@@ -1392,7 +1421,7 @@ export async function loadInvitableSuppliers(
   const engagements = await loadEngagements()
   void engagements
   const suppliers = await prisma.supplier.findMany({
-    include: { permits: true },
+    include: { permits: true, documents: true },
     orderBy: { supplierNumber: 'asc' },
   })
   return suppliers
@@ -1408,7 +1437,7 @@ export async function loadInvitableSuppliers(
     .map((supplier) => {
       const eligible =
         supplier.status === 'active' &&
-        supplier.permits.some((permit) => isAcceptedAndValid(permit, evaluationDate))
+        erlaubnisGedeckt(supplier, { von: evaluationDate, bis: evaluationDate })
       return {
         id: supplier.id,
         eligible,

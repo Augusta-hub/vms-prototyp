@@ -207,7 +207,10 @@ async function main(): Promise<void> {
   // Leeren in umgekehrter Abhängigkeitsreihenfolge, damit der Seed
   // wiederholbar bleibt. Nur Entwicklungsdaten, nie Echtdaten (CLAUDE.md).
   // 3.6 und 3.7 zuerst: Einsatz, Verlängerung und Unterbrechung hängen an
-  // Kandidat, Profilvorschlag und Personenidentität.
+  // Kandidat, Profilvorschlag und Personenidentität. Noch davor die Nachweise
+  // (3.10): sie verweisen auf fast jedes andere Objekt und auf den Benutzer,
+  // der sie eingestellt hat.
+  await prisma.document.deleteMany()
   await prisma.assignmentExtension.deleteMany()
   await prisma.assignmentInterruption.deleteMany()
   await prisma.assignment.deleteMany()
@@ -581,8 +584,59 @@ async function main(): Promise<void> {
   })
 
   // Beide Erlaubnisse sind anerkannt und am Stichtag gültig — Voraussetzung
-  // jeder Einladung (4.2.1, Prüfung P9 in 5.4). Die Urkunde selbst ist ein
-  // Dokument nach 3.10 und noch nicht modelliert; der Verweis bleibt leer.
+  // jeder Einladung (4.2.1, Prüfung P9 in 5.4). Dazu gehört die **Urkunde**:
+  // 3.2 macht den Verweis zur Pflicht (E25), 3.10 die hinterlegte Datei, und
+  // 5.4.1 rechnet einen Satz ohne beides als nicht deckungsfähig. Die Urkunde
+  // ist ein Dokument nach 3.10; sie trägt den Mandanten des Lieferanten und
+  // ist für den Kunden auf den Gültigkeitsstatus beschränkt ([36]).
+  const urkunde1 = await prisma.document.create({
+    data: {
+      tenantId: supplier1.tenantId,
+      documentNumber: 'DOK-2024-0815',
+      documentCategory: 'permitCertificate',
+      subjectType: 'supplier',
+      supplierId: supplier1.id,
+      issuer: 'Agentur für Arbeit Düsseldorf',
+      issuedOn: day('2024-02-01'),
+      validFrom: day('2024-02-01'),
+      fileRef: 'ablage://beispiel/erlaubnis/AZ-2024-0815',
+      fileName: 'AZ-2024-0815_Erlaubnisurkunde.pdf',
+      mimeType: 'application/pdf',
+      uploadedAt: day('2024-02-05'),
+      uploadedById: userId('supplierAdmin1'),
+      verificationStatus: 'accepted',
+      verifiedAt: day('2025-01-20'),
+      verifiedById: userId('operatorCoordinator'),
+      confidentiality: 'operatorAndOwner',
+      createdById: userId('supplierAdmin1'),
+      createdAt: SEED_DATE,
+    },
+  })
+  const urkunde2 = await prisma.document.create({
+    data: {
+      tenantId: supplier2.tenantId,
+      documentNumber: 'DOK-2025-0423',
+      documentCategory: 'permitCertificate',
+      subjectType: 'supplier',
+      supplierId: supplier2.id,
+      issuer: 'Agentur für Arbeit Hamburg',
+      issuedOn: day('2025-06-15'),
+      validFrom: day('2025-07-01'),
+      validTo: day('2027-06-30'),
+      fileRef: 'ablage://beispiel/erlaubnis/AZ-2025-0423',
+      fileName: 'AZ-2025-0423_Erlaubnisurkunde.pdf',
+      mimeType: 'application/pdf',
+      uploadedAt: day('2025-06-20'),
+      uploadedById: userId('supplierAdmin2'),
+      verificationStatus: 'accepted',
+      verifiedAt: day('2025-07-02'),
+      verifiedById: userId('operatorCoordinator'),
+      confidentiality: 'operatorAndOwner',
+      createdById: userId('supplierAdmin2'),
+      createdAt: SEED_DATE,
+    },
+  })
+
   await prisma.supplierPermit.create({
     data: {
       tenantId: supplier1.tenantId,
@@ -592,6 +646,7 @@ async function main(): Promise<void> {
       permitType: 'unlimited',
       issuedOn: day('2024-02-01'),
       validFrom: day('2024-02-01'),
+      certificateDocumentRef: urkunde1.id,
       verificationStatus: 'accepted',
       verifiedAt: day('2025-01-20'),
       verifiedById: userId('operatorCoordinator'),
@@ -610,6 +665,7 @@ async function main(): Promise<void> {
       issuedOn: day('2025-06-15'),
       validFrom: day('2025-07-01'),
       validTo: day('2027-06-30'),
+      certificateDocumentRef: urkunde2.id,
       verificationStatus: 'accepted',
       verifiedAt: day('2025-07-02'),
       verifiedById: userId('operatorCoordinator'),
@@ -2284,6 +2340,73 @@ async function main(): Promise<void> {
     },
   })
 
+  // ── Nachweise (3.10) zu den Einsätzen und zum Kandidaten ─────────────────
+  //
+  // Der Pflichtkatalog aus 5.4.4 entscheidet, welche Art Pflicht ist: die
+  // **Unterweisung** dort, wo der Standort sie verlangt (`safetyBriefingRequired`,
+  // 3.1), die **Arbeitserlaubnis** dort, wo der Kandidat sie braucht
+  // (`workPermitRequired`, 3.6). Beide sperren den Einsatzstart (Q21). Die
+  // Beispieldaten führen sie deshalb, wo sie Pflicht sind — eine Lage ohne sie
+  // wäre kein Demonstrationsstand, sondern der Fall, den P10 verhindert.
+  const unterweisungen: ReadonlyArray<readonly [string, string]> = [
+    ['E-2026-0003', '2026-04-01'],
+    ['E-2026-0004', '2025-09-01'],
+    ['E-2026-0005', '2026-10-05'],
+  ]
+  for (const [nummer, ab] of unterweisungen) {
+    await prisma.document.create({
+      data: {
+        tenantId: tenantId('customer1'),
+        documentNumber: `DOK-UW-${nummer}`,
+        documentCategory: 'safetyBriefing',
+        subjectType: 'assignment',
+        assignmentId: assignmentId(nummer),
+        issuer: 'Nordwerk Metall GmbH, Fachkraft für Arbeitssicherheit',
+        issuedOn: day(ab),
+        validFrom: day(ab),
+        fileRef: `ablage://beispiel/unterweisung/${nummer}`,
+        fileName: `Unterweisung_${nummer}.pdf`,
+        mimeType: 'application/pdf',
+        uploadedAt: day(ab),
+        uploadedById: userId('demandOwner1'),
+        verificationStatus: 'accepted',
+        verifiedAt: day(ab),
+        verifiedById: userId('operatorCoordinator'),
+        // Einsatzbezogener Nachweis: Kunde und Lieferant sehen ihn ([35]).
+        confidentiality: 'assignmentParties',
+        createdById: userId('demandOwner1'),
+        createdAt: SEED_DATE,
+      },
+    })
+  }
+
+  // Die Arbeitserlaubnis des einen Kandidaten, der sie braucht. Nach 6.4 wird
+  // **nur Vorliegen und Gültigkeit** geführt — kein Inhalt (3.10).
+  await prisma.document.create({
+    data: {
+      tenantId: tenantId('supplier1'),
+      documentNumber: 'DOK-AE-2001-4',
+      documentCategory: 'workPermit',
+      subjectType: 'candidate',
+      candidateId: candidateId('tomas-s1'),
+      issuer: 'Ausländerbehörde (Beispiel)',
+      issuedOn: day('2025-11-01'),
+      validFrom: day('2025-11-15'),
+      validTo: day('2027-11-14'),
+      fileRef: 'ablage://beispiel/arbeitserlaubnis/K-L-2001-4',
+      fileName: 'Arbeitserlaubnis_K-L-2001-4.pdf',
+      mimeType: 'application/pdf',
+      uploadedAt: day('2025-11-05'),
+      uploadedById: userId('supplierAdmin1'),
+      verificationStatus: 'accepted',
+      verifiedAt: day('2025-11-06'),
+      verifiedById: userId('operatorCoordinator'),
+      confidentiality: 'operatorAndOwner',
+      createdById: userId('supplierAdmin1'),
+      createdAt: SEED_DATE,
+    },
+  })
+
   // ── Verlängerungen: je ein Zustand aus 4.3.2 ─────────────────────────────
   //
   // Die wirksame Verlängerung hat `plannedEndDate` des Einsatzes E-2026-0001
@@ -2466,6 +2589,7 @@ async function main(): Promise<void> {
     Einsätze: await prisma.assignment.count(),
     Verlängerungen: await prisma.assignmentExtension.count(),
     Unterbrechungen: await prisma.assignmentInterruption.count(),
+    'Nachweise (3.10)': await prisma.document.count(),
   }
   console.log('Synthetische Demo-Daten angelegt:', counts)
 }
