@@ -5,6 +5,159 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-06 — Nachweisfluss 5.4.3: Dienst, Sichtbarkeit und Oberfläche
+
+### Gemacht
+
+Der **Nachweisfluss** aus SPEC 5.4.3 ist umgesetzt: einstellen, anerkennen,
+zurückweisen — mit Dienst, Sichtbarkeitsprojektion und Oberfläche. Bis zu
+dieser Arbeitseinheit entstanden Nachweise nur im Seed und wurden gelesen.
+
+**Das Statusmodell liegt in `lib/status/document.ts`**, obwohl Kapitel 4 kein
+Modell für das Dokument führt. 3.10 sagt das ausdrücklich und verweist für den
+Lebenszyklus auf 5.4.3; die **Mechanik** ist aber dieselbe wie bei den Modellen
+aus Kapitel 4 — geschlossene Übergangsmenge, auslösende Rollen,
+Vorbedingungen. Die Datei trägt deshalb 5.4.3 als Fundstelle und nutzt
+`lib/status/machine.ts`. Nicht ausdrückbar sind damit die drei Wege, die 5.4.3
+ausschließt: zurück nach `submitted`, ein Statuswechsel durch Zeitablauf und
+die Anerkennung durch den Einsteller.
+
+**Die Zeile „Dokument / Nachweis (3.10)" ist in der Matrix belegt**
+(`lib/authz/matrix.ts`), zusammen mit der fehlenden Fußnote **[35]**. Damit
+trägt 2.2 jetzt die Zeilen zu 3.1 bis 3.7, 3.10 und 3.11.
+
+**Neue Dateien:** `lib/status/document.ts(.test.ts)`,
+`lib/services/documents.ts`, `app/nachweise/page.tsx`, `app/nachweise/actions.ts`,
+`tests/services/documents.test.ts`, `tests/services/masterData.test.ts`.
+
+### Entscheidungen
+
+1. **`confidentiality` ist die Tatsache, nicht das Recht.** 3.10 sagt, das Feld
+   „setzt [35] und [36] um". Es steht deshalb im `ResourceRef` und wird von den
+   Fußnoten ausgewertet — es erteilt nichts. Zusätzlich entscheidet die
+   **Nachweisart** mit: eine Erlaubnisurkunde ist für Kundenrollen nie
+   einsatzbezogen, auch wenn jemand die Klasse falsch setzt. Dieselbe Grenze
+   steht als Invariante in `lib/masterdata/invariants.ts` — die Fußnote
+   verhindert die Sicht, die Invariante die Zeile.
+2. **„Einsatzbezogen zum eigenen Kunden" ([35]) heißt je Bezugsobjekt etwas
+   anderes.** Beim Einsatz dessen Kunde, beim **Kandidaten die Kunden seiner
+   Einsätze**, beim Standort der eigene. Ein einzelnes `customerTenantId` wäre
+   hier eine Verkürzung: ein Kandidat kann bei mehreren Kunden im Einsatz sein.
+   Die Ableitung steht in `documentRef` an einer Stelle (*offene Frage 36*).
+3. **Die Erlaubnisurkunde erreicht `KE` unabhängig von der
+   Sichtbarkeitsklasse.** 2.2 gibt ihm `L[36]`, und 3.10 sagt denselben Satz.
+   Die Grenze lässt ihn deshalb heran; **was** er sieht, beschneidet die
+   Fußnote auf Anerkennungsstatus und Ablaufdatum. Dieselbe Fußnote trägt zwei
+   Matrixzeilen, und die Felder heißen dort verschieden — ihre Feldliste hängt
+   jetzt am Objekt.
+4. **Beim Einstellen gibt es keinen Eigentümer.** 3.10 macht den Einsteller zum
+   Eigentümer, und `documentRef` legt ihm das bestehende Dokument offen. Beim
+   Anlegen wäre das der Zugreifende selbst — eine Offenlegung, die sich der
+   Zugreifende selbst erteilt, trägt die Mandantengrenze aus 2.3 nicht. Wer
+   einstellen darf, muss den Vorgang über sein **Bezugsobjekt** erreichen.
+5. **Das Vier-Augen-Prinzip ist eine Vorbedingung, keine Rollenfrage.** 5.4.3
+   schließt die Anerkennung durch den Einsteller aus, „auch wenn beide beim
+   Betreiber liegen". `MA` darf beides — nur nicht an demselben Dokument.
+6. **Die Oberfläche bietet nur Übergänge an, die diese Rolle wirklich
+   auslösen kann.** Geprüft wird mit `checkPermission` und dem **Zielstatus**,
+   genau wie es der Übergang später tut ([34] liest ihn). Ein Knopf, der sicher
+   scheitert, ist eine Einladung in eine Verweigerung.
+7. **`mandatory` und `blocking` werden je Zeile gerechnet.** Die Oberfläche
+   zeigt sie mit ihrer Begründung aus dem Katalog; Spalten gibt es nicht, und
+   ein Dienst-Test fragt das Schema danach ab.
+8. **Beim Anlass „Speicherung" (5.5.1 b) wird nur die geänderte Nachweisart
+   neu gerechnet.** Die Sammelprüfung über alle Pflichtarten gehört zum
+   Übergang (Q21), wo sie auch sperren darf. Bei der Speicherung würde sie
+   Mängel melden, die mit diesem Nachweis nichts zu tun haben — und sperren
+   darf sie dort ohnehin nie: „gesperrt werden Handlungen, nicht
+   Feststellungen." `pruefeNachweise` nimmt dafür eine Artenliste.
+
+### Die Abweichung des Schemas ist aufgelöst
+
+Die letzte Arbeitseinheit hat sie benannt: das Schema verwies an fünf Stellen
+auf `lib/masterdata/invariants.ts`, während die Prüfungen teils inline in
+`lib/services/masterData.ts` standen und teils **nirgends**. Jetzt stehen dort
+`pruefeAnsprechpartner` (3.1, 3.2), `pruefeLieferant` (3.2, Tarifbindung ab
+`active`), `pruefeErlaubnis` (3.2), `pruefeRahmenvertrag` (3.3) und
+`pruefePreisposition` (3.3), jede mit Tests. `createSupplierPermit` ruft
+`pruefeErlaubnis` auf — die anderen vier haben heute **keinen** Schreibweg mit
+freier Eingabe; der Aufruf kommt mit dem Schreibweg, nicht umgekehrt. Das steht
+im Kopf der Datei.
+
+Dabei fiel auf: die Preispositionen des Fixtures trugen weder
+Qualifikationsstufe noch Verrechnungssatz, obwohl 3.3 beides bei `baseRate`
+verlangt. Auch das war die Datenlage, nicht die Regel — korrigiert.
+
+### Ein Widerspruch in der Spezifikation, nicht im Code
+
+5.4.3 nennt `KB` unter den Rollen, die einen einsatzbezogenen Nachweis
+einstellen; die Zeile in 2.2 gibt ihm nur `L[35]` und **kein** `A`. Geraten
+wird hier nichts (*neue offene Frage 42*): der Übergang nennt die Rolle wie
+5.4.3, und die Prüffunktion verweigert sie anhand der Matrix. Der Widerspruch
+ist damit eine Verweigerung mit Fundstelle — in einem Einheitentest und einem
+Dienst-Test festgehalten.
+
+### Zwei Datenfehler im Bestand
+
+- Die Unterweisungen im **Seed** lagen im Kundenmandanten, obwohl ihr
+  Bezugsobjekt der Einsatz ist und der dem Betreiber gehört (3.10: „der Mandant
+  folgt dem Bezugsobjekt"). Dass der Kunde sie sieht, trägt die
+  Sichtbarkeitsklasse, nicht der Mandant.
+- Dasselbe im **Fixture**: `legeNachweisAn` legte jedes Dokument in den
+  Betreibermandanten. Es liest den Mandanten jetzt aus dem Bezugsobjekt.
+
+Außerdem trug die Sammelmeldung von P10 ihr Kennzeichen „P10:" doppelt, weil
+die Einzelmeldungen es schon führen — korrigiert, die AÜG-Suite bleibt
+unverändert.
+
+### Gemessen
+
+- `npm test`: **788 grün** in 36 Dateien, weiter ohne Datenbank.
+- `npm run test:services`: **71 grün** gegen PostgreSQL in 3 Dateien, davon 23
+  neue zu 5.4.3 und 4 zur AÜG-Erlaubnis im Stammdatendienst.
+- `npm run test:aueg`: **267 Szenarien, 120 grün, 0 rot** — unverändert.
+- `npm run typecheck`, `npm run build`, `npm run db:seed` (zweimal
+  hintereinander): fehlerfrei.
+- Keine der vier Dateien in `tests/aueg/` wurde angefasst.
+- Die Beispieldaten aus dem Seed verletzen **keine** der sechs Invarianten
+  (einmalig gegen die Entwicklungsdatenbank geprüft).
+- **Sieben Mutationen**, jede von den richtigen Tests gefangen: Vier-Augen-
+  Prinzip entfernt (2 rot), [35] ohne Sichtbarkeitsklasse und Nachweisart
+  (2 rot), [36] verdeckt am Dokument nichts (2 rot), die Oberfläche bietet
+  Übergänge nach Status statt nach Recht (2 rot), der Einsteller legt sich
+  selbst offen (1 rot), das Neurechnen über den ganzen Katalog (1 rot), die
+  Erlaubnisinvariante im Stammdatendienst abgeschaltet (3 rot).
+- Durch die Oberfläche belegt: `MD` sieht alle sechs Nachweise, `KB` nur die
+  drei einsatzbezogenen seines Kunden, `KE` nur die beiden Erlaubnisurkunden
+  mit 16 verdeckten Feldern, `LA` nur die eigenen. `LA` stellt einen
+  Qualifikationsnachweis ein (`DOK-2026-0007`, eingereicht), `MD` erkennt ihn
+  an und die Seite meldet das Neurechnen von P10; eine
+  Unbedenklichkeitsbescheinigung als „einsatzbezogen" lehnt die Invariante mit
+  Fundstelle ab. Danach neu geseedet.
+
+### Offen
+
+- **Keine Ablage.** `fileRef` ist ein Platzhalter, hinter dem keine Datei liegt
+  (*offene Fragen 1 und 2*). Die Oberfläche sagt es, der Dienst behauptet
+  nichts anderes.
+- **Keine Benachrichtigungen.** 5.4.3 nennt sie in jeder Zeile; der Prototyp
+  hat keinen Versand. Die Adressaten stehen im Ergebnis, damit sie nicht
+  verloren gehen.
+- **Kein Ändern und kein Löschen** des Nachweises bis zur Anerkennung ([37]).
+  Die Matrix trägt die Rechte, der Dienst hat die Wege noch nicht.
+- **`certificateDocumentRef` bleibt ein Textfeld** und nach 3.2 Pflicht,
+  obwohl das Schema ihn optional führt. Das ist eine Spalte, die Prisma
+  ausdrücken könnte — die Nachbesserung ist eine Migration und ein eigener
+  Schritt.
+- Der **nächtliche Lauf N5** (5.5.1 c) mit den Vorlaufstufen aus 5.4.4 ist
+  gerechnet (`pruefeNachweisVorlauf`), aber nicht angebunden: der Prototyp hat
+  keinen Zeitgeber.
+- `demand.ts` hat weiter keine Dienst-Tests; `masterData.test.ts` prüft bisher
+  nur die AÜG-Erlaubnis.
+- **P7**, **Q37, Q38 und Q41 bis Q44** unverändert offen (siehe Eintrag unten).
+
+---
+
 ## 2026-11-06 — P9 und P10 an den Übergängen; SPEC 3.10 modelliert
 
 ### Gemacht

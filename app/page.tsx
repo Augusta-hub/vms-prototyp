@@ -59,7 +59,8 @@ export default async function Home() {
         Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.7, 3.10 und 3.11. Umgesetzt
         sind Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat
         und Profilvorschlag, der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3 sowie Dokumente
-        und Nachweise (3.10) als Datenmodell. Noch nicht umgesetzt: Zeiten (3.8), Abrechnung
+        und Nachweise (3.10) samt ihrem Nachweisfluss aus 5.4.3 — einstellen, anerkennen,
+        zurückweisen. Noch nicht umgesetzt: Zeiten (3.8), Abrechnung
         (3.9) und das Protokoll (3.12). Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen
         P1 bis P11. An den Übergängen greifen P1, P3, P6, P8, P9, P10 und P11: sie schreiben
         Fristende, angerechnete Dauer und Equal-Pay-Fälligkeit fort und sperren Ausschreibung,

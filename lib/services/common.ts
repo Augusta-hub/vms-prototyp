@@ -501,6 +501,103 @@ export function assignmentSubObjectRef(
   return { ...assignmentRef({ ...assignment, status }), status }
 }
 
+// ── 3.10: Dokument / Nachweis ──────────────────────────────────────────────
+
+/**
+ * Dokument (3.10). Der Mandant **folgt dem Bezugsobjekt** — die Urkunde gehört
+ * dem Lieferanten, die Unterweisung dem Einsatz (und damit dem Betreiber), die
+ * Vertragsunterlage dem Rahmenvertrag (ebenfalls Betreiber).
+ *
+ * **Die Offenlegung folgt der Sichtbarkeitsklasse** (`confidentiality`, 3.10).
+ * Sie ist nach 3.10 die Umsetzung von [35] und [36] und entscheidet hier, wen
+ * die Mandantengrenze überhaupt an den Vorgang heranlässt:
+ *
+ *  - `operatorOnly`: niemand außerhalb des Mandanten des Dokuments.
+ *  - `operatorAndOwner`: zusätzlich der **Einsteller** (3.10: „Eigentümer ist,
+ *    wer das Dokument eingestellt hat") — nötig, weil ein Nachweis am Einsatz
+ *    dem Betreiber gehört, eingestellt aber vom Lieferanten wurde.
+ *  - `assignmentParties`: zusätzlich Kunde und Lieferant des Einsatzes.
+ *
+ * Die Grenze lässt damit heran, die Fußnote entscheidet danach: [35] verlangt
+ * für `KB` zusätzlich, dass es keine Vertragsunterlage des Lieferanten ist,
+ * [36] für `KE`, dass es die AÜG-Erlaubnis ist und eine Beauftragung besteht.
+ * `status` ist der **Anerkennungsstatus** — der Status, auf den [37] und der
+ * Fluss aus 5.4.3 sich beziehen.
+ */
+export function documentRef(
+  document: {
+    readonly tenantId: string
+    readonly tenantType: TenantType
+    readonly documentCategory: string
+    readonly confidentiality: 'operatorOnly' | 'operatorAndOwner' | 'assignmentParties'
+    readonly verificationStatus: string
+    /**
+     * Mandant des Einstellers (3.10, Eigentümer). **Nur bei einem bestehenden
+     * Dokument** anzugeben: beim Einstellen wäre es der Handelnde selbst, und
+     * eine Offenlegung, die sich der Zugreifende selbst erteilt, ist keine.
+     */
+    readonly ownerTenantId: string | null
+    /**
+     * Die Kundenmandanten, zu denen dieser Nachweis **einsatzbezogen** ist —
+     * die Grundlage von [35] („zum eigenen Kunden") und von [36] („der
+     * beauftragten Lieferanten"). Je Bezugsobjekt verschieden eng: beim
+     * Einsatz dessen Kunde, beim Kandidaten die Kunden seiner Einsätze, beim
+     * Standort der eigene Kunde. Dass Kapitel 3 für die „Beauftragung" kein
+     * Objekt führt, ist *offene Frage 36*; diese Ableitung ist die engste, die
+     * der Wortlaut zulässt.
+     */
+    readonly customerTenantIds: readonly string[]
+    readonly supplierTenantId: string | null
+    readonly siteId: string | null
+    readonly uploadedById: string | null
+  },
+  engagements: Engagements,
+): ResourceRef {
+  // Die Beauftragung für [36] bemisst sich am **Lieferanten** des Nachweises:
+  // „die AÜG-Erlaubnis der beauftragten Lieferanten".
+  const engaged = new Set<string>(document.customerTenantIds)
+  if (document.supplierTenantId !== null) {
+    for (const tenantId of engagedCustomers(engagements, document.supplierTenantId)) {
+      engaged.add(tenantId)
+    }
+  }
+
+  const disclosed = new Set<string>()
+  if (document.confidentiality !== 'operatorOnly' && document.ownerTenantId !== null) {
+    disclosed.add(document.ownerTenantId)
+  }
+  if (document.confidentiality === 'assignmentParties') {
+    for (const tenantId of document.customerTenantIds) disclosed.add(tenantId)
+    if (document.supplierTenantId !== null) disclosed.add(document.supplierTenantId)
+  }
+  // Die **Erlaubnisurkunde** ist der eine Nachweis, den der Kunde unabhängig
+  // von der Sichtbarkeitsklasse erreicht: 2.2 gibt `KE` ausdrücklich `L[36]`,
+  // und 3.10 sagt denselben Satz — „beim Lieferanten nur den Gültigkeitsstatus
+  // der AÜG-Erlaubnis ohne Urkundeninhalte". Die Grenze lässt ihn deshalb
+  // heran; **was** er sieht, beschneidet die Fußnote auf Anerkennungsstatus und
+  // Ablaufdatum.
+  if (document.documentCategory === 'permitCertificate') {
+    for (const tenantId of engaged) disclosed.add(tenantId)
+  }
+  disclosed.delete(document.tenantId)
+
+  return {
+    type: 'document',
+    tenantId: document.tenantId,
+    tenantType: document.tenantType,
+    documentCategory: document.documentCategory,
+    confidentiality: document.confidentiality,
+    status: document.verificationStatus,
+    ...(document.supplierTenantId !== null
+      ? { supplierTenantId: document.supplierTenantId }
+      : {}),
+    ...(document.siteId !== null ? { siteId: document.siteId } : {}),
+    ...(document.uploadedById !== null ? { createdById: document.uploadedById } : {}),
+    engagementTenantIds: [...engaged],
+    disclosedToTenantIds: [...disclosed],
+  }
+}
+
 /** Mandantentyp eines Mandanten, für die Bauer oben. */
 export function tenantTypeOf(tenantType: string): TenantType {
   return tenantType as TenantType

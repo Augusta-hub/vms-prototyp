@@ -8,8 +8,9 @@
  *
  * Alle 24 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
  * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind die Zeilen zu
- * 3.1 bis 3.7 und die beiden Zeilen zu 3.11; jede unbelegte Zeile verweigert
- * jeden Zugriff, weil Sichtbarkeit positiv festgelegt ist (2.3).
+ * 3.1 bis 3.7, die Zeile zu 3.10 und die beiden Zeilen zu 3.11; jede unbelegte
+ * Zeile verweigert jeden Zugriff, weil Sichtbarkeit positiv festgelegt ist
+ * (2.3).
  */
 export type ResourceType =
   // 3.1 Kunde, Standort, Kostenstelle
@@ -142,6 +143,9 @@ export const MATRIX_ROW_BY_OBJECT = {
   assignment: 'assignment',
   assignmentExtension: 'assignment',
   assignmentInterruption: 'assignment',
+  // 3.10: der Nachweis hat seine eigene Zeile. Er ist **kein** Unterobjekt
+  // seines Bezugsobjekts — er folgt ihm nur im Mandanten (3.10).
+  document: 'document',
 } as const satisfies Record<string, ResourceType>
 
 export type ModelName = keyof typeof MATRIX_ROW_BY_OBJECT

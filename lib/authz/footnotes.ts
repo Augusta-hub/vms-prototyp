@@ -25,9 +25,9 @@
  * Mechanik für 6.4 gibt es nicht.
  *
  * Hinterlegt sind alle Fußnoten der belegten Zeilen: 3.11 ([2], [7], [38],
- * [45]) und die Zeilen zu 3.1 bis 3.5. Die Fußnoten der noch unbelegten Zeilen
- * (3.6 bis 3.10, 3.12) kommen mit ihren Zeilen hinzu; die Struktur trägt sie
- * unverändert.
+ * [45]), die Zeilen zu 3.1 bis 3.7 und die Zeile zu 3.10 ([34] bis [37]). Die
+ * Fußnoten der noch unbelegten Zeilen (3.8, 3.9, 3.12) kommen mit ihren Zeilen
+ * hinzu; die Struktur trägt sie unverändert.
  */
 import type { Operation } from './operations'
 import type { RoleCode, TenantType } from './roles'
@@ -100,6 +100,19 @@ export interface ConstraintContext {
      * Klardaten (2.3, positive Festlegung).
      */
     readonly disclosureLevel?: 'pseudonymized' | 'identified'
+    /**
+     * Nachweisart eines Dokuments (`documentCategory`, 3.10) — Grundlage von
+     * [35] („keine Vertragsunterlagen des Lieferanten") und von [36] am
+     * Dokument („nur die AÜG-Erlaubnis").
+     */
+    readonly documentCategory?: string
+    /**
+     * Sichtbarkeitsklasse eines Dokuments (`confidentiality`, 3.10). 3.10 sagt
+     * ausdrücklich, dass dieses Feld „[35] und [36] umsetzt" — es ist deshalb
+     * die Tatsache, an der die beiden Fußnoten auswerten, und keine zweite
+     * Rechtequelle: ohne eine erfüllte Fußnote wirkt es nicht.
+     */
+    readonly confidentiality?: 'operatorOnly' | 'operatorAndOwner' | 'assignmentParties'
   }
 }
 
@@ -137,6 +150,18 @@ function ownSupplierOrganization(ctx: ConstraintContext): boolean {
 function hasEngagement(ctx: ConstraintContext): boolean {
   return ctx.resource.engagementTenantIds?.includes(ctx.subject.tenantId) === true
 }
+
+/**
+ * Nachweisarten, die 2.2 in [35] als „Vertragsunterlagen des Lieferanten" von
+ * den einsatzbezogenen Nachweisen abgrenzt: die Erlaubnisurkunde und die
+ * Unbedenklichkeitsbescheinigung gehören dem Lieferanten (5.4.4), die
+ * Vertragsunterlage dem Rahmenvertrag (3.3).
+ */
+const SUPPLIER_CONTRACT_DOCUMENTS: readonly string[] = [
+  'permitCertificate',
+  'clearanceCertificate',
+  'agreementDocument',
+]
 
 /** Zielstatus eines Übergangs; `undefined` erfüllt keine Einschränkung. */
 function targetStatusIn(ctx: ConstraintContext, allowed: readonly string[]): boolean {
@@ -489,31 +514,91 @@ export const FOOTNOTES = {
     text: 'Nachweis anerkennen oder zurückweisen (Kapitel 5.4).',
     isSatisfied: (ctx) => targetStatusIn(ctx, ['accepted', 'rejected']),
   },
+  35: {
+    number: 35,
+    text:
+      'Nur einsatzbezogene Nachweise zum eigenen Kunden (z. B. Unterweisung, Qualifikation), ' +
+      'keine Vertragsunterlagen des Lieferanten.',
+    // Drei Bedingungen, alle aus dem Wortlaut:
+    //
+    //  - „zum eigenen Kunden": der Nachweis muss zum Mandanten des Zugreifenden
+    //    einsatzbezogen sein. Er gehört nach 3.10 seinem Bezugsobjekt — einem
+    //    Einsatz (Betreiber) oder einem Kandidaten (Lieferant) —, nie dem
+    //    Kunden. Welche Kunden das sind, steht am Vorgang
+    //    (`engagementTenantIds`, siehe `documentRef`): beim Einsatz dessen
+    //    Kunde, beim Kandidaten die Kunden seiner Einsätze. Ein Kandidat kann
+    //    bei mehreren Kunden im Einsatz sein — ein einzelnes
+    //    `customerTenantId` wäre hier eine Verkürzung.
+    //  - „einsatzbezogen": die Sichtbarkeitsklasse `assignmentParties`. 3.10
+    //    führt das Feld ausdrücklich als Umsetzung dieser Fußnote.
+    //  - „keine Vertragsunterlagen des Lieferanten": Erlaubnisurkunde,
+    //    Unbedenklichkeitsbescheinigung und Vertragsunterlage sind für
+    //    Kundenrollen nie einsatzbezogen — auch nicht, wenn jemand die
+    //    Sichtbarkeitsklasse falsch setzt. Die Art entscheidet mit, nicht das
+    //    Feld allein.
+    isSatisfied: (ctx) =>
+      ctx.subject.tenantType === 'customer' &&
+      hasEngagement(ctx) &&
+      ctx.resource.confidentiality === 'assignmentParties' &&
+      !SUPPLIER_CONTRACT_DOCUMENTS.includes(ctx.resource.documentCategory ?? ''),
+  },
   36: {
     number: 36,
     text:
       'Nur Gültigkeitsstatus der AÜG-Erlaubnis der beauftragten Lieferanten, ohne ' +
       'Urkundeninhalte.',
-    isSatisfied: (ctx) => ctx.subject.tenantType === 'customer' && hasEngagement(ctx),
+    // Am **Dokument** (3.10) heißt derselbe Satz zusätzlich: nur die
+    // Erlaubnisurkunde. Jeder andere Nachweis des Lieferanten — auch die
+    // Unbedenklichkeitsbescheinigung — ist für `KE` keine AÜG-Erlaubnis und
+    // damit nicht sichtbar.
+    isSatisfied: (ctx) =>
+      ctx.subject.tenantType === 'customer' &&
+      hasEngagement(ctx) &&
+      (ctx.resource.type !== 'document' || ctx.resource.documentCategory === 'permitCertificate'),
     // 3.2 ist hier enger als der Satz in 2.2: „Einkauf/Controlling des Kunden
     // sieht ausschließlich Gültigkeitsstatus und Ablaufdatum der beauftragten
     // Lieferanten, nicht die Urkunde." Sichtbar bleiben deshalb nur
     // `verificationStatus` und `validTo`.
+    //
+    // Dieselbe Fußnote trägt zwei Zeilen der Matrix — die AÜG-Erlaubnis (3.2)
+    // und das Dokument (3.10) —, und die Felder heißen dort verschieden. „Ohne
+    // Urkundeninhalte" meint am Dokument die Datei und ihre Herkunft; die
+    // Feldliste hängt deshalb am Objekt und nicht an der Fußnote allein.
     fieldScope: {
-      hidden: [
-        'permitNumber',
-        'issuingAuthority',
-        'permitType',
-        'issuedOn',
-        'validFrom',
-        'restrictions',
-        'certificateDocumentRef',
-        'verifiedAt',
-        'verifiedById',
-        'verifiedBy',
-        'rejectionReason',
-        'supersedesId',
-      ],
+      hidden: (ctx) =>
+        ctx.resource.type === 'document'
+          ? [
+              'documentNumber',
+              'issuer',
+              'issuedOn',
+              'validFrom',
+              'fileRef',
+              'fileName',
+              'mimeType',
+              'uploadedAt',
+              'uploadedById',
+              'uploadedBy',
+              'verifiedAt',
+              'verifiedById',
+              'verifiedBy',
+              'rejectionReason',
+              'confidentiality',
+              'externalReference',
+            ]
+          : [
+              'permitNumber',
+              'issuingAuthority',
+              'permitType',
+              'issuedOn',
+              'validFrom',
+              'restrictions',
+              'certificateDocumentRef',
+              'verifiedAt',
+              'verifiedById',
+              'verifiedBy',
+              'rejectionReason',
+              'supersedesId',
+            ],
     },
   },
   37: {

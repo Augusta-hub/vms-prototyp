@@ -34,6 +34,7 @@
 import { istVorOderGleich, tagesdifferenz, tageDesZeitraums, type Tag } from '../kalender'
 import {
   REGELWERK,
+  type Bezugsobjekt,
   type Nachweisart,
   type Regelwerkkonfiguration,
 } from '../regelwerk'
@@ -137,9 +138,19 @@ export function pruefeNachweise(
   lage: Nachweislage,
   qZeile: string,
   konfiguration: Regelwerkkonfiguration = REGELWERK,
+  /**
+   * Nur diese Nachweisarten prüfen. Gedacht für den Anlass **Speicherung**
+   * (5.5.1 b): dort wird ein einzelnes Dokument geändert, und neu abzuleiten
+   * sind `mandatory` und `blocking` **dieses** Nachweises — nicht der ganze
+   * Katalog. Ohne Angabe prüft die Sammelprüfung wie an einem Übergang alle
+   * Arten, die für diese Zeile einen Prüfzeitpunkt tragen (5.4.4).
+   */
+  nurArten?: readonly Nachweisart[],
 ): Nachweisergebnis {
   const arten = (Object.keys(konfiguration.katalog) as Nachweisart[]).filter(
-    (art) => konfiguration.katalog[art].wirkung[qZeile] !== undefined,
+    (art) =>
+      konfiguration.katalog[art].wirkung[qZeile] !== undefined &&
+      (nurArten === undefined || nurArten.includes(art)),
   )
 
   const einzelbefunde = arten.map((art) => bewerteArt(art, lage, qZeile, konfiguration))
@@ -238,6 +249,102 @@ export function pruefeNachweisVorlauf(
           'Vorgang greift die Sperre; der laufende Einsatz wird nicht beendet (SPEC 5.4.4).'
         : `P10: Der Nachweis „${naechster.art}" läuft am ${endeBis} ab — ${restzeitTage} Tage ` +
           'Restzeit (SPEC 5.4.4).',
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Die abgeleiteten Felder `mandatory` und `blocking` (3.10)            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `mandatory` und `blocking` eines Nachweises — **abgeleitet** aus dem
+ * Pflichtkatalog (3.10: „nicht frei setzbar", 5.4.4).
+ *
+ * Diese Funktion ist der Grund, warum das Datenmodell die beiden Felder nicht
+ * als Spalten führt: sie sind eine Rechnung über den Katalog und die Lage des
+ * Bezugsobjekts, keine Eingabe. Wer sie anzeigen will — die Oberfläche, der
+ * Dienst —, rechnet sie hier und schreibt sie nirgends hin.
+ */
+export interface Katalogwirkung {
+  readonly pflicht: boolean
+  readonly sperrend: boolean
+  readonly bezugsobjekt: Bezugsobjekt
+  /** Die Prüfzeitpunkte, an denen die Art überhaupt geprüft wird (5.4.4). */
+  readonly prueft: readonly string[]
+  readonly begruendung: string
+}
+
+export function katalogwirkung(
+  art: Nachweisart,
+  lage: {
+    readonly arbeitserlaubnisErforderlich: boolean | null
+    readonly unterweisungVerlangt: boolean | null
+  },
+  konfiguration: Regelwerkkonfiguration = REGELWERK,
+): Katalogwirkung {
+  const zeile = konfiguration.katalog[art]
+  const pflicht = istPflicht(zeile.pflicht, {
+    arbeitserlaubnisErforderlich: lage.arbeitserlaubnisErforderlich,
+    unterweisungVerlangt: lage.unterweisungVerlangt,
+  })
+  const prueft = Object.keys(zeile.wirkung)
+  // Die Erlaubnisurkunde ist der eine Fall, in dem die **Sperre** nicht in
+  // dieser Tabelle steht: 5.4.4 führt für sie „Sperre (P9)", und der Rechenweg
+  // liegt in p9Erlaubnis.ts („wird von P10 nicht doppelt geprüft"). Ihre
+  // Sperrwirkung ist deshalb hier festgehalten und nicht aus `wirkung`
+  // gelesen — sonst wäre das abgeleitete Feld `blocking` für genau den
+  // strengsten Nachweis des Katalogs „nein".
+  const sperrend =
+    art === 'permitCertificate'
+      ? true
+      : Object.values(zeile.wirkung).includes('sperre')
+  return {
+    pflicht,
+    sperrend,
+    bezugsobjekt: zeile.bezugsobjekt,
+    prueft,
+    begruendung:
+      art === 'permitCertificate'
+        ? 'Pflicht immer, Sperre über P9 (SPEC 5.4.4, 5.4.1).'
+        : `${pflichtwortlaut(zeile.pflicht, pflicht)} ${
+            sperrend ? 'Sperre' : 'Warnung oder Information'
+          } nach dem Katalog (SPEC 5.4.4).`,
+  }
+}
+
+/**
+ * Passt die Nachweisart zum Bezugsobjekt? Die Vorbedingung des Anerkennens aus
+ * 5.4.3 („Nachweisart und Bezugsobjekt passen zum Katalog") — gelesen aus dem
+ * Katalog, nicht hier aufgezählt.
+ */
+export function passtZumBezugsobjekt(art: Nachweisart, subjectType: string): boolean {
+  const erwartet = REGELWERK.katalog[art].bezugsobjekt
+  if (erwartet === 'beliebig') return true
+  return BEZUGSOBJEKT_ZU_SUBJECT_TYPE[erwartet] === subjectType
+}
+
+/** Bezugsobjekt des Katalogs (5.4.4) → `subjectType` des Dokuments (3.10). */
+const BEZUGSOBJEKT_ZU_SUBJECT_TYPE: Readonly<Record<Exclude<Bezugsobjekt, 'beliebig'>, string>> = {
+  lieferant: 'supplier',
+  kandidat: 'candidate',
+  einsatz: 'assignment',
+  rahmenvertrag: 'masterAgreement',
+}
+
+function pflichtwortlaut(bedingung: string, pflicht: boolean): string {
+  switch (bedingung) {
+    case 'immer':
+      return 'Pflicht immer.'
+    case 'wennArbeitserlaubnisErforderlich':
+      return pflicht
+        ? 'Pflicht, weil der Kandidat eine Arbeitserlaubnis braucht (3.6).'
+        : 'Keine Pflicht: der Kandidat braucht keine Arbeitserlaubnis (3.6).'
+    case 'wennStandortVerlangt':
+      return pflicht
+        ? 'Pflicht, weil der Standort eine Unterweisung verlangt (3.1).'
+        : 'Keine Pflicht: der Standort verlangt keine Unterweisung (3.1).'
+    default:
+      return 'Nie Pflicht.'
   }
 }
 
@@ -341,7 +448,10 @@ function deckt(nachweis: Nachweis, prueftag: Tag): boolean {
 }
 
 /** `mandatory` wird aus dem Katalog **abgeleitet**, nicht gesetzt (3.10). */
-function istPflicht(bedingung: string, lage: Nachweislage): boolean {
+function istPflicht(
+  bedingung: string,
+  lage: Pick<Nachweislage, 'arbeitserlaubnisErforderlich' | 'unterweisungVerlangt'>,
+): boolean {
   switch (bedingung) {
     case 'immer':
       return true
@@ -367,8 +477,9 @@ function sammelmeldung(
     )
   }
   // 5.5.2 Nr. 2: jede Feststellung nennt ihre Nachweisart und ihr Bezugsobjekt —
-  // nicht „Nachweise unvollständig" (5.4.6).
-  return `P10: ${maengel.map((befund) => befund.meldung).join(' ')}`
+  // nicht „Nachweise unvollständig" (5.4.6). Die Einzelmeldungen tragen das
+  // Kennzeichen „P10" schon; ein zweites davor wäre nur Rauschen.
+  return maengel.map((befund) => befund.meldung).join(' ')
 }
 
 function alsAngabe(wert: boolean | null): string {

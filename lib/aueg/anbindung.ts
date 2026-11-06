@@ -724,6 +724,13 @@ export function nachweisstand(eingabe: {
   readonly arbeitserlaubnisErforderlich: boolean | null
   /** `site.safetyBriefingRequired` (3.1); `null` = nicht gesetzt (5.4.6). */
   readonly unterweisungVerlangt: boolean | null
+  /**
+   * Nur diese Nachweisarten prüfen — für den Anlass **Speicherung** (5.5.1 b),
+   * wo ein einzelnes Dokument geändert wurde und nur dessen abgeleitete Felder
+   * neu zu rechnen sind. An einem Übergang bleibt die Angabe leer: dort prüft
+   * P10 alle Arten des Prüfzeitpunkts (5.4.4).
+   */
+  readonly nurArten?: readonly Nachweisart[]
 }): Nachweisstand {
   const ergebnis = pruefeNachweise(
     {
@@ -753,6 +760,8 @@ export function nachweisstand(eingabe: {
       bezugsobjekt: eingabe.bezugsobjekt,
     },
     eingabe.qZeile,
+    undefined,
+    eingabe.nurArten,
   )
 
   return {

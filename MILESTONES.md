@@ -143,6 +143,17 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   Quellen für dieselbe Aussage laufen auseinander. Die Invarianten, die Prisma
   nicht erzwingen kann — genau **ein** Bezugsobjekt, Belege der Anerkennung —
   stehen in `lib/masterdata/invariants.ts`
+- ✅ **Nachweisfluss (SPEC 5.4.3) mit Dienst und Oberfläche** — einstellen,
+  anerkennen, zurückweisen als geschlossene Übergangsmenge
+  (`lib/status/document.ts`), mit dem Vier-Augen-Prinzip gegenüber dem
+  Einstellen und ohne jeden Weg zurück: ein berichtigter Nachweis ist ein neues
+  Dokument, und der Ablauf der Gültigkeit wechselt **keinen** Status. Die Zeile
+  „Dokument / Nachweis" in 2.2 ist belegt, samt Fußnoten [34] bis [37]: der
+  Kunde sieht die einsatzbezogenen Nachweise seines Kunden ([35]),
+  Einkauf/Controlling die AÜG-Erlaubnis ohne Urkundeninhalte ([36]), der
+  Lieferant die eigenen und ändert sie nur bis zur Anerkennung ([37]).
+  **Keine Ablage** hinter `fileRef` und **keine** Benachrichtigungen (offene
+  Fragen 1 und 2)
 - ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
   Kandidat, Profilvorschlag und Personenidentität (SPEC 3.6) mit dem
   Statusmodell 4.2.3; die Datenminimierung aus 6.4 über die Offenlegungsstufe

@@ -2356,7 +2356,11 @@ async function main(): Promise<void> {
   for (const [nummer, ab] of unterweisungen) {
     await prisma.document.create({
       data: {
-        tenantId: tenantId('customer1'),
+        // **Der Mandant folgt dem Bezugsobjekt** (3.10). Die Unterweisung
+        // hängt am Einsatz, und der Einsatz gehört dem Betreiber (3.7) — auch
+        // wenn der Kunde sie durchgeführt und eingestellt hat. Dass er sie
+        // sieht, trägt die Sichtbarkeitsklasse ([35]), nicht der Mandant.
+        tenantId: tenantId('operator'),
         documentNumber: `DOK-UW-${nummer}`,
         documentCategory: 'safetyBriefing',
         subjectType: 'assignment',

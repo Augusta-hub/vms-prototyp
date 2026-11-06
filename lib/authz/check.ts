@@ -107,6 +107,10 @@ export interface ResourceRef {
    * strengere Stufe `pseudonymized`.
    */
   readonly disclosureLevel?: 'pseudonymized' | 'identified'
+  /** Nachweisart eines Dokuments (3.10) — [35] und [36] am Dokument. */
+  readonly documentCategory?: string
+  /** Sichtbarkeitsklasse eines Dokuments (3.10) — die Umsetzung von [35]. */
+  readonly confidentiality?: 'operatorOnly' | 'operatorAndOwner' | 'assignmentParties'
   /**
    * Mandanten, denen Kapitel 2 und 3 **ausdrücklich** Zugang zu diesem Objekt
    * eines anderen Mandanten gewähren.
@@ -333,6 +337,12 @@ export function checkPermission(
           : {}),
         ...(resource.disclosureLevel !== undefined
           ? { disclosureLevel: resource.disclosureLevel }
+          : {}),
+        ...(resource.documentCategory !== undefined
+          ? { documentCategory: resource.documentCategory }
+          : {}),
+        ...(resource.confidentiality !== undefined
+          ? { confidentiality: resource.confidentiality }
           : {}),
       },
     }

@@ -8,6 +8,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  katalogwirkung,
+  passtZumBezugsobjekt,
   pruefeNachweise,
   pruefeNachweisVorlauf,
   type Nachweis,
@@ -312,5 +314,72 @@ describe('5.4.4 und 5.5.1 N5: gestufter Vorlauf vor dem Ablauf', () => {
     const ergebnis = pruefeNachweisVorlauf(mehrere, '2026-12-20')
     expect(ergebnis.art).toBe('safetyBriefing')
     expect(ergebnis.endeBis).toBe('2026-12-31')
+  })
+})
+
+/**
+ * `mandatory` und `blocking` sind nach 3.10 **abgeleitete** Felder: sie folgen
+ * aus dem Katalog in 5.4.4 und stehen nicht am Dokument. Diese Gruppe hält
+ * fest, was die Ableitung ergibt — vor allem die eine Zeile, deren Sperre nicht
+ * in der Wirkungstabelle steht.
+ */
+describe('Abgeleitete Felder `mandatory` und `blocking` (SPEC 3.10, 5.4.4)', () => {
+  const ohneAngaben = { arbeitserlaubnisErforderlich: null, unterweisungVerlangt: null }
+
+  it('führt die Erlaubnisurkunde als Pflicht **und** sperrend — über P9 (5.4.4)', () => {
+    const wirkung = katalogwirkung('permitCertificate', ohneAngaben)
+    expect(wirkung.pflicht).toBe(true)
+    expect(wirkung.sperrend).toBe(true)
+    expect(wirkung.begruendung).toMatch(/P9/)
+  })
+
+  it('macht die Arbeitserlaubnis zur Pflicht, wenn der Kandidat sie braucht (3.6)', () => {
+    expect(
+      katalogwirkung('workPermit', {
+        arbeitserlaubnisErforderlich: true,
+        unterweisungVerlangt: null,
+      }).pflicht,
+    ).toBe(true)
+    expect(
+      katalogwirkung('workPermit', {
+        arbeitserlaubnisErforderlich: false,
+        unterweisungVerlangt: null,
+      }).pflicht,
+    ).toBe(false)
+  })
+
+  it('rechnet die fehlende Angabe wie „ja" — die strengere Annahme (5.4.6)', () => {
+    expect(katalogwirkung('workPermit', ohneAngaben).pflicht).toBe(true)
+    expect(katalogwirkung('safetyBriefing', ohneAngaben).pflicht).toBe(true)
+  })
+
+  it('führt den Qualifikationsnachweis als nicht sperrend (5.4.4, „nie Sperre")', () => {
+    const wirkung = katalogwirkung('qualificationCertificate', ohneAngaben)
+    expect(wirkung.sperrend).toBe(false)
+    expect(wirkung.pflicht).toBe(false)
+  })
+
+  it('nennt die Prüfzeitpunkte der Art, nicht alle Übergänge (5.4.4)', () => {
+    expect(katalogwirkung('safetyBriefing', ohneAngaben).prueft).toContain('Q21')
+    expect(katalogwirkung('safetyBriefing', ohneAngaben).prueft).toContain('Q37')
+    expect(katalogwirkung('clearanceCertificate', ohneAngaben).prueft).not.toContain('Q21')
+  })
+})
+
+describe('Nachweisart und Bezugsobjekt passen zusammen (SPEC 5.4.3, 5.4.4)', () => {
+  it('verlangt die Erlaubnisurkunde am Lieferanten', () => {
+    expect(passtZumBezugsobjekt('permitCertificate', 'supplier')).toBe(true)
+    expect(passtZumBezugsobjekt('permitCertificate', 'assignment')).toBe(false)
+  })
+
+  it('verlangt die Unterweisung am Einsatz und die Arbeitserlaubnis am Kandidaten', () => {
+    expect(passtZumBezugsobjekt('safetyBriefing', 'assignment')).toBe(true)
+    expect(passtZumBezugsobjekt('safetyBriefing', 'site')).toBe(false)
+    expect(passtZumBezugsobjekt('workPermit', 'candidate')).toBe(true)
+  })
+
+  it('lässt `other` an jedem Bezugsobjekt zu (5.4.4, „beliebig")', () => {
+    expect(passtZumBezugsobjekt('other', 'site')).toBe(true)
+    expect(passtZumBezugsobjekt('other', 'masterAgreement')).toBe(true)
   })
 })

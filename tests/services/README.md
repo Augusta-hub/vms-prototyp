@@ -51,7 +51,9 @@ Personen, Firmen und Datumsangaben im Fixture sind synthetisch (Regel 3).
 | `aufbau.ts` | legt sie an und migriert sie, einmal je Lauf (`globalSetup`) |
 | `verbindung.ts` | setzt `DATABASE_URL`, **bevor** ein Modul `lib/prisma.ts` importiert |
 | `fixture.ts` | leert die Datenbank und baut die synthetische Welt |
-| `staffing.test.ts` | die Prüfungen P1, P6 und P11 an den Übergängen aus 4.3 |
+| `staffing.test.ts` | die Prüfungen P1 bis P11 an den Übergängen aus 4.2 und 4.3 |
+| `documents.test.ts` | der Nachweisfluss aus 5.4.3 und die Sichtbarkeit der Nachweise (3.10, Fußnoten [34] bis [37]) |
+| `masterData.test.ts` | bisher nur: die Invarianten der AÜG-Erlaubnis am Schreibweg (3.2) |
 
 Die Welt ist klein: ein Betreiber, ein Kunde mit Standort und Kostenstelle, ein
 zweites Unternehmen desselben Konzerns, zwei Lieferanten und eine Person mit je
@@ -61,8 +63,10 @@ auch für einen Arbeitgeber aus dem Konzern des Entleihers.
 
 ## Was noch fehlt
 
-- Die Dienste `demand.ts` und `masterData.ts` haben keine Tests. Das Muster
-  steht jetzt; die Arbeit ist dieselbe.
-- P9 und P10 sind am Einsatz und an der Verlängerung noch nicht angebunden
-  (ihre Eingangsdaten werden dort nicht geladen). Sobald sie es sind, gehören
-  ihre Sperren hierher.
+- `demand.ts` hat keine eigenen Tests; von `masterData.ts` ist bisher nur der
+  Schreibweg der AÜG-Erlaubnis geprüft. Das Muster steht; die Arbeit ist
+  dieselbe.
+- **P7** ist nirgends angebunden: Kapitel 3 führt für die Arbeitskampfanzeige
+  kein Feld (*offene Frage 30*).
+- **Q37, Q38 und Q41 bis Q44** warten auf die Statusmodelle 4.4, 4.5 und 4.6.
+  Sobald es sie gibt, gehören ihre Sperren und Warnungen hierher.

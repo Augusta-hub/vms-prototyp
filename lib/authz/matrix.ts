@@ -12,9 +12,9 @@
  * Zuständigkeit gehen vor und werden in lib/authz/check.ts **vor** der Matrix
  * geprüft.
  *
- * Belegt sind die Zeilen zu 3.1 bis 3.7 und die beiden Zeilen zu 3.11. Die
- * übrigen Zeilen (3.8 bis 3.10, 3.12) kommen mit ihren Fachmodulen hinzu; bis
- * dahin verweigern sie jeden Zugriff.
+ * Belegt sind die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10 und die beiden
+ * Zeilen zu 3.11. Die übrigen Zeilen (3.8, 3.9, 3.12) kommen mit ihren
+ * Fachmodulen hinzu; bis dahin verweigern sie jeden Zugriff.
  *
  * Die Zellen stehen in derselben Reihenfolge wie die Spalten in 2.2
  * (MA · MD · KB · KG · KE · LD · LA · AN); über jeder Zeile steht ihr Wortlaut
@@ -269,6 +269,30 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     procurementController: { read: [2] },
     supplierCoordinator: { read: [7], transition: [25] },
     supplierAdmin: { read: [7] },
+    temporaryWorker: { read: [4] },
+  },
+
+  // | Dokument / Nachweis (3.10)
+  // | MA: A L Ä S X | MD: L S[34] | KB: L[35] | KG: – | KE: L[36] |
+  // | LD: A L[7] Ä[37] | LA: A L[7] Ä[37] X[37] | AN: L[4] |
+  //
+  // Drei Dinge sind an dieser Zeile bemerkenswert und stehen so in 2.2:
+  //
+  //  - `MD` trägt **kein** `Ä`. Der Betreiberdisponent erkennt an oder weist
+  //    zurück ([34]); den Nachweis selbst ändert er nicht.
+  //  - `KB` trägt **nur** `L[35]`, obwohl 5.4.3 ihn unter den Rollen nennt, die
+  //    einen einsatzbezogenen Nachweis einstellen. Der Widerspruch ist
+  //    *offene Frage 42* und wird hier nicht durch ein zusätzliches `A`
+  //    aufgelöst: die Matrix bleibt der Wortlaut von 2.2.
+  //  - `LD` hat `A`, aber **kein** `X`: löschen darf nur der
+  //    Lieferantenadministrator, und auch er nur bis zur Anerkennung ([37]).
+  document: {
+    operatorAdmin: MA_FULL,
+    operatorCoordinator: { read: [], transition: [34] },
+    demandOwner: { read: [35] },
+    procurementController: { read: [36] },
+    supplierCoordinator: { create: [], read: [7], update: [37] },
+    supplierAdmin: { create: [], read: [7], update: [37], delete: [37] },
     temporaryWorker: { read: [4] },
   },
 

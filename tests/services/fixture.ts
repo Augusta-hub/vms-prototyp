@@ -12,7 +12,10 @@
  * behandelt werden als von der Spezifikation (5.0).
  */
 
-import { pruefeDokumentOderWirf } from '../../lib/masterdata/invariants'
+import {
+  pruefeDokumentOderWirf,
+  type Sichtbarkeitsklasse,
+} from '../../lib/masterdata/invariants'
 import { prisma } from '../../lib/prisma'
 
 /** Ein Kalendertag als UTC-Mitternacht — so führt Prisma die Datumsfelder. */
@@ -29,6 +32,12 @@ export interface Welt {
   readonly disponent: string
   /** Genehmiger der Kundenseite (`KG`) — 4.3.2 weist ihm die Verlängerung zu. */
   readonly genehmiger: string
+  /** Bedarfsträger der Kundenseite (`KB`) — Fußnote [35] in 2.2. */
+  readonly bedarfstraeger: string
+  /** Einkauf/Controlling der Kundenseite (`KE`) — Fußnote [36] in 2.2. */
+  readonly einkauf: string
+  /** Administrator des ersten Lieferanten (`LA`) — stellt Nachweise ein (5.4.3). */
+  readonly lieferantAdmin: string
   readonly kunde: string
   readonly standort: string
   readonly kostenstelle: string
@@ -128,6 +137,56 @@ export async function baueWelt(): Promise<Welt> {
       grantedById: administrator.id,
     },
   })
+
+  // Der Bedarfsträger (`KB`) und Einkauf/Controlling (`KE`) gehören ebenfalls
+  // zur Kundenseite. Sie tragen in der Zeile „Dokument / Nachweis" (2.2) nur
+  // Leserechte — [35] für den einsatzbezogenen Nachweis, [36] für den
+  // Gültigkeitsstatus der Erlaubnis. Genau das machen die Tests zu 3.10
+  // nachprüfbar.
+  const bedarfstraeger = await prisma.user.create({
+    data: {
+      userNumber: 'U-KB',
+      tenantId: kundenMandant.id,
+      loginIdentifier: 'kb@test.invalid',
+      givenName: 'Bea',
+      familyName: 'Bedarf',
+    },
+  })
+  const einkauf = await prisma.user.create({
+    data: {
+      userNumber: 'U-KE',
+      tenantId: kundenMandant.id,
+      loginIdentifier: 'ke@test.invalid',
+      givenName: 'Enno',
+      familyName: 'Einkauf',
+    },
+  })
+  // Der Lieferantenadministrator (`LA`) stellt die Nachweise seiner
+  // Organisation ein (5.4.3) und darf sie bis zur Anerkennung ändern ([37]).
+  const lieferantAdmin = await prisma.user.create({
+    data: {
+      userNumber: 'U-LA',
+      tenantId: lieferantMandant.id,
+      loginIdentifier: 'la@test.invalid',
+      givenName: 'Lara',
+      familyName: 'Lieferant',
+    },
+  })
+  for (const [benutzer, rolle, mandant] of [
+    [bedarfstraeger.id, 'demandOwner', kundenMandant.id],
+    [einkauf.id, 'procurementController', kundenMandant.id],
+    [lieferantAdmin.id, 'supplierAdmin', lieferantMandant.id],
+  ] as const) {
+    await prisma.roleAssignment.create({
+      data: {
+        userId: benutzer,
+        roleCode: rolle,
+        tenantId: mandant,
+        validFrom: tag('2025-01-01'),
+        grantedById: administrator.id,
+      },
+    })
+  }
 
   const kunde = await prisma.customer.create({
     data: {
@@ -244,11 +303,24 @@ export async function baueWelt(): Promise<Welt> {
       status: 'active',
     },
   })
+  // Eine Preisposition vom Typ `baseRate` braucht nach 3.3 Qualifikationsstufe
+  // **und** Verrechnungssatz (geprüft in lib/masterdata/invariants.ts). Eine
+  // Position ohne beides wäre keine Kondition, sondern eine leere Zeile.
   const einkaufsposition = await prisma.rateCardItem.create({
-    data: { rateCardId: einkaufsliste.id, itemType: 'baseRate' },
+    data: {
+      rateCardId: einkaufsliste.id,
+      itemType: 'baseRate',
+      qualificationLevel: 'Fachkraft',
+      hourlyRate: '24.5000',
+    },
   })
   const verkaufsposition = await prisma.rateCardItem.create({
-    data: { rateCardId: verkaufsliste.id, itemType: 'baseRate' },
+    data: {
+      rateCardId: verkaufsliste.id,
+      itemType: 'baseRate',
+      qualificationLevel: 'Fachkraft',
+      hourlyRate: '33.9000',
+    },
   })
 
   // Die AÜG-Erlaubnis beider Lieferanten mit ihrer **Urkunde** (3.2, 3.10).
@@ -328,7 +400,12 @@ export async function baueWelt(): Promise<Welt> {
     },
   })
   const zweiteEinkaufsposition = await prisma.rateCardItem.create({
-    data: { rateCardId: zweiteEinkaufsliste.id, itemType: 'baseRate' },
+    data: {
+      rateCardId: zweiteEinkaufsliste.id,
+      itemType: 'baseRate',
+      qualificationLevel: 'Fachkraft',
+      hourlyRate: '25.1000',
+    },
   })
 
   // Die Tarifzuordnung der **Verleiherseite**. Sie ist nach SPEC 3.2 ab Status
@@ -417,6 +494,9 @@ export async function baueWelt(): Promise<Welt> {
     administrator: administrator.id,
     disponent: disponent.id,
     genehmiger: genehmiger.id,
+    bedarfstraeger: bedarfstraeger.id,
+    einkauf: einkauf.id,
+    lieferantAdmin: lieferantAdmin.id,
     kunde: kunde.id,
     standort: standort.id,
     kostenstelle: kostenstelle.id,
@@ -584,9 +664,20 @@ export async function legeNachweisAn(
     readonly anerkennung?: 'submitted' | 'accepted' | 'rejected'
     /** Leer lassen heißt: Nachweis ohne hinterlegte Datei (5.4.5). */
     readonly ablage?: string
+    /** Sichtbarkeitsklasse (3.10); ohne Angabe die zur Art passende. */
+    readonly sichtbarkeit?: Sichtbarkeitsklasse
+    /** Einsteller (`uploadedBy`, 3.10); ohne Angabe der Betreiberadministrator. */
+    readonly einsteller?: string
+    /** Mandant des Dokuments; ohne Angabe der des Bezugsobjekts (3.10). */
+    readonly mandant?: string
   },
 ): Promise<string> {
   const anerkennung = eigenes.anerkennung ?? 'accepted'
+  const sichtbarkeit =
+    eigenes.sichtbarkeit ??
+    (eigenes.art === 'safetyBriefing' || eigenes.art === 'qualificationCertificate'
+      ? 'assignmentParties'
+      : 'operatorAndOwner')
   const felder = {
     documentCategory: eigenes.art,
     subjectType: eigenes.bezug.art,
@@ -605,6 +696,7 @@ export async function legeNachweisAn(
     rejectionReason: anerkennung === 'rejected' ? 'synthetischer Testfall' : null,
     validFrom: eigenes.gueltigVon ?? null,
     validTo: eigenes.gueltigBis ?? null,
+    confidentiality: sichtbarkeit,
   } as const
 
   // Eine leere Ablage ist eine **zulässige** Testlage (5.4.5 rechnet sie als
@@ -612,17 +704,44 @@ export async function legeNachweisAn(
   // bewusst übergangen und der Fall im Test benannt.
   if ((eigenes.ablage ?? 'x') !== '') pruefeDokumentOderWirf(felder, eigenes.nummer)
 
+  // **Der Mandant folgt dem Bezugsobjekt** (3.10). Die Urkunde und der
+  // Kandidatennachweis gehören dem Lieferanten, die Unterweisung dem Einsatz
+  // (und damit dem Betreiber), der Standortnachweis dem Kunden. Alles in den
+  // Betreibermandanten zu legen wäre bequem und falsch: die Sichtbarkeit hängt
+  // in 2.3 an genau diesem Mandanten.
+  const mandant = eigenes.mandant ?? (await mandantDesBezugs(welt, eigenes.bezug))
   const dokument = await prisma.document.create({
     data: {
-      tenantId: welt.betreiberMandant,
+      tenantId: mandant,
       documentNumber: `DOK-${eigenes.nummer}`,
       ...felder,
       uploadedAt: tag('2025-11-30'),
-      uploadedById: welt.administrator,
-      confidentiality: 'operatorAndOwner',
+      uploadedById: eigenes.einsteller ?? welt.administrator,
     },
   })
   return dokument.id
+}
+
+async function mandantDesBezugs(
+  welt: Welt,
+  bezug: { readonly art: 'supplier' | 'candidate' | 'assignment' | 'site'; readonly id: string },
+): Promise<string> {
+  switch (bezug.art) {
+    case 'supplier': {
+      const zeile = await prisma.supplier.findUniqueOrThrow({ where: { id: bezug.id } })
+      return zeile.tenantId
+    }
+    case 'candidate': {
+      const zeile = await prisma.candidate.findUniqueOrThrow({ where: { id: bezug.id } })
+      return zeile.tenantId
+    }
+    case 'site': {
+      const zeile = await prisma.site.findUniqueOrThrow({ where: { id: bezug.id } })
+      return zeile.tenantId
+    }
+    case 'assignment':
+      return welt.betreiberMandant
+  }
 }
 
 /** Eine Tarifzuordnung (SPEC 3.3) — die Grenze aus 5.1.2, die Frist aus 5.2.2. */

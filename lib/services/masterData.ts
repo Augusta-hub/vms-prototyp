@@ -15,6 +15,7 @@
  */
 import { checkPermission, type ResourceRef, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
+import { pruefeErlaubnis } from '../masterdata/invariants'
 import { prisma } from '../prisma'
 import { concealedFields, project } from '../visibility/projections'
 import {
@@ -813,12 +814,19 @@ export async function createSupplierPermit(
   if (input.permitNumber.trim() === '' || input.issuingAuthority.trim() === '') {
     return failure('Erlaubnisnummer und Erlaubnisbehörde sind Pflicht (3.2).')
   }
-  if (input.permitType === 'fixedTerm' && input.validTo === null) {
-    return failure('Eine befristete Erlaubnis braucht ein Ende (3.2).')
-  }
-  if (input.permitType === 'unlimited' && input.validTo !== null) {
-    return failure('Eine unbefristete Erlaubnis hat kein Ende (3.2).')
-  }
+  // Die Invarianten aus 3.2 stehen in lib/masterdata/invariants.ts — dort, wohin
+  // das Schema an `validTo` verweist, und nicht zweimal.
+  const verletzungen = pruefeErlaubnis({
+    permitType: input.permitType,
+    validFrom: input.validFrom,
+    validTo: input.validTo,
+    verificationStatus: 'submitted',
+    verifiedAt: null,
+    verifiedById: null,
+    rejectionReason: null,
+  })
+  const erste = verletzungen[0]
+  if (erste !== undefined) return failure(`${erste.feld}: ${erste.grund}`, erste.specReference)
 
   const engagements = await loadEngagements()
   const decision = checkPermission(
