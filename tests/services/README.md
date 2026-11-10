@@ -53,6 +53,7 @@ Personen, Firmen und Datumsangaben im Fixture sind synthetisch (Regel 3).
 | `fixture.ts` | leert die Datenbank und baut die synthetische Welt |
 | `staffing.test.ts` | die Prüfungen P1 bis P11 an den Übergängen aus 4.2 und 4.3 |
 | `documents.test.ts` | der Nachweisfluss aus 5.4.3 und die Sichtbarkeit der Nachweise (3.10, Fußnoten [34] bis [37]) |
+| `supplierStatus.test.ts` | der Lieferantenstatus aus 4.6 und die Zeilen Q41 bis Q44 |
 | `masterData.test.ts` | bisher nur: die Invarianten der AÜG-Erlaubnis am Schreibweg (3.2) |
 
 Die Welt ist klein: ein Betreiber, ein Kunde mit Standort und Kostenstelle, ein
@@ -68,5 +69,6 @@ auch für einen Arbeitgeber aus dem Konzern des Entleihers.
   dieselbe.
 - **P7** ist nirgends angebunden: Kapitel 3 führt für die Arbeitskampfanzeige
   kein Feld (*offene Frage 30*).
-- **Q37, Q38 und Q41 bis Q44** warten auf die Statusmodelle 4.4, 4.5 und 4.6.
-  Sobald es sie gibt, gehören ihre Sperren und Warnungen hierher.
+- **Q37, Q38 und Q39 bis Q40** warten auf die Statusmodelle 4.4 (Stundenzettel)
+  und 4.5 (Beleg). Sobald es sie gibt, gehören ihre Sperren und Warnungen
+  hierher. **Q41 bis Q44** sind mit 4.6 angebunden und hier geprüft.

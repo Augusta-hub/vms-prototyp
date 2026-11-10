@@ -415,7 +415,7 @@ export async function baueWelt(): Promise<Welt> {
   // keine rechtmäßige Welt, sondern ein Datenfehler; den prüft ein eigener
   // Test, nicht die Grundlage.
   for (const lieferantId of [lieferant.id, zweiterLieferant.id]) {
-    await prisma.collectiveAgreementAssignment.create({
+    const zuordnung = await prisma.collectiveAgreementAssignment.create({
       data: {
         tenantId: betreiber.id,
         collectiveAgreement: 'Beispieltarif Z1',
@@ -426,6 +426,15 @@ export async function baueWelt(): Promise<Welt> {
         // Leer heißt: gesetzliche Regelfrist von neun Monaten (5.2.2, Fall 2).
         equalPayDeadlineMonths: null,
       },
+    })
+    // **Die Tarifbindung steht auch am Lieferanten** (`supplierCollectiveAgreement`,
+    // 3.2): das Feld ist ab Status `active` Pflicht, und 4.6 macht es zur
+    // Vorbedingung des Freischaltens. Die Zuordnung allein anzulegen, ohne sie
+    // am Lieferanten zu vermerken, war eine Lücke dieser Welt — geprüft wird
+    // sie von `pruefeLieferant` in lib/masterdata/invariants.ts.
+    await prisma.supplier.update({
+      where: { id: lieferantId },
+      data: { supplierCollectiveAgreementId: zuordnung.id },
     })
   }
 
@@ -782,6 +791,10 @@ export async function legeTarifzuordnungAn(
  * ersten Überlassungstag.
  */
 export async function entferneVerleiherzuordnungen(): Promise<void> {
+  // Zuerst den Verweis am Lieferanten lösen (3.2): ohne das verhindert der
+  // Fremdschlüssel das Löschen — und genau dieser Verweis ist der Grund, warum
+  // eine Welt ohne Verleihertarif nach 3.2 ein Datenfehler ist.
+  await prisma.supplier.updateMany({ data: { supplierCollectiveAgreementId: null } })
   await prisma.collectiveAgreementAssignment.deleteMany({
     where: { appliesToType: 'supplier' },
   })

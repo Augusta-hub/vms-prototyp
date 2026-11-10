@@ -19,6 +19,10 @@ import {
   createSupplier,
   createSupplierPermit,
 } from '../../lib/services/masterData'
+import {
+  transitionSupplier,
+  type SupplierTransitionInput,
+} from '../../lib/services/supplierStatus'
 
 const PATH = '/stammdaten'
 
@@ -155,6 +159,26 @@ export async function createComparableWageAction(formData: FormData): Promise<vo
           ? wageSource
           : 'estimate',
       validFrom: date(formData, 'validFrom') ?? new Date(),
+    }),
+  )
+}
+
+/**
+ * Statuswechsel am Lieferanten (SPEC 4.6). Welche Begründung Pflicht ist,
+ * entscheidet der Übergang — die Handlung reicht alle drei Felder durch und
+ * lässt das Modell prüfen.
+ */
+export async function transitionSupplierAction(formData: FormData): Promise<void> {
+  const { identity, hint } = await currentIdentity()
+  if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
+  back(
+    await transitionSupplier(identity, {
+      supplierId: text(formData, 'supplierId'),
+      transition: text(formData, 'transition') as SupplierTransitionInput['transition'],
+      blockReason: optionalText(formData, 'blockReason'),
+      unblockReason: optionalText(formData, 'unblockReason'),
+      reactivationReason: optionalText(formData, 'reactivationReason'),
+      validTo: date(formData, 'validTo'),
     }),
   )
 }

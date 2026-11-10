@@ -16,6 +16,8 @@
 import { checkPermission, type ResourceRef, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { pruefeErlaubnis } from '../masterdata/invariants'
+import { attemptTransition } from '../status/machine'
+import { SUPPLIER_MODEL, type SupplierFacts } from '../status/supplier'
 import { prisma } from '../prisma'
 import { concealedFields, project } from '../visibility/projections'
 import {
@@ -29,6 +31,7 @@ import {
   masterAgreementRef,
   PermissionDenied,
   rateCardRef,
+  TransitionRejected,
   siteRef,
   success,
   supplierPermitRef,
@@ -36,6 +39,32 @@ import {
   type ActionResult,
   type Engagements,
 } from './common'
+
+/**
+ * Vorbelegung der Tatsachen aus 4.6 für die **Anlage**: dort ist nichts von
+ * dem erhoben, was das Freischalten später verlangt — es gibt noch keinen
+ * Rahmenvertrag, keine Erlaubnis und keinen Nachweis. Die Vorbedingungen der
+ * Anlage lesen diese Felder nicht; sie stehen hier, damit der Vertrag
+ * vollständig ist und nicht, weil sie etwas behaupten.
+ */
+const LEERE_LIEFERANTENTATSACHEN: SupplierFacts = {
+  supplierNumber: '',
+  legalName: '',
+  addressComplete: false,
+  contactCount: 0,
+  hasActiveMasterAgreement: false,
+  hasCollectiveAgreement: false,
+  hasAcceptedValidPermit: false,
+  mandatoryDocumentsPresent: false,
+  blockReason: null,
+  blockedById: null,
+  actingUserId: '',
+  unblockReason: null,
+  reactivationReason: null,
+  validTo: null,
+  runningAssignments: 0,
+  evaluationDate: new Date(0),
+}
 
 /** Eine Zeile einer Liste in der sichtbaren Fassung (2.3). */
 export interface VisibleRow<T> {
@@ -739,12 +768,6 @@ export async function createSupplier(
   identity: LoadedIdentity,
   input: NewSupplierInput,
 ): Promise<ActionResult> {
-  if (input.supplierNumber.trim() === '' || input.legalName.trim() === '') {
-    return failure('Lieferantennummer und Firmenname sind Pflicht (3.2).')
-  }
-  if (input.contactName.trim() === '') {
-    return failure('Mindestens ein Ansprechpartner ist Pflicht (3.2, 4.6).')
-  }
   const engagements = await loadEngagements()
   try {
     await prisma.$transaction(async (tx) => {
@@ -756,13 +779,28 @@ export async function createSupplier(
           createdById: identity.user.id,
         },
       })
-      const decision = checkPermission(
-        identity.subject,
-        'create',
-        supplierRef({ tenantId: tenant.id, status: 'onboarding' }, engagements),
-      )
-      if (!decision.allowed) {
-        throw new PermissionDenied(decision.denial.reason, decision.denial.specReference)
+      // Die Anlage ist der Übergang `— → onboarding` aus 4.6 — mit seiner
+      // auslösenden Rolle und seinen Vorbedingungen. Sie hier noch einmal von
+      // Hand zu prüfen wäre eine zweite Fassung derselben Zeile.
+      const outcome = attemptTransition(SUPPLIER_MODEL, 'create', {
+        currentStatus: null,
+        subject: identity.subject,
+        resource: supplierRef({ tenantId: tenant.id, status: 'onboarding' }, engagements),
+        facts: {
+          ...LEERE_LIEFERANTENTATSACHEN,
+          supplierNumber: input.supplierNumber,
+          legalName: input.legalName,
+          addressComplete:
+            input.addressStreet.trim() !== '' &&
+            input.addressPostalCode.trim() !== '' &&
+            input.addressCity.trim() !== '',
+          contactCount: input.contactName.trim() === '' ? 0 : 1,
+          actingUserId: identity.user.id,
+          evaluationDate: input.validFrom,
+        },
+      })
+      if (!outcome.applied) {
+        throw new TransitionRejected(outcome.rejection.reason, outcome.rejection.specReference)
       }
       const supplier = await tx.supplier.create({
         data: {

@@ -886,6 +886,17 @@ model Supplier {
   blockedAt                     DateTime?
   blockedById                   String?
   blockedBy                     User?                          @relation("SupplierBlockedBy", fields: [blockedById], references: [id])
+  /// Aufhebungsgrund der Sperre (`blocked` → `active`) und Begründung der
+  /// Reaktivierung (`inactive` → `active`).
+  ///
+  /// **Über 3.2 hinaus.** Die Attributtabelle in 3.2 führt für beide kein
+  /// Feld; 4.6 macht sie zur Vorbedingung („Sperrgrund behoben und
+  /// **dokumentiert**", „Begründung Pflicht") und legt sie als Nebenwirkung in
+  /// den **Protokolleintrag** — und das Protokoll aus 3.12 ist nicht
+  /// umgesetzt. Ohne Feld wäre die Vorbedingung nicht prüfbar und die
+  /// Dokumentation nicht vorhanden. Steht als *offene Frage 43* in Kapitel 7.
+  unblockReason                 String?
+  reactivationReason            String?
   validFrom                     DateTime
   validTo                       DateTime?
   externalReference             String?

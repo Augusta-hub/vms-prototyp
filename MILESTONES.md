@@ -154,6 +154,16 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   Lieferant die eigenen und ändert sie nur bis zur Anerkennung ([37]).
   **Keine Ablage** hinter `fileRef` und **keine** Benachrichtigungen (offene
   Fragen 1 und 2)
+- ✅ **Lieferantenstatus (SPEC 4.6) mit Dienst und Oberfläche** — das letzte
+  Statusmodell des Kernprozesses: `onboarding` → `active` ↔ `blocked` und aus
+  allen dreien `inactive`, mit drei getrennten Wegen nach `active`
+  (freischalten, entsperren, reaktivieren) und ihren verschiedenen
+  Vorbedingungen. Damit greifen **Q41 bis Q44**: P9 und P10 sperren
+  Freischalten, Entsperrung und Reaktivierung. Entsperrt wird nur durch `MA`
+  ([5]) und **nicht** durch die sperrende Person (2.4, Regel 5); die
+  Beauftragung endet erst, wenn kein Einsatz mehr läuft (4.3). Kein
+  zeitgesteuerter Übergang: der Ablauf der Erlaubnis wechselt keinen Status
+  (5.4.2 a), er sperrt über P9
 - ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
   Kandidat, Profilvorschlag und Personenidentität (SPEC 3.6) mit dem
   Statusmodell 4.2.3; die Datenminimierung aus 6.4 über die Offenlegungsstufe
@@ -186,7 +196,11 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 
 ## M5 — Zeiterfassung und Freigabe ⬜
 
-- ⬜ SPEC Kapitel 3.8 und 4.4 ausgearbeitet
+- ✅ SPEC Kapitel 3.8 und 4.4 ausgearbeitet — Stundenzettel, Freigabeschritt,
+  Zeitposition und Zuschlagsart samt Statusmodell stehen; **offene Frage 5**
+  (Anzahl und Zuständigkeit der Genehmigungsstufen) zieht sich durch das Modell
+  und ist vor der Umsetzung zu entscheiden, dazu Frage 16 (Erfassung je Tag
+  oder je Abschnitt) und Frage 21 (Abwesenheitsart, Art. 9 DSGVO)
 - ⬜ Stundenzettel, Zuschläge, Genehmigungsworkflow
 - ⬜ Zeitbezogene AÜG-Prüfungen (Unterbrechung, Fristenlauf)
 

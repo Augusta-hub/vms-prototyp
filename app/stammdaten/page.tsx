@@ -14,8 +14,14 @@ import {
   loadMasterDataOptions,
   type VisibleRow,
 } from '../../lib/services/masterData'
+import {
+  loadSupplierStatus,
+  reasonFieldFor,
+  SUPPLIER_TRANSITION_LABELS,
+  type SupplierStatusView,
+} from '../../lib/services/supplierStatus'
 import { currentIdentity } from '../identity'
-import { Meldung, Verdeckt, Wert } from '../ui'
+import { Meldung, Status, Verdeckt, Wert } from '../ui'
 import {
   createComparableWageAction,
   createCostCenterAction,
@@ -23,6 +29,7 @@ import {
   createPermitAction,
   createSiteAction,
   createSupplierAction,
+  transitionSupplierAction,
 } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +54,7 @@ export default async function StammdatenPage({
   const data = await loadMasterData(identity)
   const options = await loadMasterDataOptions(identity)
   const mayCreate = options.mayCreate
+  const supplierStatus = await loadSupplierStatus(identity)
 
   return (
     <>
@@ -197,6 +205,23 @@ export default async function StammdatenPage({
           </fieldset>
         </form>
       ) : null}
+
+      <h2>Lieferantenstatus (4.6)</h2>
+      <p className="hint">
+        Vier Zustände: <code>onboarding</code> → <code>active</code> ↔ <code>blocked</code>, und
+        aus allen dreien <code>inactive</code>. Die AÜG-Erlaubnis ist dabei{' '}
+        <strong>Vorbedingung, nicht Zustand</strong> — ihr Ablauf wechselt keinen Status (5.4.2 a),
+        sondern sperrt jede neue Einladung und jeden Einsatzstart über P9. Beim Freischalten,
+        Entsperren und Reaktivieren rechnen P9 und P10 (4.7, Q41 bis Q44); was fehlt, steht unten
+        im Klartext und nicht nur als fehlender Knopf.
+      </p>
+      {supplierStatus.length === 0 ? (
+        <p className="hint">Kein Lieferant sichtbar.</p>
+      ) : (
+        supplierStatus.map((supplier) => (
+          <Lieferantenstatus key={supplier.id} supplier={supplier} />
+        ))
+      )}
 
       <h2>AÜG-Erlaubnis (3.2)</h2>
       <p className="hint">
@@ -448,5 +473,101 @@ function Auswahl({
         ))}
       </select>
     </label>
+  )
+}
+
+/**
+ * Ein Lieferant mit seinem Status, den Handlungen, die 4.6 dieser Rolle aus
+ * diesem Zustand zulässt, und den Befunden aus Kapitel 5.
+ *
+ * Angeboten wird nur, was die Rolle auslösen **darf** — die Vorbedingungen
+ * stehen daneben als Text. Ein Knopf, den eine fehlende Vorbedingung
+ * verschwinden lässt, würde die Lage verschweigen (5.4.6: die Meldung nennt
+ * Nachweisart und Bezugsobjekt, nicht „Nachweise unvollständig").
+ */
+function Lieferantenstatus({ supplier }: { readonly supplier: SupplierStatusView }) {
+  return (
+    <fieldset>
+      <legend>
+        {supplier.supplierNumber} — {supplier.legalName} ·{' '}
+        <Status value={supplier.stateLabel} />
+      </legend>
+
+      {supplier.blockReason === null ? null : (
+        <p>
+          Sperrgrund: <Wert value={supplier.blockReason} />
+          {supplier.unblockReason === null ? null : (
+            <>
+              {' '}
+              · Aufhebungsgrund: <Wert value={supplier.unblockReason} />
+            </>
+          )}
+        </p>
+      )}
+      {supplier.reactivationReason === null ? null : (
+        <p>
+          Reaktivierungsgrund: <Wert value={supplier.reactivationReason} />
+        </p>
+      )}
+      {supplier.validTo === null ? null : (
+        <p>
+          Beauftragung endet: <Wert value={supplier.validTo} />
+        </p>
+      )}
+
+      <ul>
+        {supplier.findings.map((finding) => (
+          <li key={finding.check}>
+            <strong>{finding.check}</strong> {finding.satisfied ? '✓' : '✗'} — {finding.message}
+          </li>
+        ))}
+      </ul>
+
+      {supplier.blockers.length > 0 ? (
+        <p className="hint">
+          Offene Vorbedingungen für den nächsten Übergang nach <code>active</code>:{' '}
+          {supplier.blockers.join(' · ')}
+        </p>
+      ) : null}
+      {supplier.runningAssignments > 0 ? (
+        <p className="hint">
+          {supplier.runningAssignments} laufender Einsatz bzw. laufende Einsätze — die Beauftragung
+          lässt sich erst beenden, wenn sie beendet sind (4.6, 4.3).
+        </p>
+      ) : null}
+
+      {supplier.availableTransitions.length === 0 ? (
+        <p className="hint">Diese Rolle löst aus diesem Zustand keinen Übergang aus (2.2, 4.6).</p>
+      ) : (
+        supplier.availableTransitions
+          .filter((transition) => transition !== 'create')
+          .map((transition) => {
+            const reason = reasonFieldFor(
+              transition as Exclude<typeof transition, 'create'>,
+            )
+            return (
+              <form key={transition} action={transitionSupplierAction}>
+                <input type="hidden" name="supplierId" value={supplier.id} />
+                <input type="hidden" name="transition" value={transition} />
+                {reason === null ? null : (
+                  <label className="field">
+                    Begründung (Pflicht, 4.6)
+                    <input name={reason} required />
+                  </label>
+                )}
+                {transition === 'deactivate' ? (
+                  <label className="field">
+                    Ende der Beauftragung (`validTo`, Pflicht)
+                    <input type="date" name="validTo" required />
+                  </label>
+                ) : null}
+                <button type="submit">
+                  {SUPPLIER_TRANSITION_LABELS[transition as Exclude<typeof transition, 'create'>]}
+                </button>
+              </form>
+            )
+          })
+      )}
+    </fieldset>
   )
 }

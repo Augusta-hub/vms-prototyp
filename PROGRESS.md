@@ -5,6 +5,142 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-10 — Lieferantenstatus 4.6: Q41 bis Q44 greifen
+
+### Gemacht
+
+Das **letzte Statusmodell des Kernprozesses** ist umgesetzt: `onboarding` →
+`active` ↔ `blocked`, aus allen dreien `inactive`, und aus `inactive` zurück.
+Damit greifen die vier Querschnittszeilen, die 4.7 dem Lieferanten zuordnet —
+**Q41** (P9 beim Freischalten), **Q42** (P10 beim Freischalten), **Q43** (beide
+beim Entsperren) und **Q44** (beide bei der Reaktivierung).
+
+**Drei Wege nach `active`, drei Namen.** 4.6 führt sie in drei Zeilen mit
+**verschiedenen** Vorbedingungen: freischalten (Rahmenvertrag, Tarifbindung,
+P9, P10), entsperren (Aufhebungsgrund, Vier-Augen-Prinzip, P9, P10) und
+reaktivieren (Begründung, dazu alles vom Freischalten). Ein gemeinsamer
+Übergang „nach aktiv" hätte die Unterschiede verschluckt.
+
+**Die Anlage läuft jetzt auch über das Modell.** `createSupplier` prüfte
+Nummer, Namen und Ansprechpartner von Hand — eine zweite Fassung der Zeile
+`— → onboarding`. Sie ruft jetzt `attemptTransition`, und `common.ts` trägt
+dafür `TransitionRejected`: eine abgelehnte **Handlung** (4.0) ist fachlich
+etwas anderes als ein verweigerter **Zugriff** (2.3), auch wenn beide aus einer
+Transaktion zurückrollen müssen.
+
+**Neue Dateien:** `lib/status/supplier.ts(.test.ts)`,
+`lib/services/supplierStatus.ts`, `tests/services/supplierStatus.test.ts`. Dazu
+die Migration `20261110091628_lieferantenstatus_4_6_begruendungen`.
+
+### Entscheidungen
+
+1. **Der Stichtag ist der Tag des Übergangs, nicht „heute".** 5.0 führt dafür
+   eine eigene Zeile („Lieferant `onboarding` / `blocked` / `inactive` →
+   `active`"). Beides fällt im Betrieb meist zusammen — deshalb prüft ein
+   eigener Test mit einem Übergangstag **vier Monate in der Zukunft**, dass die
+   Erlaubnis gegen ihn und nicht gegen den Tag des Aufrufs gerechnet wird.
+   Ohne diesen Test wäre die Vertauschung unsichtbar gewesen.
+2. **Der Rahmenvertrag muss am Stichtag gelten, nicht nur `active` heißen.**
+   5.0 sagt: „Zeitraumbezogene Stammdaten werden mit dem Stichtag gelesen."
+   Ein ausgelaufener Vertrag im Status `active` ist nach 3.0 Festlegung 2 kein
+   gültiger Vertrag — der Status allein wäre die halbe Antwort.
+3. **Die Entsperrung verlangt keinen Rahmenvertrag.** 4.6 nennt dort
+   ausdrücklich nur „Erlaubnis gültig und anerkannt": die Entsperrung hebt eine
+   Sperre auf, sie ist nicht das erstmalige Freischalten. Ein Vertrag, der
+   zwischenzeitlich ausgelaufen ist, wirkt über P9 an jedem Vorgang — nicht
+   hier. Ein Test hält das fest, damit es nicht als Lücke „korrigiert" wird.
+4. **Das Vier-Augen-Prinzip filtert die Oberfläche mit.** Die angebotenen
+   Übergänge folgen Zustand, Rolle und Recht — **nicht** den Vorbedingungen:
+   eine fehlende Vorbedingung ist behebbar, und die Seite soll sagen, was
+   fehlt, statt den Weg zu verstecken (5.4.6). Zwei Angaben filtern trotzdem
+   mit, weil kein Eingabefeld sie heilt: ein laufender Einsatz und die Frage,
+   ob der Zugreifende selbst gesperrt hat.
+5. **Die offenen Vorbedingungen stehen im Klartext**, gelesen aus dem Modell
+   und nicht in der Oberfläche aufgezählt — so kann die Liste nicht veralten.
+   Die **Begründungen** gelten dabei als gegeben: sie sind Eingaben des
+   Übergangs, und „der Aufhebungsgrund ist Pflicht" vor dem Ausfüllen des
+   Feldes zu melden wäre kein Befund, sondern Rauschen.
+6. **Der Sperrvermerk bleibt nach dem Entsperren stehen.** 3.2 macht ihn
+   Pflicht **bei** `blocked`, nicht verboten danach; ohne ihn wäre später nicht
+   mehr zu sehen, wer gesperrt hatte und weshalb aufgehoben wurde. Die
+   Reaktivierung setzt dagegen `validTo` zurück: ein Ende in der Vergangenheit
+   würde dem Status `active` widersprechen.
+7. **P10 am Lieferanten prüft die Zeile des jeweiligen Übergangs** — Q42, Q43
+   oder Q44. Welche Nachweisarten der Katalog prüft, hängt am Prüfzeitpunkt
+   (5.4.4); die Zeile steht deshalb in der Meldung, und zwei Tests lesen sie
+   dort.
+
+### Was Q42 bis Q44 heute nicht leisten
+
+4.7 trägt für P10 an diesen Zeilen eine **Sperre**, der Pflichtkatalog in 5.4.4
+führt für den Lieferanten aber nur die **Unbedenklichkeitsbescheinigung** — und
+die trägt „nie Sperre". Die Tatsache ist deshalb in der Regel erfüllt, auch
+wenn der Nachweis fehlt. Das ist *offene Frage 31*, und sie hält ausdrücklich
+fest, dass die Rechnung dem Katalog folgt. Die Vorbedingung steht trotzdem im
+Modell: sie ist der Ort, an dem eine andere Antwort wirksam würde, ohne das
+Modell zu ändern. Gesperrt wird heute über **P9** — und das ist die Sperre, die
+3.10 und 5.4.4 für die AÜG-Erlaubnis vorsehen.
+
+### Zwei Felder über 3.2 hinaus
+
+4.6 verlangt den Sperrgrund „behoben **und dokumentiert**" und bei der
+Reaktivierung eine Begründung; beide legt es als Nebenwirkung in den
+**Protokolleintrag**. 3.2 führt dafür kein Feld, und das Protokoll aus 3.12 ist
+nicht umgesetzt — ohne Feld wäre die Vorbedingung nicht prüfbar und die
+Dokumentation nicht vorhanden. Das Schema trägt deshalb `unblockReason` und
+`reactivationReason`, wie 3.7 den Genehmigungsvermerk trägt (*Frage 39*). Neu
+als *offene Frage 43*.
+
+### Das Fixture war wieder nicht rechtmäßig
+
+Beide Lieferanten der Testwelt stehen auf `active`, trugen aber **keine**
+Tarifbindung (`supplierCollectiveAgreement`) — nach 3.2 Pflicht ab genau diesem
+Status, und nach 4.6 Vorbedingung des Freischaltens. Die Zuordnung lag vor, nur
+der Verweis am Lieferanten fehlte. Gefunden hat es die Invariante
+`pruefeLieferant`, die mit der letzten Arbeitseinheit entstanden ist; das
+Entfernen der Verleiherzuordnungen löst den Verweis jetzt zuerst.
+
+### Gemessen
+
+- `npm test`: **818 grün** in 37 Dateien, davon 30 neue zum Statusmodell.
+- `npm run test:services`: **98 grün** gegen PostgreSQL in 4 Dateien, davon 27
+  neue zu 4.6.
+- `npm run test:aueg`: **267 Szenarien, 120 grün, 0 rot** — unverändert; auch
+  der Kontrolllauf ohne Überspringen bleibt bei **0 verletzten Zusicherungen**.
+- `npm run typecheck`, `npm run build`, `npm run db:seed` (zweimal
+  hintereinander): fehlerfrei.
+- Keine der vier Dateien in `tests/aueg/` wurde angefasst.
+- **Sieben Mutationen**, jede gefangen: Vier-Augen-Prinzip entfernt (1 Modell,
+  1 Dienst), `MD` darf entsperren (1 Modell — der Dienst bleibt grün, weil
+  Fußnote [5] ihn über den Zielstatus zusätzlich verweigert), Beendigung ohne
+  Einsatzprüfung (1 + 1), Stichtag „heute" statt Tag des Übergangs (1),
+  Rahmenvertrag nur nach Status (1), P10 immer an Q42 (2), angebotene Übergänge
+  ohne Rechteprüfung (2).
+- Durch die Oberfläche belegt: `MD` sperrt L-2001 mit Grund, sieht danach
+  **keinen** Übergang mehr; `MA` entsperrt mit Aufhebungsgrund, und die Seite
+  meldet P9 und P10 an **Q43**. Beide Gründe bleiben lesbar. Ein Lieferant in
+  `onboarding`, dessen Erlaubnis nur eingereicht ist, lässt sich **nicht**
+  freischalten: „Vorbedingung nicht erfüllt: P9: AÜG-Erlaubnis anerkannt und am
+  Tag des Übergangs gültig (5.4.1)" — und die Seite nennt daneben den Grund im
+  Klartext („die Anerkennung … steht noch aus"). Danach neu geseedet.
+
+### Offen
+
+- **Keine Benachrichtigungen** und **kein Protokolleintrag**: 4.6 nennt beide
+  in jeder Zeile (3.12 ist nicht umgesetzt).
+- Die Nebenwirkungen „Zugänge des Lieferantenmandanten werden gesperrt" (3.11)
+  und „offene Einladungen und Angebote enden" (4.2) sind **nicht** umgesetzt.
+  Die Wirkung der Sperre auf **neue** Vorgänge trägt bereits das Statusmodell
+  der Einladung (4.2.1 prüft den Lieferantenstatus); das Beenden offener
+  Einladungen beim Übergang nach `inactive` fehlt.
+- Der **nächtliche Lauf N1** (5.5.1 c) würde den Ablauf der Erlaubnis
+  feststellen und das Sperren **vorschlagen**; der Prototyp hat keinen
+  Zeitgeber.
+- M4 ist damit bis auf **P7** (*offene Frage 30*) und die Teile, die auf die
+  Statusmodelle 4.4 und 4.5 warten, geschlossen.
+
+---
+
 ## 2026-11-06 — Nachweisfluss 5.4.3: Dienst, Sichtbarkeit und Oberfläche
 
 ### Gemacht

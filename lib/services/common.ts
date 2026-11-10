@@ -35,11 +35,31 @@ export class PermissionDenied extends Error {
 }
 
 /**
- * Ein Fehler beim Schreiben als Ergebnis — ein verweigerter Zugriff behält
- * seine Begründung aus der Prüffunktion.
+ * Wird in einer Transaktion geworfen, wenn ein **Übergang** aus Kapitel 4
+ * abgelehnt wurde — eine Vorbedingung, eine nicht auslösende Rolle, ein
+ * Zustand, aus dem der Übergang nicht führt.
+ *
+ * Getrennt von `PermissionDenied`, weil die beiden fachlich verschieden sind:
+ * ein verweigerter **Zugriff** ist eine Aussage über Rechte (2.2, 2.3), eine
+ * abgelehnte **Handlung** eine über den Vorgang (4.0). Beide müssen aus einer
+ * Transaktion heraus zurückrollen, deshalb sind beide Fehler.
+ */
+export class TransitionRejected extends Error {
+  constructor(
+    reason: string,
+    readonly specReference: string,
+  ) {
+    super(reason)
+    this.name = 'TransitionRejected'
+  }
+}
+
+/**
+ * Ein Fehler beim Schreiben als Ergebnis — ein verweigerter Zugriff und eine
+ * abgelehnte Handlung behalten ihre Begründung samt Fundstelle.
  */
 export function asFailure(error: unknown, prefix: string): ActionResult {
-  if (error instanceof PermissionDenied) {
+  if (error instanceof PermissionDenied || error instanceof TransitionRejected) {
     return failure(error.message, error.specReference)
   }
   const detail = error instanceof Error ? error.message.split('\n')[0] : String(error)
