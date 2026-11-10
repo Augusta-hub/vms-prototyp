@@ -26,6 +26,9 @@
 import { katalogwirkung, passtZumBezugsobjekt } from '../aueg/regeln/p10Nachweise'
 import { alsNachweiszeile, nachweisstand } from '../aueg/anbindung'
 import type { Nachweisart } from '../aueg/regelwerk'
+import { leseEintrag, type Protokollbezug } from '../audit/entry'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type Decision, type ResourceRef } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import {
@@ -46,6 +49,7 @@ import { project } from '../visibility/projections'
 import {
   asFailure,
   documentRef,
+  protokollbezug,
   failure,
   loadEngagements,
   success,
@@ -122,7 +126,15 @@ export async function loadDocuments(identity: LoadedIdentity): Promise<readonly 
   return views
 }
 
-/** Ein einzelner Nachweis, oder `null`, wenn diese Identität ihn nicht sieht. */
+/**
+ * Ein einzelner Nachweis, oder `null`, wenn diese Identität ihn nicht sieht.
+ *
+ * **Protokollpflichtig**, wenn der Zugriff über die Mandantengrenze geht
+ * (3.12, Nummer 2): der Betreiber, der einen Nachweis eines Lieferanten liest,
+ * und der Kunde, dem ein einsatzbezogener Nachweis zugänglich gemacht ist
+ * ([35]). Protokolliert wird hier der **einzelne** Zugriff, nicht die Liste —
+ * *offene Frage 45*.
+ */
 export async function loadDocument(
   identity: LoadedIdentity,
   documentId: string,
@@ -135,6 +147,19 @@ export async function loadDocument(
   const engagements = await loadEngagements()
   const decision = checkPermission(identity.subject, 'read', refFor(row, engagements))
   if (!decision.allowed) return null
+  if (decision.crossTenant) {
+    await protokolliereGetrennt(
+      leseEintrag({
+        decision,
+        bezug: protokollbezug('document', row.id, row.tenantId),
+        userId: identity.user.id,
+        occurredAt: new Date(),
+        reason:
+          'Lesezugriff über die Mandantengrenze auf einen einzelnen Nachweis (2.3, ' +
+          'Bedingung 3; 3.12, Nummer 2).',
+      }),
+    )
+  }
   return asView(row, decision, identity, engagements)
 }
 
@@ -387,20 +412,41 @@ export async function submitDocument(
     resource,
     facts: factsFor(felder, identity.user.id, null, false),
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    // Kein Dokument und damit keine technische Kennung: der Eintrag nennt die
+    // **Nachweisnummer** des beabsichtigten Vorgangs (*offene Frage 44*). Der
+    // Mandant steht dagegen fest — er folgt dem Bezugsobjekt (3.10).
+    return rejection(outcome, {
+      bezug: protokollbezug('document', documentNumber, subject.tenantId),
+      userId: identity.user.id,
+      statusTo: 'submitted',
+      operation: 'create',
+    })
+  }
 
   try {
-    await prisma.document.create({
-      data: {
-        tenantId: subject.tenantId,
-        documentNumber,
-        ...felder,
-        issuer: input.issuer,
-        issuedOn: input.issuedOn,
-        uploadedAt,
-        uploadedById: identity.user.id,
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          tenantId: subject.tenantId,
+          documentNumber,
+          ...felder,
+          issuer: input.issuer,
+          issuedOn: input.issuedOn,
+          uploadedAt,
+          uploadedById: identity.user.id,
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('document', document.id, document.tenantId),
+          userId: identity.user.id,
+          occurredAt: uploadedAt,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Nachweis konnte nicht eingestellt werden')
@@ -497,24 +543,45 @@ async function decide(
     resource: refFor(row, engagements),
     facts,
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug('document', row.id, row.tenantId),
+      userId: identity.user.id,
+      statusFrom: row.verificationStatus,
+      statusTo: DOCUMENT_MODEL.transitions[transition].to,
+    })
+  }
 
   try {
-    await prisma.document.update({
-      where: { id: row.id },
-      data:
-        transition === 'accept'
-          ? {
-              verificationStatus: 'accepted',
-              verifiedAt,
-              verifiedById: identity.user.id,
-              updatedById: identity.user.id,
-            }
-          : {
-              verificationStatus: 'rejected',
-              rejectionReason: input.rejectionReason,
-              updatedById: identity.user.id,
-            },
+    await prisma.$transaction(async (tx) => {
+      await tx.document.update({
+        where: { id: row.id },
+        data:
+          transition === 'accept'
+            ? {
+                verificationStatus: 'accepted',
+                verifiedAt,
+                verifiedById: identity.user.id,
+                updatedById: identity.user.id,
+              }
+            : {
+                verificationStatus: 'rejected',
+                rejectionReason: input.rejectionReason,
+                updatedById: identity.user.id,
+              },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('document', row.id, row.tenantId),
+          userId: identity.user.id,
+          occurredAt: verifiedAt,
+          // Die Zurückweisung trägt eine Pflichtbegründung (3.10, 5.4.3); sie
+          // gehört nach 3.12 in den Eintrag.
+          reason: transition === 'reject' ? input.rejectionReason : null,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Die Entscheidung über den Nachweis konnte nicht gespeichert werden')
@@ -1105,7 +1172,34 @@ function day(value: Date | null): string | null {
   return value === null ? null : value.toISOString().slice(0, 10)
 }
 
-function rejection(outcome: TransitionOutcome<DocumentState>): ActionResult {
+/**
+ * Eine abgelehnte Handlung: Ergebnis **und** Audit-Eintrag (3.12, „abgelehnte
+ * Zugriffe werden ebenfalls protokolliert").
+ *
+ * Beides an einer Stelle, damit kein Weg aus diesem Modul eine Ablehnung
+ * zurückgibt, ohne sie zu protokollieren.
+ */
+async function rejection(
+  outcome: TransitionOutcome<DocumentState>,
+  protokoll: {
+    readonly bezug: Protokollbezug
+    readonly userId: string
+    readonly statusFrom?: string | null
+    readonly statusTo: string
+    readonly operation?: 'create' | 'transition'
+  },
+): Promise<ActionResult> {
   if (outcome.applied) return success('')
+  await protokolliereGetrennt(
+    ablehnungsEintrag({
+      rejection: outcome.rejection,
+      bezug: protokoll.bezug,
+      userId: protokoll.userId,
+      occurredAt: new Date(),
+      statusFrom: protokoll.statusFrom ?? null,
+      statusTo: protokoll.statusTo,
+      ...(protokoll.operation !== undefined ? { operation: protokoll.operation } : {}),
+    }),
+  )
   return failure(outcome.rejection.reason, outcome.rejection.specReference)
 }

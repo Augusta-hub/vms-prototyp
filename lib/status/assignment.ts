@@ -123,12 +123,14 @@ type AssignmentPrecondition = Precondition<AssignmentFacts>
 type AssignmentTransition = TransitionDefinition<AssignmentState, AssignmentFacts>
 
 const permitValid: AssignmentPrecondition = {
+  ruleRef: 'P9',
   description: 'P9: AÜG-Erlaubnis des Lieferanten anerkannt und gültig (5.4.1).',
   specReference: 'SPEC 4.3.1; 5.4.1',
   isSatisfied: (facts) => facts.hasAcceptedValidPermit,
 }
 
 const noIndustrialAction: AssignmentPrecondition = {
+  ruleRef: 'P7',
   description:
     'P7: kein Arbeitskampf am Standort oder Zusicherung nach § 11 Abs. 5 Satz 2 AÜG (5.3.2).',
   specReference: 'SPEC 4.3.1; 5.3.2',
@@ -136,6 +138,7 @@ const noIndustrialAction: AssignmentPrecondition = {
 }
 
 const withinMaxDuration: AssignmentPrecondition = {
+  ruleRef: 'P1',
   description: 'P1: Fristende der Höchstüberlassungsdauer nicht erreicht — sonst Sperre (5.1).',
   specReference: 'SPEC 4.3.1; 5.1, 5.5.5',
   isSatisfied: (facts) => !facts.maxDurationExceeded,
@@ -211,12 +214,14 @@ const TRANSITIONS = {
       },
       withinMaxDuration,
       {
+        ruleRef: 'P8',
         description: 'P8: Kennzeichnung und Konkretisierung vollständig (5.3.3).',
         specReference: 'SPEC 4.3.1, — → planned; 5.3.3',
         isSatisfied: (facts) => facts.concretizationComplete,
       },
       permitValid,
       {
+        ruleRef: 'P6',
         description:
           'P6: Erklärung zur Vorbeschäftigung liegt vor — ohne sie ist die Drehtürprüfung nicht ' +
           'prüfbar und der Übergang gesperrt (5.3.1).',
@@ -246,6 +251,7 @@ const TRANSITIONS = {
       },
       permitValid,
       {
+        ruleRef: 'P10',
         description: 'P10: Pflichtnachweise vorhanden (5.4.4).',
         specReference: 'SPEC 4.3.1, planned → active; 5.4.4',
         isSatisfied: (facts) => facts.mandatoryDocumentsPresent,
@@ -253,16 +259,19 @@ const TRANSITIONS = {
       noIndustrialAction,
       withinMaxDuration,
       {
+        ruleRef: 'P8',
         description: 'P8: Konkretisierung vollständig und rechtzeitig (5.3.3).',
         specReference: 'SPEC 4.3.1, planned → active; 5.3.3',
         isSatisfied: (facts) => facts.concretizationComplete,
       },
       {
+        ruleRef: 'P11',
         description: 'P11: Arbeitsverhältnis beim Verleiher besteht am ersten Überlassungstag (5.3.4).',
         specReference: 'SPEC 4.3.1, planned → active; 5.3.4',
         isSatisfied: (facts) => facts.employmentRelationshipOnFirstDay,
       },
       {
+        ruleRef: 'P4',
         description:
           'P4: Vergleichsentgelt vorhanden, soweit Equal Pay ab dem ersten Tag geschuldet ist ' +
           '(5.2).',

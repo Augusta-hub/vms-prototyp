@@ -101,6 +101,7 @@ model Tenant {
   responsibilityScopes ResponsibilityScope[]
   delegations          Delegation[]
   accountAssignments   AccountAssignment[]   @relation("AccountAssignmentCustomerTenant")
+  auditEntries         AuditEntry[]          @relation("AuditTenant")
 
   // Fachmodule 3.1 bis 3.5. Der Mandant trägt die Mandantengrenze aus 2.3;
   // jedes mandantengebundene Objekt hängt deshalb an genau einem Mandanten.
@@ -286,6 +287,7 @@ model User {
   createdInterruptions            AssignmentInterruption[]   @relation("InterruptionCreatedBy")
   updatedInterruptions            AssignmentInterruption[]   @relation("InterruptionUpdatedBy")
   deactivatedInterruptions        AssignmentInterruption[]   @relation("InterruptionDeactivatedBy")
+  auditEntries                    AuditEntry[]               @relation("AuditActor")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -323,6 +325,7 @@ model RoleAssignment {
 
   responsibilityScopes ResponsibilityScope[]
   delegations          Delegation[]
+  auditEntries         AuditEntry[]          @relation("AuditActingAs")
 
   @@index([userId])
   @@index([tenantId])
@@ -427,6 +430,8 @@ model Delegation {
   deactivatedAt   DateTime?
   deactivatedById String?
   deactivatedBy   User?     @relation("DelegationDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  auditEntries AuditEntry[] @relation("AuditDelegation")
 
   @@index([delegatedRoleAssignmentId])
   @@index([delegateUserId])
@@ -2155,4 +2160,128 @@ model Document {
   @@index([assignmentId])
   @@index([siteId])
   @@index([documentCategory])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Fachmodul 3.12 — Audit-Eintrag (fachliches Protokoll)
+//
+// Zwei Eigenschaften unterscheiden dieses Modell von allen anderen:
+//
+//  - **Unveränderlichkeit.** 3.12 sagt: Einträge entstehen ausschließlich
+//    durch das System und sind für jede Rolle unveränderlich — deshalb trägt
+//    die Zeile in 2.2 kein `Ä` und kein `X` ([39]). Die Migration legt dafür
+//    einen Datenbank-Trigger an: `UPDATE` und `DELETE` auf dieser Tabelle
+//    scheitern. Eine Korrektur erzeugt einen **neuen** Eintrag.
+//  - **Lückenlosigkeit.** `entryNumber` ist fortlaufend und lückenlos;
+//    „Lücken sind ein Befund, kein Betriebszustand" (3.12). Eine
+//    Datenbanksequenz leistet das nicht — sie lässt bei jedem Rollback eine
+//    Lücke. Die Nummer kommt deshalb aus `AuditSequence`, einer Zeile, die
+//    der schreibende Vorgang sperrt (lib/audit/record.ts).
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Operationen des Protokolls — dieselben wie in 2.2 (3.12).
+enum AuditOperation {
+  create
+  read
+  update
+  transition
+  delete
+}
+
+/// Ergebnis eines protokollierten Zugriffs (3.12). `denied` ist die
+/// Verweigerung nach Kapitel 2, `blocked` die Sperre einer Prüfung aus
+/// Kapitel 5 (5.5).
+enum AuditResult {
+  success
+  denied
+  blocked
+}
+
+/// Audit-Eintrag (`auditEntry`, SPEC 3.12) — das fachliche Protokoll.
+///
+/// Der Eintrag gehört technisch dem Betreiber, wird aber dem Mandanten des
+/// betroffenen **Objekts** zugeordnet: darauf beruht die Sichtbarkeit nach
+/// [39] (3.12).
+model AuditEntry {
+  id String @id @default(cuid())
+
+  /// Fortlaufend und lückenlos (3.12). Vergeben in lib/audit/record.ts.
+  entryNumber Int      @unique
+  occurredAt  DateTime
+
+  /// Handelnder Benutzer. Leer **nur** beim Systemlauf — dann trägt
+  /// `systemActor` das Systemkennzeichen (3.12, 4.0 Regel 10).
+  actorUserId String?
+  /// `Restrict`, nicht `SetNull`: wird der Benutzer physisch gelöscht, darf
+  /// der Eintrag nicht stillschweigend seinen Handelnden verlieren (3.12).
+  /// Die Löschung wird verweigert — nach 2.2 ist `X` ohnehin Deaktivierung,
+  /// und physisches Löschen folgt allein 6.6. Die Spannung zum Löschanspruch
+  /// ist *offene Frage 22* und wird hier sichtbar, nicht weggeräumt.
+  actorUser   User?   @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  /// Systemkennzeichen statt eines Benutzers (3.12). Genau eines von beiden
+  /// ist gesetzt — geprüft in lib/audit/entry.ts.
+  systemActor String?
+
+  /// In welcher Funktion gehandelt wurde (3.12). Pflicht bei
+  /// `result = success`; bei einer Verweigerung vor der Matrix gibt es keine
+  /// Zuweisung, die der Eintrag nennen könnte — *offene Frage 44*.
+  actingAsRoleAssignmentId String?
+  actingAsRoleAssignment   RoleAssignment? @relation("AuditActingAs", fields: [actingAsRoleAssignmentId], references: [id], onDelete: Restrict)
+
+  /// Vertretungsvermerk — Pflicht bei Handlung in Vertretung (2.4, Regel 6).
+  delegationId String?
+  delegation   Delegation? @relation("AuditDelegation", fields: [delegationId], references: [id], onDelete: Restrict)
+
+  /// Mandant des **Objekts**, Grundlage der Sichtbarkeit nach [39] (3.12).
+  tenantId String
+  tenant   Tenant @relation("AuditTenant", fields: [tenantId], references: [id])
+
+  /// Objektname aus Kapitel 3 (`ModelName` in lib/authz/resources.ts).
+  objectType String
+  objectRef  String
+
+  operation AuditOperation
+
+  /// Pflicht bei `transition` (3.12). `statusFrom` ist bei der Anlage leer.
+  statusFrom String?
+  statusTo   String?
+
+  /// Pflicht bei `update`: Liste aus Feld, Wert vorher, Wert nachher (3.12).
+  /// Umfang und Aufbewahrung richten sich nach 6.6.
+  changedFields Json?
+
+  /// Pflicht bei Korrektur und Übersteuerung ([28], 5.5).
+  reason String?
+
+  /// Ausgelöste Regel aus Kapitel 5 — bei Prüfergebnissen und Sperren (3.12).
+  ruleRef String?
+
+  result AuditResult
+
+  /// Lesender oder schreibender Zugriff über die Mandantengrenze hinweg
+  /// (2.3, Bedingung 3). Kein Feld aus 3.12, sondern die Begründung dafür,
+  /// **warum** ein Lesezugriff überhaupt protokolliert wurde.
+  crossTenant Boolean @default(false)
+
+  /// Satz technischer Merkmale; Umfang ist in **6.8** festzulegen (3.12).
+  /// Bis dahin leer: IP-Adressen sind personenbezogen.
+  clientContext Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([objectType, objectRef])
+  @@index([actorUserId])
+  @@index([occurredAt])
+}
+
+/// Der Zähler für `entryNumber` (3.12, „fortlaufend, lückenlos").
+///
+/// Eine einzige Zeile. Wer einen Eintrag schreibt, sperrt sie in derselben
+/// Transaktion (`SELECT ... FOR UPDATE`) und erhöht sie — damit ist die Folge
+/// auch bei gleichzeitigen Vorgängen lückenlos, und ein Rollback gibt die
+/// Nummer wieder frei. Eine Datenbanksequenz täte das nicht.
+model AuditSequence {
+  id              Int @id @default(1)
+  lastEntryNumber Int @default(0)
 }

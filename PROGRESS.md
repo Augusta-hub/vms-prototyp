@@ -5,6 +5,129 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-10 — Protokoll 3.12: das fachliche Protokoll greift
+
+### Gemacht
+
+Der **Audit-Eintrag** aus 3.12 ist umgesetzt — und damit das, was in vier
+Arbeitseinheiten hintereinander als fehlend in diesem Protokoll stand. Jede
+schreibende Operation der sechs Fachdienste erzeugt jetzt einen Eintrag, in
+**derselben** Transaktion wie die Handlung: 29 Schreibwege in `masterData.ts`,
+`demand.ts`, `documents.ts`, `staffing.ts`, `supplierStatus.ts` und
+`workerIdentity.ts`.
+
+**Neue Dateien:** `lib/audit/entry.ts(.test.ts)`, `lib/audit/record.ts`,
+`lib/audit/transitions.ts`, `lib/services/audit.ts`, `app/protokoll/page.tsx`,
+`tests/services/audit.test.ts`. Dazu die Migrationen
+`20261110153356_protokoll_3_12_audit_eintrag` (Tabelle, Zähler und der
+Unveränderlichkeits-Trigger) und `20261110161051_protokoll_3_12_verweise_schuetzen`.
+
+Die Zeile „Audit-Eintrag (3.12)" in 2.2 ist belegt, mit Fußnote **[39]** — und
+sie ist die **einzige** Zeile der Matrix ohne `MA_FULL`: nur `L`, in jeder
+Spalte.
+
+### Entscheidungen
+
+1. **Lückenlosigkeit braucht einen Zähler, keine Sequenz.** 3.12 nennt Lücken
+   in der Nummernfolge „ein Befund, kein Betriebszustand". Eine
+   Datenbanksequenz leistet das nicht — sie zieht bei jedem Rollback eine
+   Nummer, die niemand mehr verwendet. Die Nummer kommt deshalb aus einer
+   einzigen Zeile (`AuditSequence`), die der schreibende Vorgang mit
+   `SELECT ... FOR UPDATE` sperrt: gleichzeitige Vorgänge warten aufeinander,
+   und ein Rollback gibt die Nummer zurück.
+2. **Der Eintrag teilt das Schicksal seiner Handlung — außer bei der
+   Ablehnung.** Ein erfolgreicher Eintrag liegt in derselben Transaktion:
+   protokolliert wird, was geschehen ist. Ein **abgelehnter** Zugriff rollt die
+   Handlung ja gerade zurück, und 3.12 verlangt den Eintrag trotzdem — er
+   braucht deshalb eine **eigene** Transaktion (`protokolliereGetrennt`). Wäre
+   er in derselben, wäre die Spur genau dort blind, wo sie am meisten taugt.
+3. **Verweigerung und Sperre sind zwei Ergebnisse, nicht eines.** 4.0 Regel 5
+   unterscheidet sie: eine Sperre aus Kapitel 5 verhindert eine Handlung, die
+   die Rolle **durfte**. Erkennbar ist sie an der neuen `ruleRef` an der
+   Vorbedingung — nur eine Vorbedingung, die auf eine Prüfung aus Kapitel 5
+   zeigt, wird als `blocked` protokolliert; eine fehlende Pflichtangabe oder
+   das Vier-Augen-Prinzip ist `denied`. Die `ruleRef` steht jetzt an allen
+   17 Vorbedingungen der Statusmodelle, die eine Prüfung P1 bis P11 nennen.
+4. **Unveränderlichkeit in zwei Schichten.** Die Matrix nennt für 3.12 keine
+   schreibende Operation ([39]) — und die Migration legt zusätzlich einen
+   Trigger an, der `UPDATE` und `DELETE` auf der Tabelle verweigert. Ohne ihn
+   wäre die Unveränderlichkeit eine Zusage der Anwendung über sich selbst. Der
+   Trigger hat sofort zugeschlagen: der **Seed** scheiterte an ihm, weil er
+   Benutzer löscht und der Fremdschlüssel die Einträge stillschweigend auf
+   `NULL` gesetzt hätte. Die Verweise stehen deshalb jetzt auf `Restrict`, und
+   der Seed leert das Protokoll mit `TRUNCATE` — dem Verwaltungsweg, der keine
+   Zeilentrigger auslöst.
+5. **Geprüft wird vor dem Schreiben, nicht mitten in der Transaktion.**
+   `createCustomer` und `createSupplier` prüften das Recht **nachdem** sie den
+   Mandanten angelegt hatten; der verweigerte Versuch hätte seinen eigenen
+   Protokolleintrag mit zurückgerollt. Beide prüfen jetzt vorher, mit einer
+   Platzhalterkennung für den noch nicht angelegten Mandanten — wie
+   `createSite` es ohnehin tat.
+6. **Lesezugriffe nur in den drei Fällen, die 3.12 nennt.** Protokolliert
+   werden die Offenlegung von **Klardaten** nach der Zusage (Nummer 3; 4.2.3,
+   6.4) und der Zugriff auf **einzeln** geladene Objekte über die
+   Mandantengrenze (Nummer 2). Lesezugriffe innerhalb des eigenen Mandanten auf
+   nicht personenbezogene Daten bleiben ungeschrieben — 3.12 schließt sie
+   ausdrücklich aus. Dass `objectRef` in 3.12 Pflicht ist und eine Liste damit
+   einen Eintrag **je Zeile und je Seitenaufruf** ergäbe, ist *offene Frage 45*.
+7. **Die Verknüpfungshistorie aus 3.6 ersetzt das Protokoll nicht.** Sie ist
+   ein Fachobjekt mit Begründung und Rückholbarkeit, der Audit-Eintrag der
+   Nachweis, wer sie geschrieben hat. `confirmLink` und `detachLink` schreiben
+   deshalb beides.
+
+### Belege
+
+Gemessen: **846** Einheitentests in 38 Dateien (28 neue), **120** Dienst-Tests
+in 5 Dateien (22 neue), AÜG-Suite unverändert **267 Szenarien, 120 grün, 0
+rot**, Kontrolllauf ohne Überspringen **0 verletzte Zusicherungen**,
+`npx tsc --noEmit` und `npm run build` fehlerfrei, `npm run db:seed` zweimal
+hintereinander.
+
+**Acht Mutationen, acht Befunde — einer davon in einem Test.** Dass der Eintrag
+nicht geschrieben wird, dass der Zähler außerhalb der Transaktion zieht, dass
+die Ablehnung nicht protokolliert wird, dass jede Ablehnung `denied` heißt, dass
+der Vertretungsvermerk verschwiegen wird, dass [39] dem Betreiber alles zeigt,
+dass die Klardaten-Protokollierung die Seite nicht prüft, dass der Trigger
+fehlt, dass `update` ohne geänderte Felder geduldet wird — jede dieser
+Verfälschungen macht punktgenau die Tests rot, die sie betrifft.
+
+**Die Mutation zum Zähler überlebte zuerst.** Der Test hieß „gibt die Nummer
+zurück, wenn der Vorgang zurückrollt", prüfte aber nur, dass eine Anlage, die
+**vor** dem Eintrag scheitert, keinen Eintrag hinterlässt — weil die
+Fachdienste den Eintrag als letzte Anweisung schreiben. Der Test heißt jetzt,
+was er prüft, und ein zweiter stellt den eigentlichen Fall von Hand her:
+Eintrag geschrieben, danach scheitert der Vorgang. Erst der tötet die Mutation.
+
+**Durch die Oberfläche gegengeprüft.** `MD` sperrt L-2001 mit Pflichtbegründung
+und sieht auf `/protokoll` anschließend: „1 Eintrag, Nummern 1 bis 1. Keine
+Lücke." — und **keinen** Eintrag. Genau das sagt [39]: die Lückenprüfung läuft
+über den ganzen Bestand, der Inhalt folgt der Sichtbarkeit (*offene Frage 46*).
+`MA` sieht beide Einträge mit Handelndem, Funktion, Mandant des Objekts,
+Statuswechsel und Begründung. Der Versuch, L-2002 mit nur eingereichter
+Erlaubnis freizuschalten, steht als Nummer 3 mit Ergebnis **„gesperrt"** und
+**„Regel: P9"** im Protokoll, während der Lieferant unverändert auf
+`onboarding` bleibt.
+
+### Offen
+
+- **Eskalationsstufen** (3.12, Nummer 4) und **Übersteuerungen einer
+  AÜG-Sperre** (Nummer 5) sind nicht protokolliert — beide Vorgänge hat der
+  Prototyp nicht. Benachrichtigungen fehlen weiter.
+- `clientContext` bleibt leer: den Umfang legt **6.8** fest, und IP-Adressen
+  sind personenbezogen.
+- Drei neue offene Fragen: **44** (die Pflichtfelder des Eintrags setzen einen
+  erfolgreichen Zugriff auf ein bestehendes Objekt voraus), **45**
+  (Granularität der Lesezugriffe), **46** (sieht `MD` das Protokoll zu den
+  Lieferanten, die er steuert?). *Frage 43* ist fortgeschrieben: die
+  Begründungen liegen jetzt an beiden Stellen, am Objekt und im Eintrag.
+- Die Aufbewahrung der Einträge und ihr Verhältnis zum Löschanspruch bleibt
+  *Frage 22*. Mit `Restrict` an den Verweisen ist die Spannung jetzt sichtbar:
+  ein Benutzer, der gehandelt hat, lässt sich nicht mehr physisch löschen.
+- Aus M4 unverändert offen: **P7** (*Frage 30*) und die Teile, die auf die
+  Statusmodelle 4.4 und 4.5 warten.
+
+---
+
 ## 2026-11-10 — Lieferantenstatus 4.6: Q41 bis Q44 greifen
 
 ### Gemacht

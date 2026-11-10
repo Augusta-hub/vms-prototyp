@@ -26,8 +26,10 @@
  *
  * Nebenwirkungen (Benachrichtigungen, Fristenlauf, Folgeübergänge) sind
  * **nicht** Teil dieser Schicht: sie gehören in den Vorgang, der den Übergang
- * vollzieht. Der Audit-Eintrag aus 4.0, Regel 3 entsteht mit 3.12 und ist noch
- * nicht umgesetzt; `TransitionOutcome` trägt die dafür nötigen Angaben.
+ * vollzieht. Dazu gehört auch der Audit-Eintrag aus 4.0, Regel 3: diese
+ * Schicht **schreibt nichts**, trägt aber in `TransitionOutcome` und
+ * `Rejection` alles, was der Eintrag braucht (3.12). Gebaut wird er in
+ * lib/audit/transitions.ts, geschrieben in der Transaktion des Vorgangs.
  */
 import { checkPermission, type Decision, type ResourceRef, type Subject } from '../authz/check'
 import { ROLE_CATALOG, type RoleCode } from '../authz/roles'
@@ -38,6 +40,17 @@ export interface Precondition<TFacts> {
   readonly description: string
   readonly specReference: string
   readonly isSatisfied: (facts: TFacts) => boolean
+  /**
+   * Die Prüfung aus Kapitel 5, die hinter dieser Vorbedingung steht — `P9`,
+   * `P10`, `P1` … Gesetzt **nur** dort, wo 4.7 dem Übergang eine Prüfung
+   * zuordnet; eine Vorbedingung des Vorgangs selbst (eine Pflichtangabe, eine
+   * Vier-Augen-Bedingung) trägt keine.
+   *
+   * Der Unterschied ist nicht kosmetisch: er entscheidet, ob eine
+   * fehlgeschlagene Vorbedingung im Protokoll als **Sperre** (`blocked`, mit
+   * `ruleRef`) oder als Verweigerung erscheint (3.12, 4.0 Regel 5).
+   */
+  readonly ruleRef?: string
 }
 
 /** Eine Zeile der Übergangstabelle eines Statusmodells. */
@@ -101,6 +114,17 @@ export interface Rejection {
   readonly kind: RejectionKind
   readonly reason: string
   readonly specReference: string
+  /** Die Prüfung aus Kapitel 5, an der es lag (nur bei `precondition`). */
+  readonly ruleRef?: string
+  /**
+   * Die Entscheidung der Prüffunktion, soweit sie schon getroffen war.
+   *
+   * Bei `precondition` **war** der Zugriff erlaubt — die Handlung scheitert
+   * erst an der Sache. Der Audit-Eintrag soll dann die Rollenzuweisung nennen,
+   * in deren Funktion es versucht wurde (3.12); ohne dieses Feld wäre sie beim
+   * Ablehnen verloren.
+   */
+  readonly decision?: Decision
 }
 
 export type TransitionOutcome<TState extends string> =
@@ -235,6 +259,8 @@ export function attemptTransition<
       kind: 'precondition',
       reason: `Vorbedingung nicht erfüllt: ${unmet.description}`,
       specReference: unmet.specReference,
+      ...(unmet.ruleRef !== undefined ? { ruleRef: unmet.ruleRef } : {}),
+      ...(decision !== null ? { decision } : {}),
     })
   }
 

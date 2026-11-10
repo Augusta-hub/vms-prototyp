@@ -25,7 +25,11 @@ Was ohne Datenbank **nicht** zu prüfen ist, steht hier:
   oder durchlässt (4.2.3, 4.3),
 - ob die abgeleiteten Felder `maxDurationEndDate` und `countedDurationDays` an
   **jedem** Einsatz der Kette landen (5.1.3, „Ergebnisfelder") — und ob eine
-  Sperre nichts schreibt (4.0, Regel 5).
+  Sperre nichts schreibt (4.0, Regel 5),
+- ob das **Protokoll** aus 3.12 die Zusicherungen hält, die nur die Datenbank
+  geben kann: lückenlose Eintragsnummern auch beim Rollback, `UPDATE` und
+  `DELETE`, die am Trigger scheitern, und ein Eintrag zum abgelehnten Versuch,
+  der die zurückgerollte Handlung überlebt.
 
 ## Welche Datenbank
 
@@ -55,6 +59,7 @@ Personen, Firmen und Datumsangaben im Fixture sind synthetisch (Regel 3).
 | `documents.test.ts` | der Nachweisfluss aus 5.4.3 und die Sichtbarkeit der Nachweise (3.10, Fußnoten [34] bis [37]) |
 | `supplierStatus.test.ts` | der Lieferantenstatus aus 4.6 und die Zeilen Q41 bis Q44 |
 | `masterData.test.ts` | bisher nur: die Invarianten der AÜG-Erlaubnis am Schreibweg (3.2) |
+| `audit.test.ts` | das fachliche Protokoll aus 3.12: Lückenlosigkeit, Unveränderlichkeit, abgelehnte Versuche, Vertretungsvermerk, Sichtbarkeit nach [39] und die Offenlegung von Klardaten |
 
 Die Welt ist klein: ein Betreiber, ein Kunde mit Standort und Kostenstelle, ein
 zweites Unternehmen desselben Konzerns, zwei Lieferanten und eine Person mit je
@@ -66,7 +71,8 @@ auch für einen Arbeitgeber aus dem Konzern des Entleihers.
 
 - `demand.ts` hat keine eigenen Tests; von `masterData.ts` ist bisher nur der
   Schreibweg der AÜG-Erlaubnis geprüft. Das Muster steht; die Arbeit ist
-  dieselbe.
+  dieselbe. Die Protokolleinträge dieser beiden Dienste sind damit nur
+  mittelbar belegt — über die Schreibwege, die `audit.test.ts` anfasst.
 - **P7** ist nirgends angebunden: Kapitel 3 führt für die Arbeitskampfanzeige
   kein Feld (*offene Frage 30*).
 - **Q37, Q38 und Q39 bis Q40** warten auf die Statusmodelle 4.4 (Stundenzettel)

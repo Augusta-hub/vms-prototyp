@@ -19,6 +19,9 @@ import {
   erlaubnisstand,
   type Erlaubniszeile,
 } from '../aueg/anbindung'
+import { schreibEintrag, SYSTEM_ACTOR, type Protokollbezug } from '../audit/entry'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
@@ -54,6 +57,7 @@ import {
   demandRequestRef,
   failure,
   loadEngagements,
+  protokollbezug,
   siteRef,
   success,
   supplierOfferRef,
@@ -580,7 +584,13 @@ export async function createDemandRequest(
     },
   })
   if (!outcome.applied) {
-    return failure(outcome.rejection.reason, outcome.rejection.specReference)
+    return rejection(outcome, {
+      // Noch kein Vorgang: die Anfragenummer tritt ein (*offene Frage 44*).
+      bezug: protokollbezug('demandRequest', input.requestNumber, site.tenantId),
+      userId: identity.user.id,
+      statusTo: 'draft',
+      operation: 'create',
+    })
   }
 
   // Die Rechteprüfung zur Anlage steckt im Übergang `create`: 4.1 nennt
@@ -590,39 +600,50 @@ export async function createDemandRequest(
     identity.tenant.tenantType === 'operator' ? { createdOnBehalfOfId: input.requestedById } : {}
 
   try {
-    await prisma.demandRequest.create({
-      data: {
-        tenantId: site.tenantId,
-        requestNumber: input.requestNumber.trim(),
-        customerId: site.customerId,
-        siteId: site.id,
-        costCenterId: costCenter.id,
-        requestedById: input.requestedById,
-        ...onBehalf,
-        title: input.title.trim(),
-        activityDescription: input.activityDescription.trim(),
-        headcount: input.headcount,
-        startDate: input.startDate,
-        endDate: input.endDate,
-        weeklyHours: input.weeklyHours,
-        maxHourlyRate: input.maxHourlyRate,
-        currency: input.maxHourlyRate === null ? null : 'EUR',
-        internalNote: input.internalNote,
-        status: 'draft',
-        createdById: identity.user.id,
-        qualificationRequirements:
-          input.qualification.trim() === ''
-            ? undefined
-            : {
-                create: [
-                  {
-                    qualification: input.qualification.trim(),
-                    requirementKind: 'mandatory',
-                    createdById: identity.user.id,
-                  },
-                ],
-              },
-      },
+    await prisma.$transaction(async (tx) => {
+      const angelegt = await tx.demandRequest.create({
+        data: {
+          tenantId: site.tenantId,
+          requestNumber: input.requestNumber.trim(),
+          customerId: site.customerId,
+          siteId: site.id,
+          costCenterId: costCenter.id,
+          requestedById: input.requestedById,
+          ...onBehalf,
+          title: input.title.trim(),
+          activityDescription: input.activityDescription.trim(),
+          headcount: input.headcount,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          weeklyHours: input.weeklyHours,
+          maxHourlyRate: input.maxHourlyRate,
+          currency: input.maxHourlyRate === null ? null : 'EUR',
+          internalNote: input.internalNote,
+          status: 'draft',
+          createdById: identity.user.id,
+          qualificationRequirements:
+            input.qualification.trim() === ''
+              ? undefined
+              : {
+                  create: [
+                    {
+                      qualification: input.qualification.trim(),
+                      requirementKind: 'mandatory',
+                      createdById: identity.user.id,
+                    },
+                  ],
+                },
+        },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('demandRequest', angelegt.id, angelegt.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Bedarfsanfrage konnte nicht angelegt werden')
@@ -667,7 +688,12 @@ export async function transitionDemandRequest(
     facts,
   })
   if (!outcome.applied) {
-    return failure(outcome.rejection.reason, outcome.rejection.specReference)
+    return rejection(outcome, {
+      bezug: protokollbezug('demandRequest', request.id, request.tenantId),
+      userId: identity.user.id,
+      statusFrom: status,
+      statusTo: DEMAND_REQUEST_MODEL.transitions[input.transition].to,
+    })
   }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
@@ -681,12 +707,26 @@ export async function transitionDemandRequest(
   if (input.transition === 'cancel') data.cancellationReason = reason
 
   try {
-    await prisma.demandRequest.update({ where: { id: request.id }, data })
+    await prisma.$transaction(async (tx) => {
+      await tx.demandRequest.update({ where: { id: request.id }, data })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('demandRequest', request.id, request.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          // 4.1 macht die Begründung beim Zurückgeben und beim Stornieren zur
+          // Pflicht; 3.12 legt sie in den Eintrag.
+          reason: reason,
+        }),
+      )
+    })
   } catch (error) {
     return asFailure(error, 'Statuswechsel konnte nicht gespeichert werden')
   }
-  // Offen: Benachrichtigungen und Fristenlauf aus 4.1 sowie der Audit-Eintrag
-  // aus 4.0, Regel 3 — beide hängen an 3.12 und sind noch nicht umgesetzt.
+  // Offen: Benachrichtigungen und Fristenlauf aus 4.1 — der
+  // Benachrichtigungsweg ist nicht umgesetzt.
   return success(
     `${outcome.label}: ${request.requestNumber} steht jetzt auf „${outcome.to}" (${outcome.specReference}).`,
   )
@@ -758,7 +798,12 @@ export async function publishTender(
     }),
   })
   if (!requestOutcome.applied) {
-    return failure(requestOutcome.rejection.reason, requestOutcome.rejection.specReference)
+    return rejection(requestOutcome, {
+      bezug: protokollbezug('demandRequest', request.id, request.tenantId),
+      userId: identity.user.id,
+      statusFrom: status,
+      statusTo: DEMAND_REQUEST_MODEL.transitions[transition].to,
+    })
   }
 
   const operatorTenant = await prisma.tenant.findFirst({ where: { tenantType: 'operator' } })
@@ -766,6 +811,14 @@ export async function publishTender(
 
   // Jede Einladung einzeln nach 4.2.1 — der Lieferantenstatus und die
   // Erlaubnis sind Vorbedingung, nicht Nebenbedingung.
+  //
+  // Die vollzogenen Übergänge werden **gemerkt**, nicht später nachgebaut: der
+  // Audit-Eintrag soll den Übergang nennen, den das Modell wirklich erlaubt
+  // hat (3.12, 4.0 Regel 3).
+  const einladungsUebergaenge = new Map<
+    string,
+    Extract<TransitionOutcome<TenderInvitationState>, { applied: true }>
+  >()
   for (const supplier of suppliers) {
     const fact = eligibility.find((entry) => entry.supplierId === supplier.id)
     const invitationOutcome = attemptTransition(TENDER_INVITATION_MODEL, 'invite', {
@@ -790,11 +843,22 @@ export async function publishTender(
       },
     })
     if (!invitationOutcome.applied) {
+      await protokolliereGetrennt(
+        ablehnungsEintrag({
+          rejection: invitationOutcome.rejection,
+          bezug: protokollbezug('tenderInvitation', supplier.supplierNumber, operatorTenant.id),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          statusTo: 'invited',
+          operation: 'create',
+        }),
+      )
       return failure(
         `${supplier.legalName}: ${invitationOutcome.rejection.reason}`,
         invitationOutcome.rejection.specReference,
       )
     }
+    einladungsUebergaenge.set(supplier.id, invitationOutcome)
   }
 
   const round = request.tenders.length + 1
@@ -813,8 +877,20 @@ export async function publishTender(
           createdById: identity.user.id,
         },
       })
+      // Die Ausschreibung selbst hat kein Statusmodell (4.2): sie ist die
+      // Runde. Ihr Eintrag ist deshalb eine Anlage, kein Übergang.
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision: requestOutcome.decision,
+          operation: 'create',
+          bezug: protokollbezug('tender', tender.id, tender.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
       for (const supplier of suppliers) {
-        await tx.tenderInvitation.create({
+        const einladung = await tx.tenderInvitation.create({
           data: {
             tenantId: operatorTenant.id,
             tenderId: tender.id,
@@ -824,6 +900,22 @@ export async function publishTender(
             createdById: identity.user.id,
           },
         })
+        // Je Einladung ein eigener Eintrag: 4.2.1 führt sie als eigenen
+        // Vorgang, und 2.3 Regel 2 verbietet, mehrere Lieferanten in einem
+        // Vorgang zu bündeln.
+        const einladungsUebergang = einladungsUebergaenge.get(supplier.id)
+        if (einladungsUebergang === undefined) {
+          throw new Error('Übergang zur Einladung fehlt — das Protokoll wäre unvollständig (3.12).')
+        }
+        await protokolliere(
+          tx,
+          uebergangsEintrag({
+            outcome: einladungsUebergang,
+            bezug: protokollbezug('tenderInvitation', einladung.id, einladung.tenantId),
+            userId: identity.user.id,
+            occurredAt: evaluationDate,
+          }),
+        )
       }
       await tx.demandRequest.update({
         where: { id: request.id },
@@ -833,6 +925,15 @@ export async function publishTender(
           updatedById: identity.user.id,
         },
       })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome: requestOutcome,
+          bezug: protokollbezug('demandRequest', request.id, request.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Ausschreibung konnte nicht veröffentlicht werden')
@@ -1004,6 +1105,7 @@ export async function loadInvitations(
 async function markInvitationViewed(
   invitationId: string,
   invitation: {
+    readonly tenantId: string
     readonly invitationStatus: string
     readonly declineReason: string | null
     readonly supplier: { readonly status: string }
@@ -1032,9 +1134,23 @@ async function markInvitationViewed(
     },
   })
   if (!outcome.applied) return false
-  await prisma.tenderInvitation.update({
-    where: { id: invitationId },
-    data: { invitationStatus: 'viewed', viewedAt: evaluationDate },
+  await prisma.$transaction(async (tx) => {
+    await tx.tenderInvitation.update({
+      where: { id: invitationId },
+      data: { invitationStatus: 'viewed', viewedAt: evaluationDate },
+    })
+    // Schreibender Vorgang, also protokollpflichtig (3.12, Nummer 1) — und
+    // zwar als Systemübergang: ausgelöst hat ihn der erste Lesezugriff, nicht
+    // eine Benutzerhandlung (4.2.1, 4.0 Regel 10).
+    await protokolliere(
+      tx,
+      uebergangsEintrag({
+        outcome,
+        bezug: protokollbezug('tenderInvitation', invitationId, invitation.tenantId),
+        userId: SYSTEM_ACTOR,
+        occurredAt: evaluationDate,
+      }),
+    )
   })
   return true
 }
@@ -1076,18 +1192,36 @@ export async function declineInvitation(
     },
   })
   if (!outcome.applied) {
-    return failure(outcome.rejection.reason, outcome.rejection.specReference)
+    return rejection(outcome, {
+      bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
+      userId: identity.user.id,
+      statusFrom: invitation.invitationStatus,
+      statusTo: 'declined',
+    })
   }
 
   try {
-    await prisma.tenderInvitation.update({
-      where: { id: invitation.id },
-      data: {
-        invitationStatus: 'declined',
-        declineReason: input.declineReason.trim(),
-        respondedAt: evaluationDate,
-        updatedById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.tenderInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          invitationStatus: 'declined',
+          declineReason: input.declineReason.trim(),
+          respondedAt: evaluationDate,
+          updatedById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          // 4.2.1 macht den Absagegrund zur Pflicht.
+          reason: input.declineReason.trim(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Absage konnte nicht gespeichert werden')
@@ -1162,7 +1296,18 @@ export async function submitOffer(
     resource: offerRef,
     facts: baseFacts,
   })
-  if (!created.applied) return rejection(created)
+  if (!created.applied) {
+    return rejection(created, {
+      bezug: protokollbezug(
+        'supplierOffer',
+        `Angebot zu Einladung ${invitation.id}`,
+        invitation.supplier.tenantId,
+      ),
+      userId: identity.user.id,
+      statusTo: 'draft',
+      operation: 'create',
+    })
+  }
 
   const submitted = attemptTransition(SUPPLIER_OFFER_MODEL, 'submit', {
     currentStatus: 'draft',
@@ -1170,7 +1315,18 @@ export async function submitOffer(
     resource: offerRef,
     facts: baseFacts,
   })
-  if (!submitted.applied) return rejection(submitted)
+  if (!submitted.applied) {
+    return rejection(submitted, {
+      bezug: protokollbezug(
+        'supplierOffer',
+        `Angebot zu Einladung ${invitation.id}`,
+        invitation.supplier.tenantId,
+      ),
+      userId: identity.user.id,
+      statusFrom: 'draft',
+      statusTo: 'submitted',
+    })
+  }
 
   // Folgeübergang an der Einladung (4.2.1): System, nicht der Lieferant.
   const invitationOutcome = attemptTransition(TENDER_INVITATION_MODEL, 'recordOfferSubmitted', {
@@ -1188,14 +1344,21 @@ export async function submitOffer(
       evaluationDate,
     },
   })
-  if (!invitationOutcome.applied) return rejection(invitationOutcome)
+  if (!invitationOutcome.applied) {
+    return rejection(invitationOutcome, {
+      bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
+      userId: identity.user.id,
+      statusFrom: invitation.invitationStatus,
+      statusTo: 'offerSubmitted',
+    })
+  }
 
   const offerCount = await prisma.supplierOffer.count({
     where: { supplierId: invitation.supplierId },
   })
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.supplierOffer.create({
+      const angebot = await tx.supplierOffer.create({
         data: {
           tenantId: invitation.supplier.tenantId,
           offerNumber: `A-${invitation.supplier.supplierNumber}-${offerCount + 1}`,
@@ -1221,6 +1384,26 @@ export async function submitOffer(
           },
         },
       })
+      // Zwei Übergänge, zwei Einträge (4.2.2: `create` und `submit`): das
+      // Protokoll zeigt die Schritte, die 4.2.2 nennt, nicht ihre Summe.
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome: created,
+          bezug: protokollbezug('supplierOffer', angebot.id, angebot.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome: submitted,
+          bezug: protokollbezug('supplierOffer', angebot.id, angebot.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
       await tx.tenderInvitation.update({
         where: { id: invitation.id },
         data: {
@@ -1229,6 +1412,18 @@ export async function submitOffer(
           updatedById: identity.user.id,
         },
       })
+      // Der Folgeübergang an der Einladung ist ein **Systemübergang** (4.2.1):
+      // der Eintrag trägt deshalb das Systemkennzeichen statt des Lieferanten
+      // (3.12, 4.0 Regel 10).
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome: invitationOutcome,
+          bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Angebot konnte nicht eingereicht werden')
@@ -1282,7 +1477,14 @@ export async function transitionOffer(
       evaluationDate,
     },
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug('supplierOffer', offer.id, offer.tenantId),
+      userId: identity.user.id,
+      statusFrom: offer.status,
+      statusTo: SUPPLIER_OFFER_MODEL.transitions[input.transition].to,
+    })
+  }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
   if (input.transition === 'review') data.reviewedAt = evaluationDate
@@ -1290,15 +1492,52 @@ export async function transitionOffer(
   if (input.transition === 'withdraw') data.withdrawnAt = evaluationDate
 
   try {
-    await prisma.supplierOffer.update({ where: { id: offer.id }, data })
+    await prisma.$transaction(async (tx) => {
+      await tx.supplierOffer.update({ where: { id: offer.id }, data })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('supplierOffer', offer.id, offer.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason,
+        }),
+      )
+    })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Angebot konnte nicht gespeichert werden')
   }
   return success(`${outcome.label}: Angebot steht jetzt auf „${outcome.to}" (${outcome.specReference}).`)
 }
 
-function rejection(outcome: TransitionOutcome<string>): ActionResult {
+/**
+ * Eine abgelehnte Handlung: Ergebnis **und** Audit-Eintrag (3.12, „abgelehnte
+ * Zugriffe werden ebenfalls protokolliert"). Beides an einer Stelle, damit kein
+ * Weg aus diesem Modul eine Ablehnung zurückgibt, ohne sie zu protokollieren.
+ */
+async function rejection(
+  outcome: TransitionOutcome<string>,
+  protokoll: {
+    readonly bezug: Protokollbezug
+    readonly userId: string
+    readonly statusFrom?: string | null
+    readonly statusTo: string
+    readonly operation?: 'create' | 'transition'
+  },
+): Promise<ActionResult> {
   if (outcome.applied) return success('')
+  await protokolliereGetrennt(
+    ablehnungsEintrag({
+      rejection: outcome.rejection,
+      bezug: protokoll.bezug,
+      userId: protokoll.userId,
+      occurredAt: new Date(),
+      statusFrom: protokoll.statusFrom ?? null,
+      statusTo: protokoll.statusTo,
+      ...(protokoll.operation !== undefined ? { operation: protokoll.operation } : {}),
+    }),
+  )
   return failure(outcome.rejection.reason, outcome.rejection.specReference)
 }
 
@@ -1345,9 +1584,23 @@ export async function runSystemDeadlineRun(
       },
     })
     if (!outcome.applied) continue
-    await prisma.tenderInvitation.update({
-      where: { id: invitation.id },
-      data: { invitationStatus: 'expired' },
+    await prisma.$transaction(async (tx) => {
+      await tx.tenderInvitation.update({
+        where: { id: invitation.id },
+        data: { invitationStatus: 'expired' },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
+          // Systemlauf: `outcome.decision` ist `null`, der Eintrag trägt
+          // deshalb das Systemkennzeichen und keinen Benutzer (3.12, 4.0
+          // Regel 10). Die Kennung wird mitgegeben, aber nicht verwendet.
+          userId: SYSTEM_ACTOR,
+          occurredAt: evaluationDate,
+        }),
+      )
     })
     log.push(`Einladung ${invitation.id}: ${outcome.label} (4.2.1)`)
   }
@@ -1374,7 +1627,18 @@ export async function runSystemDeadlineRun(
       },
     })
     if (!outcome.applied) continue
-    await prisma.supplierOffer.update({ where: { id: offer.id }, data: { status: 'expired' } })
+    await prisma.$transaction(async (tx) => {
+      await tx.supplierOffer.update({ where: { id: offer.id }, data: { status: 'expired' } })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('supplierOffer', offer.id, offer.tenantId),
+          userId: SYSTEM_ACTOR,
+          occurredAt: evaluationDate,
+        }),
+      )
+    })
     log.push(`Angebot ${offer.offerNumber}: ${outcome.label} (4.2.2)`)
   }
 
@@ -1406,7 +1670,18 @@ export async function runSystemDeadlineRun(
       },
     })
     if (!outcome.applied) continue
-    await prisma.demandRequest.update({ where: { id: request.id }, data: { status: 'expired' } })
+    await prisma.$transaction(async (tx) => {
+      await tx.demandRequest.update({ where: { id: request.id }, data: { status: 'expired' } })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('demandRequest', request.id, request.tenantId),
+          userId: SYSTEM_ACTOR,
+          occurredAt: evaluationDate,
+        }),
+      )
+    })
     log.push(`Bedarfsanfrage ${request.requestNumber}: ${outcome.label} (4.1)`)
   }
 

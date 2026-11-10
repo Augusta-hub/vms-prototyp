@@ -228,11 +228,13 @@ const TRANSITIONS = {
           facts.decision === 'accepted' && facts.decidedAt !== null && facts.decidedById !== null,
       },
       {
+        ruleRef: 'P1',
         description: 'P1: Höchstüberlassungsdauer nicht überschritten — sonst Sperre (5.1, 5.5.5).',
         specReference: 'SPEC 4.2.3, → accepted; 5.1',
         isSatisfied: (facts) => !facts.maxDurationExceeded,
       },
       {
+        ruleRef: 'P6',
         description:
           'P6: Erklärung zur Vorbeschäftigung liegt vor. Gesperrt wird nicht die Drehtür, ' +
           'sondern die fehlende Tatsachengrundlage (5.3.1, „Wenn Daten fehlen").',

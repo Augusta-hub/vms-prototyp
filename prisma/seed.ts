@@ -210,6 +210,18 @@ async function main(): Promise<void> {
   // Kandidat, Profilvorschlag und Personenidentität. Noch davor die Nachweise
   // (3.10): sie verweisen auf fast jedes andere Objekt und auf den Benutzer,
   // der sie eingestellt hat.
+  // Das **Protokoll** zuerst, und nicht mit `deleteMany`: Audit-Einträge sind
+  // nach 3.12 unveränderlich, und ein Trigger aus der Migration verweigert
+  // `UPDATE` und `DELETE` auf der Tabelle. Das trifft auch den Seed, und zwar
+  // zu Recht — er löscht Benutzer, und der Fremdschlüssel würde die Einträge
+  // dieser Benutzer stillschweigend auf `NULL` setzen. `TRUNCATE` ist der
+  // Verwaltungsweg, keine Anwendungsoperation: es löst die Zeilentrigger nicht
+  // aus. Der Zähler wird mit zurückgesetzt, damit die Nummernfolge einer
+  // frischen Entwicklungsdatenbank wieder bei 1 beginnt (3.12).
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE "AuditEntry", "AuditSequence"')
+  await prisma.$executeRawUnsafe(
+    'INSERT INTO "AuditSequence" ("id", "lastEntryNumber") VALUES (1, 0) ON CONFLICT ("id") DO NOTHING',
+  )
   await prisma.document.deleteMany()
   await prisma.assignmentExtension.deleteMany()
   await prisma.assignmentInterruption.deleteMany()

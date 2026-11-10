@@ -22,11 +22,21 @@
  * das Audit-Protokoll aus 3.12 — es ist die Historie, die 3.6 ausdrücklich am
  * Objekt verlangt.
  */
+import { schreibEintrag } from '../audit/entry'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
 import { checkPermission } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
 import { allProposals, type CandidateForMatching } from '../workerIdentity/matching'
-import { asFailure, failure, success, workerIdentityRef, type ActionResult } from './common'
+import {
+  asFailure,
+  failure,
+  protokollbezug,
+  success,
+  verweigere,
+  workerIdentityRef,
+  type ActionResult,
+} from './common'
 
 const DAY = (value: Date | null): string | null =>
   value === null ? null : value.toISOString().slice(0, 10)
@@ -140,7 +150,14 @@ export async function proposeLinks(identity: LoadedIdentity): Promise<ActionResu
     workerIdentityRef({ tenantId: operatorTenant.id }),
   )
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'workerIdentity',
+      'Abgleichlauf',
+      operatorTenant.id,
+    )
   }
 
   const candidates = await prisma.candidate.findMany({
@@ -202,7 +219,7 @@ export async function proposeLinks(identity: LoadedIdentity): Promise<ActionResu
         where: { workerIdentityId_candidateId: { workerIdentityId: identityId, candidateId } },
       })
       if (present !== null) continue
-      await prisma.workerIdentityLink.create({
+      const neueVerknuepfung = await prisma.workerIdentityLink.create({
         data: {
           workerIdentityId: identityId,
           candidateId,
@@ -223,6 +240,21 @@ export async function proposeLinks(identity: LoadedIdentity): Promise<ActionResu
           createdById: identity.user.id,
         },
       })
+      // Der Audit-Eintrag nennt dagegen den **Benutzer**, nicht das System:
+      // 3.6 lässt den Vorschlag ohne Benutzer, weil der Treffer maschinell
+      // entsteht — geschrieben hat ihn aber, solange der Prototyp keinen
+      // nächtlichen Lauf hat, die Person, die den Abgleich angestoßen hat.
+      // Protokolliert wird, wer geschrieben hat (3.12).
+      await protokolliereGetrennt(
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('workerIdentityLink', neueVerknuepfung.id, operatorTenant.id),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+          reason: `Abgleichlauf (3.6): ${proposal.basis}`,
+        }),
+      )
       created += 1
     }
   }
@@ -271,7 +303,14 @@ export async function confirmLink(
     workerIdentityRef({ tenantId: link.workerIdentity.tenantId }),
   )
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'update',
+      'workerIdentityLink',
+      link.id,
+      link.workerIdentity.tenantId,
+    )
   }
 
   const now = new Date()
@@ -308,6 +347,26 @@ export async function confirmLink(
           createdById: identity.user.id,
         },
       })
+      // Die Verknüpfungshistorie aus 3.6 und das Protokoll aus 3.12 sind
+      // **nicht** dasselbe: die Historie ist ein Fachobjekt mit Begründung und
+      // Rückholbarkeit, der Audit-Eintrag der Nachweis, wer sie geschrieben
+      // hat. Deshalb beides, in einer Transaktion.
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'update',
+          bezug: protokollbezug(
+            'workerIdentityLink',
+            link.id,
+            link.workerIdentity.tenantId,
+          ),
+          userId: identity.user.id,
+          occurredAt: now,
+          changedFields: [{ field: 'linkStatus', from: link.linkStatus, to: 'confirmed' }],
+          reason: input.reason.trim(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Verknüpfung konnte nicht bestätigt werden')
@@ -346,7 +405,14 @@ export async function detachLink(
     workerIdentityRef({ tenantId: link.workerIdentity.tenantId }),
   )
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'update',
+      'workerIdentityLink',
+      link.id,
+      link.workerIdentity.tenantId,
+    )
   }
 
   // Einen Einsatz, der auf dieser Identität beruht, darf die Trennung nicht
@@ -394,6 +460,22 @@ export async function detachLink(
           createdById: identity.user.id,
         },
       })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'update',
+          bezug: protokollbezug(
+            'workerIdentityLink',
+            link.id,
+            link.workerIdentity.tenantId,
+          ),
+          userId: identity.user.id,
+          occurredAt: now,
+          changedFields: [{ field: 'linkStatus', from: link.linkStatus, to: 'detached' }],
+          reason: input.reason.trim(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Verknüpfung konnte nicht getrennt werden')
@@ -432,7 +514,14 @@ export async function createIdentityForCandidate(
     workerIdentityRef({ tenantId: operatorTenant.id }),
   )
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'workerIdentity',
+      candidate.candidateNumber,
+      operatorTenant.id,
+    )
   }
 
   const reason =
@@ -483,6 +572,17 @@ export async function createIdentityForCandidate(
           createdById: identity.user.id,
         },
       })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('workerIdentity', created.id, operatorTenant.id),
+          userId: identity.user.id,
+          occurredAt: now,
+          reason,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Personenidentität konnte nicht angelegt werden')

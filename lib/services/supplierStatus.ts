@@ -18,11 +18,15 @@
  * gültiger Vertrag.
  *
  * Geschrieben wird nur, was 4.6 nennt: `status`, die Sperrangaben und die
- * beiden Begründungen. Benachrichtigungen (4.6, jede Zeile) hat der Prototyp
- * nicht; der Protokolleintrag gehört zu 3.12 und ist nicht umgesetzt — die
- * Begründungen liegen deshalb am Objekt (*offene Frage 43*).
+ * beiden Begründungen — und der Audit-Eintrag aus 3.12, in **derselben**
+ * Transaktion wie der Statuswechsel. Die Begründung steht in beiden: am Objekt,
+ * weil die Vorbedingung sie liest, und im Eintrag, weil 4.6 sie dorthin legt
+ * (*offene Frage 43*). Benachrichtigungen (4.6, jede Zeile) hat der Prototyp
+ * nicht.
  */
 import { alsNachweiszeile, erlaubnisstand, nachweisstand } from '../aueg/anbindung'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
@@ -227,6 +231,20 @@ export async function transitionSupplier(
     facts,
   })
   if (!outcome.applied) {
+    // Der abgelehnte Versuch wird protokolliert (3.12) — in einer **eigenen**
+    // Transaktion, weil die Handlung selbst nichts schreibt. Eine Sperre aus
+    // Kapitel 5 steht als `blocked` mit `ruleRef` im Eintrag, eine
+    // Verweigerung nach Kapitel 2 als `denied` (4.0, Regel 5).
+    await protokolliereGetrennt(
+      ablehnungsEintrag({
+        rejection: outcome.rejection,
+        bezug: protokollbezug(supplier),
+        userId: identity.user.id,
+        occurredAt: evaluationDate,
+        statusFrom: state,
+        statusTo: SUPPLIER_MODEL.transitions[input.transition]?.to ?? null,
+      }),
+    )
     return failure(outcome.rejection.reason, outcome.rejection.specReference)
   }
 
@@ -256,7 +274,21 @@ export async function transitionSupplier(
   }
 
   try {
-    await prisma.supplier.update({ where: { id: supplier.id }, data })
+    await prisma.$transaction(async (tx) => {
+      await tx.supplier.update({ where: { id: supplier.id }, data })
+      // Derselbe Vorgang: rollt der Statuswechsel zurück, gibt es auch keinen
+      // Eintrag. Protokolliert wird, was geschehen ist (3.12).
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug(supplier),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason: begruendungFuer(input),
+        }),
+      )
+    })
   } catch (error) {
     return asFailure(error, 'Der Statuswechsel am Lieferanten konnte nicht gespeichert werden')
   }
@@ -468,4 +500,31 @@ export const SUPPLIER_TRANSITION_LABELS: {
   unblock: 'entsperren (nur MA, [5])',
   deactivate: 'Beauftragung beenden (MA)',
   reactivate: 'reaktivieren (nur MA, [5])',
+}
+
+/* ------------------------------------------------------------------ */
+/* Protokoll (3.12)                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Das Objekt, auf das sich der Eintrag bezieht: der **Lieferant**, mit seinem
+ * eigenen Mandanten. Darauf beruht die Sichtbarkeit nach [39] — und darauf,
+ * dass `MD` den Eintrag nicht lesen kann, obwohl er ihn auslöst (*offene
+ * Frage 46*).
+ */
+function protokollbezug(supplier: { readonly id: string; readonly tenantId: string }) {
+  return { objectType: 'supplier' as const, objectRef: supplier.id, tenantId: supplier.tenantId }
+}
+
+/**
+ * Die Begründung, die 4.6 dem Übergang abverlangt — Sperrgrund,
+ * Aufhebungsgrund, Reaktivierungsgrund. Sie ist `reason` im Audit-Eintrag
+ * (3.12, Pflicht bei Korrektur und Übersteuerung; 4.6 legt sie ausdrücklich in
+ * den Protokolleintrag). Die Beendigung verlangt keine.
+ */
+function begruendungFuer(input: SupplierTransitionInput): string | null {
+  if (input.transition === 'block') return input.blockReason
+  if (input.transition === 'unblock') return input.unblockReason
+  if (input.transition === 'reactivate') return input.reactivationReason
+  return null
 }

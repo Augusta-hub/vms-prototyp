@@ -164,8 +164,10 @@ export type Decision =
       readonly concealedFields: readonly string[]
       /**
        * Lesender oder schreibender Zugriff über die Mandantengrenze hinweg.
-       * Er ist nach 2.3 als Audit-Eintrag zu erfassen (3.12, noch nicht
-       * umgesetzt) — die Entscheidung sagt es deshalb ausdrücklich.
+       * Er ist nach 2.3 als Audit-Eintrag zu erfassen (3.12) — die
+       * Entscheidung sagt es deshalb ausdrücklich, und lib/audit/ trägt den
+       * Wert in den Eintrag. In welcher Granularität **lesende** Zugriffe
+       * erfasst werden, ist *offene Frage 45*.
        */
       readonly crossTenant: boolean
       /** Vertretungsvermerk (2.4, Regel 6), wenn in Vertretung gehandelt wird. */

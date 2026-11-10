@@ -56,13 +56,13 @@ export default async function Home() {
     <>
       <h1>Identität und Rechte</h1>
       <p>
-        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.7, 3.10 und 3.11. Umgesetzt
+        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.7, 3.10 bis 3.12. Umgesetzt
         sind Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat
         und Profilvorschlag, der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3 sowie Dokumente
         und Nachweise (3.10) samt ihrem Nachweisfluss aus 5.4.3 — einstellen, anerkennen,
-        zurückweisen — und der Lieferantenstatus (4.6). Noch nicht umgesetzt: Zeiten (3.8),
-        Abrechnung
-        (3.9) und das Protokoll (3.12). Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen
+        zurückweisen —, der Lieferantenstatus (4.6) und das fachliche Protokoll (3.12): jede
+        schreibende Operation und jeder abgelehnte Versuch stehen als Audit-Eintrag im{' '}
+        <strong>Protokoll</strong>. Noch nicht umgesetzt: Zeiten (3.8) und Abrechnung (3.9). Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen
         P1 bis P11. An den Übergängen greifen P1, P3, P6, P8, P9, P10 und P11: sie schreiben
         Fristende, angerechnete Dauer und Equal-Pay-Fälligkeit fort und sperren Ausschreibung,
         Anlage, Einsatzstart und das Freischalten eines Lieferanten, wo Erlaubnis oder
@@ -142,8 +142,8 @@ export default async function Home() {
 
       <h2>Berechtigungsmatrix (SPEC 2.2)</h2>
       <p>
-        Gelesen aus <code>lib/authz/matrix.ts</code>. Belegt sind die Zeilen zu 3.1 bis 3.7 und
-        3.11; jede andere Zeile verweigert jeden Zugriff, bis ihr Fachmodul kommt. Zahlen in
+        Gelesen aus <code>lib/authz/matrix.ts</code>. Belegt sind die Zeilen zu 3.1 bis 3.7, 3.10,
+        3.11 und 3.12; jede andere Zeile verweigert jeden Zugriff, bis ihr Fachmodul kommt. Zahlen in
         Klammern sind die Fußnoten aus 2.2.
       </p>
       <table>

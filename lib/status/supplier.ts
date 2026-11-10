@@ -120,6 +120,7 @@ const collectiveAgreement: SupplierPrecondition = {
 
 /** P9 (5.4.1) — in 4.7 die Zeilen Q41, Q43 und Q44, jede mit **Sperre**. */
 const permitAccepted: SupplierPrecondition = {
+  ruleRef: 'P9',
   description: 'P9: AÜG-Erlaubnis anerkannt und am Tag des Übergangs gültig (5.4.1).',
   specReference: 'SPEC 4.6, → active; 5.4.1; 4.7 Q41, Q43, Q44',
   isSatisfied: (facts) => facts.hasAcceptedValidPermit,
@@ -137,6 +138,7 @@ const permitAccepted: SupplierPrecondition = {
  * eine andere Antwort auf Frage 31 wirksam würde, ohne das Modell zu ändern.
  */
 const mandatoryDocuments: SupplierPrecondition = {
+  ruleRef: 'P10',
   description: 'P10: Pflichtnachweise des Lieferanten vorhanden (5.4.4).',
   specReference: 'SPEC 4.6, → active; 5.4.4; 4.7 Q42, Q43, Q44',
   isSatisfied: (facts) => facts.mandatoryDocumentsPresent,

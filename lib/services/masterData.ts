@@ -12,7 +12,15 @@
  *     Grundsatz). Gelistet wird deshalb, was die Prüffunktion für diese
  *     Identität erlaubt — und in der Fassung, die lib/visibility/projections.ts
  *     daraus macht.
+ *  3. **Jede Anlage trägt ihren Audit-Eintrag** (3.12, Nummer 1), geschrieben
+ *     in derselben Transaktion; jede Verweigerung ebenfalls, in einer eigenen
+ *     (`verweigere`). Deshalb prüfen die Funktionen hier **vor** dem Schreiben
+ *     und nicht mitten in der Transaktion: ein verweigerter Versuch würde
+ *     seinen eigenen Eintrag zurückrollen.
  */
+import { schreibEintrag } from '../audit/entry'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type ResourceRef, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { pruefeErlaubnis } from '../masterdata/invariants'
@@ -29,13 +37,13 @@ import {
   failure,
   loadEngagements,
   masterAgreementRef,
-  PermissionDenied,
+  protokollbezug,
   rateCardRef,
-  TransitionRejected,
   siteRef,
   success,
   supplierPermitRef,
   supplierRef,
+  verweigere,
   type ActionResult,
   type Engagements,
 } from './common'
@@ -603,6 +611,19 @@ export async function createCustomer(
     return failure('Mindestens ein Ansprechpartner ist Pflicht (3.1).')
   }
   const engagements = await loadEngagements()
+  // Geprüft wird **vor** der Anlage des Mandanten, mit einer Platzhalterkennung
+  // wie bei `createSite`: der Mandant existiert noch nicht, und die Prüfung
+  // fragt an dieser Stelle ohnehin nur, ob diese Identität Kunden anlegen darf
+  // (2.2, Zeile 3.1). Innerhalb der Transaktion zu prüfen hätte den
+  // verweigerten Versuch mitsamt seinem Protokolleintrag zurückgerollt (3.12).
+  const decision = checkPermission(
+    identity.subject,
+    'create',
+    customerRef({ tenantId: 'neu' }, engagements),
+  )
+  if (!decision.allowed) {
+    return verweigere(identity, decision, 'create', 'customer', input.customerNumber)
+  }
   try {
     await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -613,14 +634,6 @@ export async function createCustomer(
           createdById: identity.user.id,
         },
       })
-      const decision = checkPermission(
-        identity.subject,
-        'create',
-        customerRef({ tenantId: tenant.id }, engagements),
-      )
-      if (!decision.allowed) {
-        throw new PermissionDenied(decision.denial.reason, decision.denial.specReference)
-      }
       const customer = await tx.customer.create({
         data: {
           tenantId: tenant.id,
@@ -643,6 +656,16 @@ export async function createCustomer(
         where: { id: tenant.id },
         data: { organizationId: customer.id },
       })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('customer', customer.id, tenant.id),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Kunde konnte nicht angelegt werden')
@@ -680,25 +703,37 @@ export async function createSite(
     siteId: undefined,
   })
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(identity, decision, 'create', 'site', input.siteNumber, customer.tenantId)
   }
 
   try {
-    await prisma.site.create({
-      data: {
-        tenantId: customer.tenantId,
-        customerId: customer.id,
-        siteNumber: input.siteNumber.trim(),
-        name: input.name.trim(),
-        addressStreet: input.addressStreet.trim(),
-        addressPostalCode: input.addressPostalCode.trim(),
-        addressCity: input.addressCity.trim(),
-        addressCountry: 'DE',
-        standardWeeklyHours: input.standardWeeklyHours,
-        safetyBriefingRequired: input.safetyBriefingRequired,
-        validFrom: input.validFrom,
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const site = await tx.site.create({
+        data: {
+          tenantId: customer.tenantId,
+          customerId: customer.id,
+          siteNumber: input.siteNumber.trim(),
+          name: input.name.trim(),
+          addressStreet: input.addressStreet.trim(),
+          addressPostalCode: input.addressPostalCode.trim(),
+          addressCity: input.addressCity.trim(),
+          addressCountry: 'DE',
+          standardWeeklyHours: input.standardWeeklyHours,
+          safetyBriefingRequired: input.safetyBriefingRequired,
+          validFrom: input.validFrom,
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('site', site.id, site.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Standort konnte nicht angelegt werden')
@@ -729,19 +764,40 @@ export async function createCostCenter(
     'create',
     costCenterRef({ id: 'neu', tenantId: customer.tenantId, siteId: input.siteId }),
   )
-  if (!decision.allowed) return failure(decision.denial.reason, decision.denial.specReference)
+  if (!decision.allowed) {
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'costCenter',
+      input.costCenterNumber,
+      customer.tenantId,
+    )
+  }
 
   try {
-    await prisma.costCenter.create({
-      data: {
-        tenantId: customer.tenantId,
-        customerId: customer.id,
-        costCenterNumber: input.costCenterNumber.trim(),
-        name: input.name.trim(),
-        siteId: input.siteId,
-        validFrom: input.validFrom,
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const costCenter = await tx.costCenter.create({
+        data: {
+          tenantId: customer.tenantId,
+          customerId: customer.id,
+          costCenterNumber: input.costCenterNumber.trim(),
+          name: input.name.trim(),
+          siteId: input.siteId,
+          validFrom: input.validFrom,
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('costCenter', costCenter.id, costCenter.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Kostenstelle konnte nicht angelegt werden')
@@ -769,6 +825,47 @@ export async function createSupplier(
   input: NewSupplierInput,
 ): Promise<ActionResult> {
   const engagements = await loadEngagements()
+  // Die Anlage ist der Übergang `— → onboarding` aus 4.6 — mit seiner
+  // auslösenden Rolle und seinen Vorbedingungen. Sie hier noch einmal von Hand
+  // zu prüfen wäre eine zweite Fassung derselben Zeile.
+  //
+  // Geprüft wird **vor** der Transaktion, mit einer Platzhalterkennung für den
+  // noch nicht angelegten Mandanten: ein abgelehnter Versuch soll seinen
+  // Protokolleintrag behalten (3.12), und der wäre in der Transaktion mit
+  // zurückgerollt.
+  const outcome = attemptTransition(SUPPLIER_MODEL, 'create', {
+    currentStatus: null,
+    subject: identity.subject,
+    resource: supplierRef({ tenantId: 'neu', status: 'onboarding' }, engagements),
+    facts: {
+      ...LEERE_LIEFERANTENTATSACHEN,
+      supplierNumber: input.supplierNumber,
+      legalName: input.legalName,
+      addressComplete:
+        input.addressStreet.trim() !== '' &&
+        input.addressPostalCode.trim() !== '' &&
+        input.addressCity.trim() !== '',
+      contactCount: input.contactName.trim() === '' ? 0 : 1,
+      actingUserId: identity.user.id,
+      evaluationDate: input.validFrom,
+    },
+  })
+  if (!outcome.applied) {
+    await protokolliereGetrennt(
+      ablehnungsEintrag({
+        rejection: outcome.rejection,
+        // Kein Objekt und kein Mandant des Objekts: die fachliche Kennung und
+        // der Mandant des Handelnden treten ein (*offene Frage 44*).
+        bezug: protokollbezug('supplier', input.supplierNumber, identity.tenant.id),
+        userId: identity.user.id,
+        occurredAt: new Date(),
+        statusTo: 'onboarding',
+        operation: 'create',
+      }),
+    )
+    return failure(outcome.rejection.reason, outcome.rejection.specReference)
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -779,29 +876,6 @@ export async function createSupplier(
           createdById: identity.user.id,
         },
       })
-      // Die Anlage ist der Übergang `— → onboarding` aus 4.6 — mit seiner
-      // auslösenden Rolle und seinen Vorbedingungen. Sie hier noch einmal von
-      // Hand zu prüfen wäre eine zweite Fassung derselben Zeile.
-      const outcome = attemptTransition(SUPPLIER_MODEL, 'create', {
-        currentStatus: null,
-        subject: identity.subject,
-        resource: supplierRef({ tenantId: tenant.id, status: 'onboarding' }, engagements),
-        facts: {
-          ...LEERE_LIEFERANTENTATSACHEN,
-          supplierNumber: input.supplierNumber,
-          legalName: input.legalName,
-          addressComplete:
-            input.addressStreet.trim() !== '' &&
-            input.addressPostalCode.trim() !== '' &&
-            input.addressCity.trim() !== '',
-          contactCount: input.contactName.trim() === '' ? 0 : 1,
-          actingUserId: identity.user.id,
-          evaluationDate: input.validFrom,
-        },
-      })
-      if (!outcome.applied) {
-        throw new TransitionRejected(outcome.rejection.reason, outcome.rejection.specReference)
-      }
       const supplier = await tx.supplier.create({
         data: {
           tenantId: tenant.id,
@@ -823,6 +897,15 @@ export async function createSupplier(
         where: { id: tenant.id },
         data: { organizationId: supplier.id },
       })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('supplier', supplier.id, tenant.id),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Lieferant konnte nicht angelegt werden')
@@ -872,25 +955,46 @@ export async function createSupplierPermit(
     'create',
     supplierPermitRef({ tenantId: supplier.tenantId, verificationStatus: 'submitted' }, engagements),
   )
-  if (!decision.allowed) return failure(decision.denial.reason, decision.denial.specReference)
+  if (!decision.allowed) {
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'supplierPermit',
+      input.permitNumber,
+      supplier.tenantId,
+    )
+  }
 
   try {
-    await prisma.supplierPermit.create({
-      data: {
-        tenantId: supplier.tenantId,
-        supplierId: supplier.id,
-        permitNumber: input.permitNumber.trim(),
-        issuingAuthority: input.issuingAuthority.trim(),
-        permitType: input.permitType,
-        issuedOn: input.issuedOn,
-        validFrom: input.validFrom,
-        validTo: input.validTo,
-        certificateDocumentRef: input.certificateDocumentRef,
-        // Der Nachweis entsteht als eingereicht; die Anerkennung ist die
-        // Handlung des MD (Fußnote [34], Nachweisfluss 5.4.3).
-        verificationStatus: 'submitted',
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const permit = await tx.supplierPermit.create({
+        data: {
+          tenantId: supplier.tenantId,
+          supplierId: supplier.id,
+          permitNumber: input.permitNumber.trim(),
+          issuingAuthority: input.issuingAuthority.trim(),
+          permitType: input.permitType,
+          issuedOn: input.issuedOn,
+          validFrom: input.validFrom,
+          validTo: input.validTo,
+          certificateDocumentRef: input.certificateDocumentRef,
+          // Der Nachweis entsteht als eingereicht; die Anerkennung ist die
+          // Handlung des MD (Fußnote [34], Nachweisfluss 5.4.3).
+          verificationStatus: 'submitted',
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('supplierPermit', permit.id, permit.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Erlaubnis konnte nicht angelegt werden')
@@ -922,22 +1026,43 @@ export async function createComparableWageEntry(
     'create',
     comparableWageRef({ tenantId: site.tenantId, siteId: site.id }),
   )
-  if (!decision.allowed) return failure(decision.denial.reason, decision.denial.specReference)
+  if (!decision.allowed) {
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'comparableWageEntry',
+      input.activityKey,
+      site.tenantId,
+    )
+  }
 
   try {
-    await prisma.comparableWageEntry.create({
-      data: {
-        tenantId: site.tenantId,
-        siteId: site.id,
-        activityKey: input.activityKey.trim(),
-        comparableWage: input.comparableWage,
-        currency: 'EUR',
-        validFrom: input.validFrom,
-        wageSource: input.wageSource,
-        reportedAt: new Date(),
-        reportedById: identity.user.id,
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const eintrag = await tx.comparableWageEntry.create({
+        data: {
+          tenantId: site.tenantId,
+          siteId: site.id,
+          activityKey: input.activityKey.trim(),
+          comparableWage: input.comparableWage,
+          currency: 'EUR',
+          validFrom: input.validFrom,
+          wageSource: input.wageSource,
+          reportedAt: new Date(),
+          reportedById: identity.user.id,
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('comparableWageEntry', eintrag.id, eintrag.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Vergleichsentgelt konnte nicht angelegt werden')

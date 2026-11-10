@@ -27,6 +27,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <Link href="/einsaetze">Einsätze</Link>
             <Link href="/nachweise">Nachweise</Link>
             <Link href="/identitaeten">Personenidentität</Link>
+            <Link href="/protokoll">Protokoll</Link>
           </nav>
           <span className="identity">
             {identity === null

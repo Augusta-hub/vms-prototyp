@@ -6,8 +6,16 @@
  * (lib/authz/check.ts). Diese Datei baut nur die Angaben zusammen, die die
  * Prüffunktion und die Fußnoten aus 2.2 brauchen — sie entscheidet nichts.
  */
-import type { ResourceRef } from '../authz/check'
+import {
+  verweigerungsEintrag,
+  type AuditOperation,
+  type Protokollbezug,
+} from '../audit/entry'
+import { protokolliereGetrennt } from '../audit/record'
+import type { Decision, ResourceRef } from '../authz/check'
+import type { ModelName } from '../authz/resources'
 import type { TenantType } from '../authz/roles'
+import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
 
 /** Ergebnis einer schreibenden Handlung, für Oberfläche und Protokoll. */
@@ -618,7 +626,79 @@ export function documentRef(
   }
 }
 
+/**
+ * Audit-Eintrag (3.12) als Vorgang der Prüffunktion.
+ *
+ * Maßgeblich ist der Mandant des **betroffenen Objekts**, nicht der des
+ * Handelnden: „Der Eintrag gehört technisch dem Betreiber, wird aber dem
+ * Mandanten des betroffenen Objekts zugeordnet" (3.12). Darauf beruht [39].
+ *
+ * `customerTenantId` wird nur bei Objekten eines Kundenmandanten gesetzt —
+ * dort greift die Betreuungszuordnung des Betreibers (2.3, Bedingung 2). Eine
+ * `disclosedToTenantIds`-Kante gibt es **nicht**: die Matrix macht das
+ * Protokoll keinem anderen Mandanten zugänglich.
+ */
+export function auditEntryRef(entry: {
+  readonly tenantId: string
+  readonly tenantType: TenantType
+}): ResourceRef {
+  return {
+    type: 'auditEntry',
+    tenantId: entry.tenantId,
+    tenantType: entry.tenantType,
+    ...(entry.tenantType === 'customer' ? { customerTenantId: entry.tenantId } : {}),
+  }
+}
+
 /** Mandantentyp eines Mandanten, für die Bauer oben. */
 export function tenantTypeOf(tenantType: string): TenantType {
   return tenantType as TenantType
+}
+
+/* ------------------------------------------------------------------ */
+/* Protokoll (3.12)                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Protokolliert einen **verweigerten** Zugriff (3.12: „abgelehnte Zugriffe
+ * werden ebenfalls protokolliert") und gibt die Verweigerung als Ergebnis
+ * zurück, damit die Aufrufstelle eine Zeile bleibt.
+ *
+ * Der Eintrag läuft in einer **eigenen** Transaktion: die Handlung findet nicht
+ * statt, und ein Eintrag in ihrer Transaktion wäre mit dem Rollback weg.
+ *
+ * `tenantId` ist der Mandant des betroffenen Objekts. Fehlt er — bei einer
+ * abgelehnten **Anlage** gibt es noch kein Objekt —, tritt der Mandant des
+ * Handelnden ein (*offene Frage 44*).
+ */
+export async function verweigere(
+  identity: LoadedIdentity,
+  decision: Decision,
+  operation: AuditOperation,
+  objectType: ModelName,
+  objectRef: string,
+  tenantId?: string,
+): Promise<ActionResult> {
+  await protokolliereGetrennt(
+    verweigerungsEintrag({
+      decision,
+      operation,
+      bezug: { objectType, objectRef, tenantId: tenantId ?? identity.tenant.id },
+      userId: identity.user.id,
+      occurredAt: new Date(),
+    }),
+  )
+  if (decision.allowed) {
+    throw new Error('verweigere() wurde mit einer erlaubten Entscheidung aufgerufen.')
+  }
+  return failure(decision.denial.reason, decision.denial.specReference)
+}
+
+/** Bezug eines Eintrags zu einem bestehenden Objekt (3.12). */
+export function protokollbezug(
+  objectType: ModelName,
+  objectRef: string,
+  tenantId: string,
+): Protokollbezug {
+  return { objectType, objectRef, tenantId }
 }

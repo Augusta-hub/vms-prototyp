@@ -58,6 +58,9 @@ Legende: ⬜ offen · 🟨 in Arbeit · ✅ abgeschlossen
 Noch **nicht** Teil von M3 und bewusst offen: der Lieferantenstatus als
 Übergangsmenge (4.6), die Nebenwirkungen aus Kapitel 4 (Benachrichtigung,
 Fristenlauf, Audit-Eintrag aus 3.12) und jede AÜG-Prüfung aus Kapitel 5.
+Davon sind inzwischen erledigt: der Lieferantenstatus (4.6, 10.11.2026), die
+AÜG-Prüfungen (alle elf, siehe M4) und der Audit-Eintrag (3.12, 10.11.2026).
+Offen bleiben Benachrichtigungen und Fristenlauf.
 
 ## M4 — Klickbare Demo: Besetzung 🟨
 
@@ -164,6 +167,20 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   Beauftragung endet erst, wenn kein Einsatz mehr läuft (4.3). Kein
   zeitgesteuerter Übergang: der Ablauf der Erlaubnis wechselt keinen Status
   (5.4.2 a), er sperrt über P9
+- ✅ **Fachliches Protokoll (SPEC 3.12) mit Dienst und Oberfläche** — jede
+  schreibende Operation der sechs Fachdienste erzeugt einen Audit-Eintrag in
+  **derselben** Transaktion wie die Handlung; ein **abgelehnter** Versuch
+  erzeugt ihn in einer eigenen, weil die Handlung zurückrollt und 3.12 den
+  Eintrag trotzdem verlangt. Verweigerung (`denied`, Kapitel 2) und Sperre
+  (`blocked` mit `ruleRef`, Kapitel 5) sind unterschieden (4.0, Regel 5). Die
+  Eintragsnummern sind **lückenlos**, weil die Nummer aus einer gesperrten
+  Zählerzeile kommt und nicht aus einer Sequenz; die Einträge sind
+  unveränderlich in zwei Schichten — die Matrix nennt keine schreibende
+  Operation ([39]), und ein Trigger verweigert `UPDATE` und `DELETE`. Lesend
+  protokolliert werden nur die drei Fälle, die 3.12 nennt; die Granularität
+  bei Listen ist *offene Frage 45*. **Nicht** umgesetzt: Eskalationsstufen und
+  Übersteuerungen (beide Vorgänge gibt es im Prototyp nicht) und
+  `clientContext` (Umfang legt 6.8 fest)
 - ✅ Profilvorschlag durch Lieferanten, Sicht- und Datenschutzregeln —
   Kandidat, Profilvorschlag und Personenidentität (SPEC 3.6) mit dem
   Statusmodell 4.2.3; die Datenminimierung aus 6.4 über die Offenlegungsstufe
@@ -186,13 +203,15 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   Bedarf → Ausschreibung → Profilvorschlag → Einsatz mit Verlängerung,
   Unterbrechung und Beendigung), und die Prüfungen greifen an den Übergängen.
   Die Naht zwischen Regelwerk und Statusmodell ist seit 05.11.2026
-  **automatisiert belegt**: `npm run test:services` führt 25 Tests gegen eine
+  **automatisiert belegt**: `npm run test:services` führt 120 Tests gegen eine
   **eigene** Datenbank (`_test`, vor jedem Test geleert) und prüft, was ohne
   Datenbank nicht prüfbar ist — welche Zeilen der Dienst lädt, ob die gerechnete
   Tatsache den Übergang erreicht und ob eine Sperre nichts schreibt. Zwei
   absichtliche Mutationen im Dienst machen punktgenau je ein Szenario rot; ein
-  grüner Lauf, der nichts prüft, wäre kein Beleg. Was fehlt: `demand.ts` und
-  `masterData.ts` haben noch keine Tests — das Muster steht
+  grüner Lauf, der nichts prüft, wäre kein Beleg. Was fehlt: `demand.ts` hat
+  noch keine eigene Testdatei — das Muster steht, und `masterData.ts`,
+  `documents.ts`, `staffing.ts`, `supplierStatus.ts` und das Protokoll (3.12)
+  haben eine
 
 ## M5 — Zeiterfassung und Freigabe ⬜
 

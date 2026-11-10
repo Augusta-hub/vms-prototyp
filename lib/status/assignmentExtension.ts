@@ -185,6 +185,7 @@ const TRANSITIONS = {
     specReference: 'SPEC 4.3.2, approved → effective',
     preconditions: [
       {
+        ruleRef: 'P1',
         description:
           'P1: `newEndDate` liegt innerhalb von `maxDurationEndDate` — sonst Sperre (5.1, 5.5). ' +
           'Eine Verlängerung darüber hinaus braucht eine dokumentierte Übersteuerung nach 5.5.4 ' +
@@ -193,6 +194,7 @@ const TRANSITIONS = {
         isSatisfied: (facts) => facts.newEndWithinMaxDuration,
       },
       {
+        ruleRef: 'P9',
         description: 'P9: Erlaubnis für den verlängerten Zeitraum gültig (5.4.1).',
         specReference: 'SPEC 4.3.2, approved → effective; 5.4.1',
         isSatisfied: (facts) => facts.hasAcceptedValidPermitForNewPeriod,

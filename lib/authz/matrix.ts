@@ -12,9 +12,9 @@
  * Zuständigkeit gehen vor und werden in lib/authz/check.ts **vor** der Matrix
  * geprüft.
  *
- * Belegt sind die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10 und die beiden
- * Zeilen zu 3.11. Die übrigen Zeilen (3.8, 3.9, 3.12) kommen mit ihren
- * Fachmodulen hinzu; bis dahin verweigern sie jeden Zugriff.
+ * Belegt sind die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10, die beiden Zeilen
+ * zu 3.11 und die Zeile zu 3.12. Die übrigen Zeilen (3.8, 3.9) kommen mit
+ * ihren Fachmodulen hinzu; bis dahin verweigern sie jeden Zugriff.
  *
  * Die Zellen stehen in derselben Reihenfolge wie die Spalten in 2.2
  * (MA · MD · KB · KG · KE · LD · LA · AN); über jeder Zeile steht ihr Wortlaut
@@ -334,6 +334,20 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     procurementController: { create: [45], read: [45], delete: [45] },
     supplierCoordinator: { create: [45], read: [45], delete: [45] },
     supplierAdmin: { create: [7], read: [7], update: [7], delete: [7] },
+  },
+
+  // | Audit-Eintrag (3.12)
+  // | MA: L | MD: L[39] | KB: – | KG: – | KE: L[39] | LD: – | LA: L[39] | AN: – |
+  //
+  // Nur `L`, in jeder Spalte: Einträge entstehen ausschließlich durch das
+  // System und sind für jede Rolle unveränderlich (3.12, [39]). Deshalb trägt
+  // die Zeile kein `A`, kein `Ä`, kein `S` und kein `X` — auch nicht für `MA`.
+  // Das ist die einzige Zeile der Matrix ohne `MA_FULL`.
+  auditEntry: {
+    operatorAdmin: { read: [] },
+    operatorCoordinator: { read: [39] },
+    procurementController: { read: [39] },
+    supplierAdmin: { read: [39] },
   },
 }
 

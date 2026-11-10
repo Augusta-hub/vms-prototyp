@@ -25,9 +25,9 @@
  * Mechanik für 6.4 gibt es nicht.
  *
  * Hinterlegt sind alle Fußnoten der belegten Zeilen: 3.11 ([2], [7], [38],
- * [45]), die Zeilen zu 3.1 bis 3.7 und die Zeile zu 3.10 ([34] bis [37]). Die
- * Fußnoten der noch unbelegten Zeilen (3.8, 3.9, 3.12) kommen mit ihren Zeilen
- * hinzu; die Struktur trägt sie unverändert.
+ * [45]), die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10 ([34] bis [37]) und die
+ * Zeile zu 3.12 ([39]). Die Fußnoten der noch unbelegten Zeilen (3.8, 3.9)
+ * kommen mit ihren Zeilen hinzu; die Struktur trägt sie unverändert.
  */
 import type { Operation } from './operations'
 import type { RoleCode, TenantType } from './roles'
@@ -612,6 +612,27 @@ export const FOOTNOTES = {
       'Nur lesend, zur Zuordnung von Vorgängen; die Rollenvergabe bleibt bei MA bzw. LA. ' +
       'Die kundenseitige Benutzerverwaltung liegt derzeit beim Betreiber — offene Frage 12.',
     isSatisfied: (ctx) => ctx.operation === 'read',
+  },
+  39: {
+    number: 39,
+    text:
+      'Nur Einträge zu Objekten der eigenen Organisation bzw. des betreuten Kunden. ' +
+      'Audit-Einträge entstehen ausschließlich durch das System und sind für jede Rolle ' +
+      'unveränderlich — deshalb trägt die Zeile kein Ä und kein X.',
+    // Die Unveränderlichkeit steht nicht in diesem Prädikat, sondern in der
+    // **Zelle**: die Zeile zu 3.12 nennt weder `update` noch `delete`, und die
+    // Migration zu 3.12 legt zusätzlich einen Trigger an. Hier bleibt die
+    // Sichtbarkeit — und sie ist positiv festgelegt (2.3).
+    //
+    // Für den Betreiber gilt „bzw. des betreuten Kunden": welche Kunden das
+    // sind, hat `checkPermission` vor dieser Fußnote entschieden (2.3,
+    // Bedingung 2). Objekte eines **Lieferantenmandanten** nennt [39] für `MD`
+    // nicht — 3.12 sagt ausdrücklich „`MD` zu Objekten der betreuten Kunden".
+    // Die Folge ist unbequem und benannt: *offene Frage 46*.
+    isSatisfied: (ctx) =>
+      ctx.operation === 'read' &&
+      (ctx.resource.tenantId === ctx.subject.tenantId ||
+        (ctx.subject.tenantType === 'operator' && ctx.resource.tenantType === 'customer')),
   },
   40: {
     number: 40,

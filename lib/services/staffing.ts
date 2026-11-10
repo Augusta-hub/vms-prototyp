@@ -74,7 +74,15 @@ import {
   type Tarifzeile,
   type Verleiherzeile,
 } from '../aueg/anbindung'
-import { checkPermission, type Subject } from '../authz/check'
+import {
+  leseEintrag,
+  schreibEintrag,
+  type AuditDraft,
+  type Protokollbezug,
+} from '../audit/entry'
+import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
+import { checkPermission, type Decision, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
 import {
@@ -107,7 +115,9 @@ import {
   candidateSubmissionRef,
   demandRequestRef,
   failure,
+  protokollbezug,
   success,
+  verweigere,
   type ActionResult,
 } from './common'
 
@@ -713,40 +723,60 @@ export async function createCandidate(
     candidateRef({ tenantId: identity.tenant.id, status: 'active' }),
   )
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'create',
+      'candidate',
+      `${input.pseudonym.trim()} (Lieferant ${supplier.supplierNumber})`,
+      identity.tenant.id,
+    )
   }
 
   const count = await prisma.candidate.count({ where: { supplierId: supplier.id } })
+  const candidateNumber = `K-${supplier.supplierNumber}-${count + 1}`
   try {
-    await prisma.candidate.create({
-      data: {
-        tenantId: identity.tenant.id,
-        candidateNumber: `K-${supplier.supplierNumber}-${count + 1}`,
-        supplierId: supplier.id,
-        givenName: input.givenName.trim(),
-        familyName: input.familyName.trim(),
-        dateOfBirth: input.dateOfBirth,
-        placeOfBirth: input.placeOfBirth,
-        pseudonym: input.pseudonym.trim(),
-        employmentStatusWithSupplier: input.employmentStatusWithSupplier,
-        employedSince: input.employedSince,
-        workPermitRequired: input.workPermitRequired,
-        previousEmploymentDeclaredAt: input.previousEmploymentDeclaredAt,
-        previousEmploymentExisted: input.previousEmploymentExisted,
-        previousEmploymentEndedOn: input.previousEmploymentEndedOn,
-        previousEmploymentEmployer: input.previousEmploymentEmployer,
-        status: 'active',
-        createdById: identity.user.id,
-        ...(input.qualification === null || input.qualification.trim() === ''
-          ? {}
-          : {
-              qualifications: {
-                create: [
-                  { qualification: input.qualification.trim(), createdById: identity.user.id },
-                ],
-              },
-            }),
-      },
+    await prisma.$transaction(async (tx) => {
+      const angelegt = await tx.candidate.create({
+        data: {
+          tenantId: identity.tenant.id,
+          candidateNumber,
+          supplierId: supplier.id,
+          givenName: input.givenName.trim(),
+          familyName: input.familyName.trim(),
+          dateOfBirth: input.dateOfBirth,
+          placeOfBirth: input.placeOfBirth,
+          pseudonym: input.pseudonym.trim(),
+          employmentStatusWithSupplier: input.employmentStatusWithSupplier,
+          employedSince: input.employedSince,
+          workPermitRequired: input.workPermitRequired,
+          previousEmploymentDeclaredAt: input.previousEmploymentDeclaredAt,
+          previousEmploymentExisted: input.previousEmploymentExisted,
+          previousEmploymentEndedOn: input.previousEmploymentEndedOn,
+          previousEmploymentEmployer: input.previousEmploymentEmployer,
+          status: 'active',
+          createdById: identity.user.id,
+          ...(input.qualification === null || input.qualification.trim() === ''
+            ? {}
+            : {
+                qualifications: {
+                  create: [
+                    { qualification: input.qualification.trim(), createdById: identity.user.id },
+                  ],
+                },
+              }),
+        },
+      })
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'create',
+          bezug: protokollbezug('candidate', angelegt.id, angelegt.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Kandidat konnte nicht angelegt werden')
@@ -917,6 +947,14 @@ function submissionResource(submission: LoadedSubmission) {
 /**
  * Die Profilvorschläge, die diese Identität sehen darf — in der sichtbaren
  * Fassung (6.4) und mit den Übergängen, die sie auslösen kann.
+ *
+ * **Protokollpflichtig** ist hier einer der drei Lesefälle aus 3.12: die
+ * Offenlegung der **Klardaten** eines Kandidaten gegenüber der Kundenseite
+ * (Nummer 3; 4.2.3 nennt sie ausdrücklich als Nebenwirkung der Zusage). Sie
+ * entsteht erst mit der Offenlegungsstufe `identified` und nur für Rollen, die
+ * nicht schon ohnehin alles sehen. Alle anderen Lesezugriffe dieser Liste
+ * bleiben unprotokolliert — 3.12 schließt sie ausdrücklich aus, und die
+ * Granularität der Liste ist *offene Frage 45*.
  */
 export async function loadSubmissions(
   identity: LoadedIdentity,
@@ -938,12 +976,31 @@ export async function loadSubmissions(
     ),
   )
 
-  return submissions.flatMap((submission) => {
+  const offenlegungen: AuditDraft[] = []
+  const eintraege = submissions.flatMap((submission) => {
     const status = submission.status as CandidateSubmissionState
     const ref = submissionResource(submission)
     const decision = checkPermission(identity.subject, 'read', ref)
     const fields = project(describeSubmission(submission), decision)
     if (fields === null) return []
+
+    // 3.12, Nummer 3: jeder Lesezugriff auf Klardaten eines Kandidaten wird
+    // protokolliert. Gemeldet wird er, nicht abgewartet — die Liste soll
+    // nicht an einem Protokolleintrag hängen, und der Eintrag läuft in seiner
+    // eigenen Transaktion.
+    if (klardatenOffengelegt(identity, submission, decision)) {
+      offenlegungen.push(
+        leseEintrag({
+          decision,
+          bezug: protokollbezug('candidate', submission.candidateId, submission.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason:
+            `Klardaten des Kandidaten über den Profilvorschlag ${submission.submissionNumber} ` +
+            'offengelegt (6.4, 4.2.3): die Offenlegungsstufe steht auf `identified`.',
+        }),
+      )
+    }
 
     const facts = submissionFacts(
       submission,
@@ -980,6 +1037,35 @@ export async function loadSubmissions(
       },
     ]
   })
+
+  for (const entwurf of offenlegungen) {
+    await protokolliereGetrennt(entwurf)
+  }
+  return eintraege
+}
+
+/**
+ * Legt dieser Lesezugriff die Klardaten des Kandidaten offen (3.12, Nummer 3)?
+ *
+ * Drei Bedingungen zusammen: die Offenlegungsstufe steht auf `identified`
+ * (6.4, 4.2.3), der Lesende gehört zur **Kundenseite** — für Betreiber und
+ * Lieferanten sind die Daten nie verdeckt, bei ihnen gibt es keine Offenlegung,
+ * die mit der Zusage entstünde —, und die Entscheidung verdeckt die Klardaten
+ * tatsächlich nicht.
+ *
+ * Die dritte Bedingung ist die eigentliche: sie liest das Ergebnis der
+ * Fußnote [23] statt sie nachzubauen. Verdeckt die Fußnote die Felder, ist
+ * nichts offengelegt worden.
+ */
+function klardatenOffengelegt(
+  identity: LoadedIdentity,
+  submission: LoadedSubmission,
+  decision: Decision,
+): boolean {
+  if (!decision.allowed) return false
+  if (identity.tenant.tenantType !== 'customer') return false
+  if (submission.disclosureLevel !== 'identified') return false
+  return !decision.concealedFields.includes('familyName')
 }
 
 export interface NewSubmissionInput {
@@ -1056,7 +1142,18 @@ export async function submitCandidate(
     resource: ref,
     facts,
   })
-  if (!created.applied) return rejection(created)
+  if (!created.applied) {
+    return rejection(created, {
+      bezug: protokollbezug(
+        'candidateSubmission',
+        `Vorschlag zu Kandidat ${candidate.candidateNumber}`,
+        candidate.tenantId,
+      ),
+      userId: identity.user.id,
+      statusTo: 'draft',
+      operation: 'create',
+    })
+  }
 
   const submitted = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'submit', {
     currentStatus: 'draft',
@@ -1064,25 +1161,51 @@ export async function submitCandidate(
     resource: ref,
     facts,
   })
-  if (!submitted.applied) return rejection(submitted)
+  if (!submitted.applied) {
+    return rejection(submitted, {
+      bezug: protokollbezug(
+        'candidateSubmission',
+        `Vorschlag zu Kandidat ${candidate.candidateNumber}`,
+        candidate.tenantId,
+      ),
+      userId: identity.user.id,
+      statusFrom: 'draft',
+      statusTo: 'submitted',
+    })
+  }
 
   const count = await prisma.candidateSubmission.count({ where: { tenantId: candidate.tenantId } })
   try {
-    await prisma.candidateSubmission.create({
-      data: {
-        tenantId: candidate.tenantId,
-        submissionNumber: `PV-${candidate.candidateNumber}-${count + 1}`,
-        candidateId: candidate.id,
-        supplierOfferId: offer.id,
-        demandRequestId: demandRequest.id,
-        availableFrom: input.availableFrom,
-        offeredHourlyRate: input.offeredHourlyRate,
-        currency: input.offeredHourlyRate === null ? null : 'EUR',
-        disclosureLevel: 'pseudonymized',
-        submittedAt: evaluationDate,
-        status: 'submitted',
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const vorschlag = await tx.candidateSubmission.create({
+        data: {
+          tenantId: candidate.tenantId,
+          submissionNumber: `PV-${candidate.candidateNumber}-${count + 1}`,
+          candidateId: candidate.id,
+          supplierOfferId: offer.id,
+          demandRequestId: demandRequest.id,
+          availableFrom: input.availableFrom,
+          offeredHourlyRate: input.offeredHourlyRate,
+          currency: input.offeredHourlyRate === null ? null : 'EUR',
+          disclosureLevel: 'pseudonymized',
+          submittedAt: evaluationDate,
+          status: 'submitted',
+          createdById: identity.user.id,
+        },
+      })
+      // Zwei Übergänge aus 4.2.3, zwei Einträge: das Protokoll zeigt die
+      // Schritte, die Kapitel 4 nennt, nicht ihre Summe (4.0, Regel 3).
+      for (const uebergang of [created, submitted]) {
+        await protokolliere(
+          tx,
+          uebergangsEintrag({
+            outcome: uebergang,
+            bezug: protokollbezug('candidateSubmission', vorschlag.id, vorschlag.tenantId),
+            userId: identity.user.id,
+            occurredAt: evaluationDate,
+          }),
+        )
+      }
     })
   } catch (error) {
     return asFailure(error, 'Profilvorschlag konnte nicht eingereicht werden')
@@ -1153,7 +1276,14 @@ export async function transitionSubmission(
       overrides,
     ),
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug('candidateSubmission', submission.id, submission.tenantId),
+      userId: identity.user.id,
+      statusFrom: submission.status,
+      statusTo: CANDIDATE_SUBMISSION_MODEL.transitions[input.transition].to,
+    })
+  }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
   if (input.transition === 'releaseToCustomer') data.releasedToCustomerAt = evaluationDate
@@ -1178,7 +1308,43 @@ export async function transitionSubmission(
   if (input.transition === 'withdraw') data.withdrawnAt = evaluationDate
 
   try {
-    await prisma.candidateSubmission.update({ where: { id: submission.id }, data })
+    await prisma.$transaction(async (tx) => {
+      await tx.candidateSubmission.update({ where: { id: submission.id }, data })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('candidateSubmission', submission.id, submission.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          // 4.2.3 macht die Begründung bei der Ablehnung zur Pflicht.
+          reason,
+        }),
+      )
+      // 4.2.3: mit der Zusage wechselt die Offenlegungsstufe auf
+      // `identified` — ab dann sind Klardaten sichtbar, und **jeder** Zugriff
+      // darauf ist zu protokollieren (3.12, Nummer 3; 6.4). Der Wechsel selbst
+      // steht als geänderte Felder im Eintrag, damit später nachvollziehbar
+      // ist, ab wann die Klardaten offenlagen.
+      if (input.transition === 'accept') {
+        await protokolliere(
+          tx,
+          schreibEintrag({
+            decision: outcome.decision,
+            operation: 'update',
+            bezug: protokollbezug('candidateSubmission', submission.id, submission.tenantId),
+            userId: identity.user.id,
+            occurredAt: evaluationDate,
+            changedFields: [
+              { field: 'disclosureLevel', from: submission.disclosureLevel, to: 'identified' },
+            ],
+            reason:
+              'Offenlegungsstufe nach der Zusage (4.2.3, 6.4): ab hier sind die Klardaten des ' +
+              'Kandidaten für die Kundenseite sichtbar.',
+          }),
+        )
+      }
+    })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Profilvorschlag konnte nicht gespeichert werden')
   }
@@ -1238,9 +1404,20 @@ async function moveRequestToSelection(
     },
   })
   if (!outcome.applied) return ''
-  await prisma.demandRequest.update({
-    where: { id: demandRequestId },
-    data: { status: 'inSelection', updatedById: identity.user.id },
+  await prisma.$transaction(async (tx) => {
+    await tx.demandRequest.update({
+      where: { id: demandRequestId },
+      data: { status: 'inSelection', updatedById: identity.user.id },
+    })
+    await protokolliere(
+      tx,
+      uebergangsEintrag({
+        outcome,
+        bezug: protokollbezug('demandRequest', demandRequestId, request.tenantId),
+        userId: identity.user.id,
+        occurredAt: evaluationDate,
+      }),
+    )
   })
   return ' Die Bedarfsanfrage steht jetzt auf „inSelection" (4.1).'
 }
@@ -1986,61 +2163,83 @@ export async function createAssignment(
     resource: ref,
     facts,
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug(
+        'assignment',
+        `Einsatz zu Profilvorschlag ${submission.submissionNumber}`,
+        operatorTenant.id,
+      ),
+      userId: identity.user.id,
+      statusTo: 'planned',
+      operation: 'create',
+    })
+  }
 
   const count = await prisma.assignment.count()
   try {
-    await prisma.assignment.create({
-      data: {
-        tenantId: operatorTenant.id,
-        assignmentNumber: `E-2026-${String(count + 1).padStart(4, '0')}`,
-        customerId: submission.demandRequest.customerId,
-        siteId: submission.demandRequest.siteId,
-        costCenterId: input.costCenterId,
-        supplierId: submission.candidate.supplierId,
-        candidateId: submission.candidateId,
-        workerIdentityId: submission.candidate.workerIdentityId,
-        demandRequestId: submission.demandRequestId,
-        candidateSubmissionId: submission.id,
-        activityDescription: input.activityDescription.trim(),
-        plannedStartDate: input.plannedStartDate,
-        plannedEndDate: input.plannedEndDate,
-        weeklyHours: input.weeklyHours,
-        shiftModel: input.shiftModel,
-        agreedRateCardItemId: input.agreedRateCardItemId,
-        customerRateCardItemId: input.customerRateCardItemId,
-        currency: 'EUR',
-        comparableWage,
-        comparableWageCurrency: comparableWage === null ? null : 'EUR',
-        status: 'planned',
-        createdById: identity.user.id,
-        // 5.1.3, „Ergebnisfelder": der Einsatz trägt den Fristenstand seiner
-        // Kette von Anfang an — gerechnet mit seinen eigenen vorgesehenen
-        // Tagen (Schritt 6), nicht erst beim Start.
-        maxDurationEndDate: regelstand.hoechstdauer?.maxDurationEndDate ?? null,
-        countedDurationDays: regelstand.hoechstdauer?.countedDurationDays ?? null,
-      },
-    })
-    // Dieselben Werte an den **übrigen** Einsätzen der Kette; der neue trägt
-    // sie schon. Die Kennung des neuen Einsatzes stand beim Rechnen noch nicht
-    // fest und ist deshalb kein Ziel.
-    if (regelstand.hoechstdauer !== null) {
-      const ohneNeuen = (kennungen: readonly string[]) =>
-        kennungen.filter((kennung) => kennung !== '(neuer Einsatz)')
-      await schreibeFristenstand(
-        prisma,
-        {
-          ...regelstand.hoechstdauer,
-          chainAssignmentIds: ohneNeuen(regelstand.hoechstdauer.chainAssignmentIds),
+    await prisma.$transaction(async (tx) => {
+      const einsatz = await tx.assignment.create({
+        data: {
+          tenantId: operatorTenant.id,
+          assignmentNumber: `E-2026-${String(count + 1).padStart(4, '0')}`,
+          customerId: submission.demandRequest.customerId,
+          siteId: submission.demandRequest.siteId,
+          costCenterId: input.costCenterId,
+          supplierId: submission.candidate.supplierId,
+          candidateId: submission.candidateId,
+          workerIdentityId: submission.candidate.workerIdentityId,
+          demandRequestId: submission.demandRequestId,
+          candidateSubmissionId: submission.id,
+          activityDescription: input.activityDescription.trim(),
+          plannedStartDate: input.plannedStartDate,
+          plannedEndDate: input.plannedEndDate,
+          weeklyHours: input.weeklyHours,
+          shiftModel: input.shiftModel,
+          agreedRateCardItemId: input.agreedRateCardItemId,
+          customerRateCardItemId: input.customerRateCardItemId,
+          currency: 'EUR',
+          comparableWage,
+          comparableWageCurrency: comparableWage === null ? null : 'EUR',
+          status: 'planned',
+          createdById: identity.user.id,
+          // 5.1.3, „Ergebnisfelder": der Einsatz trägt den Fristenstand seiner
+          // Kette von Anfang an — gerechnet mit seinen eigenen vorgesehenen
+          // Tagen (Schritt 6), nicht erst beim Start.
+          maxDurationEndDate: regelstand.hoechstdauer?.maxDurationEndDate ?? null,
+          countedDurationDays: regelstand.hoechstdauer?.countedDurationDays ?? null,
         },
-        regelstand.equalPay === null
-          ? null
-          : {
-              ...regelstand.equalPay,
-              chainAssignmentIds: ohneNeuen(regelstand.equalPay.chainAssignmentIds),
-            },
+      })
+      // Dieselben Werte an den **übrigen** Einsätzen der Kette; der neue trägt
+      // sie schon. Die Kennung des neuen Einsatzes stand beim Rechnen noch
+      // nicht fest und ist deshalb kein Ziel.
+      if (regelstand.hoechstdauer !== null) {
+        const ohneNeuen = (kennungen: readonly string[]) =>
+          kennungen.filter((kennung) => kennung !== '(neuer Einsatz)')
+        await schreibeFristenstand(
+          tx,
+          {
+            ...regelstand.hoechstdauer,
+            chainAssignmentIds: ohneNeuen(regelstand.hoechstdauer.chainAssignmentIds),
+          },
+          regelstand.equalPay === null
+            ? null
+            : {
+                ...regelstand.equalPay,
+                chainAssignmentIds: ohneNeuen(regelstand.equalPay.chainAssignmentIds),
+              },
+        )
+      }
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('assignment', einsatz.id, einsatz.tenantId),
+          userId: identity.user.id,
+          occurredAt: new Date(),
+        }),
       )
-    }
+    })
   } catch (error) {
     return asFailure(error, 'Einsatz konnte nicht angelegt werden')
   }
@@ -2120,7 +2319,14 @@ export async function transitionAssignment(
     resource: assignmentResource(assignment),
     facts: assignmentFacts(assignment, regelstand, evaluationDate, overrides, bezug),
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug('assignment', assignment.id, assignment.tenantId),
+      userId: identity.user.id,
+      statusFrom: status,
+      statusTo: ASSIGNMENT_MODEL.transitions[input.transition].to,
+    })
+  }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
   if (input.transition === 'start') data.actualStartDate = input.actualStartDate
@@ -2152,6 +2358,16 @@ export async function transitionAssignment(
       // fortgeschrieben — in derselben Transaktion wie der Übergang, der die
       // Rechengrundlage geändert hat (5.5.1 b).
       await schreibeFristenstand(tx, regelstand.hoechstdauer, regelstand.equalPay)
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('assignment', assignment.id, assignment.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason: input.interruptionReason ?? null,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Einsatz konnte nicht gespeichert werden')
@@ -2219,7 +2435,14 @@ export async function recordTerminationRequest(
 
   const decision = checkPermission(identity.subject, 'update', assignmentResource(assignment))
   if (!decision.allowed) {
-    return failure(decision.denial.reason, decision.denial.specReference)
+    return verweigere(
+      identity,
+      decision,
+      'update',
+      'assignment',
+      assignment.id,
+      assignment.tenantId,
+    )
   }
   if (side === 'customer' && input.approvedByUserId === null) {
     return failure(
@@ -2229,18 +2452,46 @@ export async function recordTerminationRequest(
     )
   }
 
+  const beantragtAm = new Date()
   try {
-    await prisma.assignment.update({
-      where: { id: assignment.id },
-      data: {
-        terminationReason: input.reason.trim(),
-        terminationRequestedById: requester.id,
-        terminationRequestedAt: new Date(),
-        ...(side === 'customer' && input.approvedByUserId !== null
-          ? { terminationApprovedAt: new Date(), terminationApprovedById: input.approvedByUserId }
-          : {}),
-        updatedById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.assignment.update({
+        where: { id: assignment.id },
+        data: {
+          terminationReason: input.reason.trim(),
+          terminationRequestedById: requester.id,
+          terminationRequestedAt: beantragtAm,
+          ...(side === 'customer' && input.approvedByUserId !== null
+            ? { terminationApprovedAt: beantragtAm, terminationApprovedById: input.approvedByUserId }
+            : {}),
+          updatedById: identity.user.id,
+        },
+      })
+      // Kein Übergang (4.3.1 gibt dem Antrag keinen Zustand), also eine
+      // **Änderung** mit geänderten Feldern — so verlangt es 3.12 für `update`.
+      await protokolliere(
+        tx,
+        schreibEintrag({
+          decision,
+          operation: 'update',
+          bezug: protokollbezug('assignment', assignment.id, assignment.tenantId),
+          userId: identity.user.id,
+          occurredAt: beantragtAm,
+          changedFields: [
+            {
+              field: 'terminationRequestedById',
+              from: assignment.terminationRequestedById,
+              to: requester.id,
+            },
+            {
+              field: 'terminationReason',
+              from: assignment.terminationReason,
+              to: input.reason.trim(),
+            },
+          ],
+          reason: input.reason.trim(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Antrag auf vorzeitige Beendigung konnte nicht gespeichert werden')
@@ -2298,19 +2549,48 @@ export async function requestExtension(
       evaluationDate,
     ),
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug(
+        'assignmentExtension',
+        `Verlängerung zu Einsatz ${assignment.assignmentNumber}`,
+        assignment.tenantId,
+      ),
+      userId: identity.user.id,
+      statusTo: 'requested',
+      // 2.2 gibt `KB` und `LD` am Einsatz **kein** `A`, sondern `S[25]`: der
+      // Antrag ist dort ein Übergang, nicht eine Anlage (*offene Frage 39*).
+      operation: 'transition',
+    })
+  }
 
   try {
-    await prisma.assignmentExtension.create({
-      data: {
-        assignmentId: assignment.id,
-        newEndDate: input.newEndDate,
-        reason: input.reason.trim(),
-        requestedAt: evaluationDate,
-        requestedById: identity.user.id,
-        status: 'requested',
-        createdById: identity.user.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      const verlaengerung = await tx.assignmentExtension.create({
+        data: {
+          assignmentId: assignment.id,
+          newEndDate: input.newEndDate,
+          reason: input.reason.trim(),
+          requestedAt: evaluationDate,
+          requestedById: identity.user.id,
+          status: 'requested',
+          createdById: identity.user.id,
+        },
+      })
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug(
+            'assignmentExtension',
+            verlaengerung.id,
+            assignment.tenantId,
+          ),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason: input.reason.trim(),
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Verlängerung konnte nicht beantragt werden')
@@ -2376,7 +2656,14 @@ export async function transitionExtension(
       evaluationDate,
     ),
   })
-  if (!outcome.applied) return rejection(outcome)
+  if (!outcome.applied) {
+    return rejection(outcome, {
+      bezug: protokollbezug('assignmentExtension', extension.id, assignment.tenantId),
+      userId: identity.user.id,
+      statusFrom: extension.status,
+      statusTo: ASSIGNMENT_EXTENSION_MODEL.transitions[input.transition].to,
+    })
+  }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
   if (input.transition === 'approve') {
@@ -2410,6 +2697,16 @@ export async function transitionExtension(
         )
         await schreibeFristenstand(tx, nachVerlaengerung.hoechstdauer, nachVerlaengerung.equalPay)
       }
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('assignmentExtension', extension.id, assignment.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason,
+        }),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel an der Verlängerung konnte nicht gespeichert werden')
@@ -2577,8 +2874,33 @@ export async function loadStaffingFormOptions(
   return { ownOffers, ownCandidates, terminationRequesters, approvers, acceptedSubmissions }
 }
 
-function rejection(outcome: TransitionOutcome<string>): ActionResult {
+/**
+ * Eine abgelehnte Handlung: Ergebnis **und** Audit-Eintrag (3.12, „abgelehnte
+ * Zugriffe werden ebenfalls protokolliert"). Beides an einer Stelle, damit kein
+ * Weg aus diesem Modul eine Ablehnung zurückgibt, ohne sie zu protokollieren.
+ */
+async function rejection(
+  outcome: TransitionOutcome<string>,
+  protokoll: {
+    readonly bezug: Protokollbezug
+    readonly userId: string
+    readonly statusFrom?: string | null
+    readonly statusTo: string
+    readonly operation?: 'create' | 'transition'
+  },
+): Promise<ActionResult> {
   if (outcome.applied) return success('')
+  await protokolliereGetrennt(
+    ablehnungsEintrag({
+      rejection: outcome.rejection,
+      bezug: protokoll.bezug,
+      userId: protokoll.userId,
+      occurredAt: new Date(),
+      statusFrom: protokoll.statusFrom ?? null,
+      statusTo: protokoll.statusTo,
+      ...(protokoll.operation !== undefined ? { operation: protokoll.operation } : {}),
+    }),
+  )
   return failure(outcome.rejection.reason, outcome.rejection.specReference)
 }
 
