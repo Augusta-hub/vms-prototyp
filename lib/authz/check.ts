@@ -97,6 +97,10 @@ export interface ResourceRef {
   readonly engagementTenantIds?: readonly string[]
   /** Bedarfsträger einer Bedarfsanfrage — [11] und Vier-Augen in 4.1. */
   readonly requestedById?: string
+  /** Einreichende Person — Vier-Augen am Stundenzettel ([29]). */
+  readonly submittedById?: string
+  /** Rolle der offenen Freigabestufe eines Stundenzettels (3.1, 4.4) — [29]. */
+  readonly openApprovalRoleCode?: RoleCode
   /** Seite einer Preisliste (3.3) — [41] und [42]. */
   readonly rateCardScope?: 'supplierRateCard' | 'customerRateCard'
   /** Zugriff aus der Entscheidung über einen konkreten Vorgang heraus — [8]. */
@@ -333,6 +337,12 @@ export function checkPermission(
           ? { engagementTenantIds: resource.engagementTenantIds }
           : {}),
         ...(resource.requestedById !== undefined ? { requestedById: resource.requestedById } : {}),
+        ...(resource.submittedById !== undefined
+          ? { submittedById: resource.submittedById }
+          : {}),
+        ...(resource.openApprovalRoleCode !== undefined
+          ? { openApprovalRoleCode: resource.openApprovalRoleCode }
+          : {}),
         ...(resource.rateCardScope !== undefined ? { rateCardScope: resource.rateCardScope } : {}),
         ...(resource.inApprovalContext !== undefined
           ? { inApprovalContext: resource.inApprovalContext }

@@ -17,6 +17,9 @@ import {
   pruefeLieferant,
   pruefePreisposition,
   pruefeRahmenvertrag,
+  pruefeZeitposition,
+  pruefeZeitpositionen,
+  pruefeZeitpositionOderWirf,
   StammdatenInvarianteError,
   wirfBeiVerletzung,
   type Dokumentfelder,
@@ -385,5 +388,151 @@ describe('Werfen mit Fundstelle', () => {
 
   it('wirft nicht, wenn nichts verletzt ist', () => {
     expect(() => wirfBeiVerletzung([], 'Lieferant L-1')).not.toThrow()
+  })
+})
+
+describe('Zeitposition: die vier Invarianten (SPEC 3.8)', () => {
+  const TAG = new Date('2026-11-11T00:00:00.000Z')
+
+  const tagessumme = (teile: Partial<Parameters<typeof pruefeZeitposition>[0]> = {}) => ({
+    workDate: TAG,
+    startMinute: null,
+    endMinute: null,
+    breakMinutes: null,
+    hours: 8,
+    ...teile,
+  })
+
+  const abschnitt = (teile: Partial<Parameters<typeof pruefeZeitposition>[0]> = {}) => ({
+    workDate: TAG,
+    startMinute: 8 * 60,
+    endMinute: 16 * 60,
+    breakMinutes: 30,
+    hours: 7.5,
+    ...teile,
+  })
+
+  it('nimmt eine Tagessumme an', () => {
+    expect(pruefeZeitposition(tagessumme())).toEqual([])
+  })
+
+  it('nimmt einen Abschnitt an, dessen Menge der Dauer entspricht', () => {
+    expect(pruefeZeitposition(abschnitt())).toEqual([])
+  })
+
+  it('nimmt einen Abschnitt über Mitternacht an — die Nachtschicht ist der Regelfall', () => {
+    // 22:00 bis 06:00, 30 Minuten Pause → 7,5 Stunden.
+    expect(
+      pruefeZeitposition(
+        abschnitt({ startMinute: 22 * 60, endMinute: 6 * 60, breakMinutes: 30, hours: 7.5 }),
+      ),
+    ).toEqual([])
+  })
+
+  // ── Invariante 1 ────────────────────────────────────────────────────────
+  it('beanstandet eine halbe Uhrzeit — das ist keine Erfassungsform', () => {
+    const verletzungen = pruefeZeitposition(tagessumme({ startMinute: 8 * 60 }))
+    expect(verletzungen.map((eintrag) => eintrag.feld)).toContain('startTime/endTime')
+  })
+
+  it('beanstandet eine Uhrzeit außerhalb des Tages', () => {
+    const verletzungen = pruefeZeitposition(
+      abschnitt({ startMinute: 24 * 60, endMinute: 2 * 60, hours: 2 }),
+    )
+    expect(verletzungen.map((eintrag) => eintrag.feld)).toContain('startTime')
+  })
+
+  // ── Invariante 2 ────────────────────────────────────────────────────────
+  it('beanstandet eine Pause an einer Tagessumme — dort wäre sie doppelt abgezogen', () => {
+    const verletzungen = pruefeZeitposition(tagessumme({ breakMinutes: 30 }))
+    expect(verletzungen.map((eintrag) => eintrag.feld)).toContain('breakMinutes')
+  })
+
+  it('beanstandet eine negative Pause', () => {
+    const verletzungen = pruefeZeitposition(abschnitt({ breakMinutes: -30, hours: 8.5 }))
+    expect(verletzungen.map((eintrag) => eintrag.feld)).toContain('breakMinutes')
+  })
+
+  // ── Invariante 3 ────────────────────────────────────────────────────────
+  it('beanstandet eine Menge, die nicht der Dauer entspricht', () => {
+    const verletzungen = pruefeZeitposition(abschnitt({ hours: 8 }))
+    expect(verletzungen).toHaveLength(1)
+    expect(verletzungen[0]?.grund).toContain('die Menge die Dauer')
+  })
+
+  it('duldet eine Abweichung von einer Sekunde — Dezimalstunden sind nicht exakt', () => {
+    expect(pruefeZeitposition(abschnitt({ hours: 7.5 - 1 / 3600 / 2 }))).toEqual([])
+  })
+
+  it('beanstandet eine Pause, die den Abschnitt aufzehrt', () => {
+    const verletzungen = pruefeZeitposition(
+      abschnitt({ startMinute: 8 * 60, endMinute: 9 * 60, breakMinutes: 60, hours: 1 }),
+    )
+    expect(verletzungen.map((eintrag) => eintrag.grund)).toContain(
+      'Die Pause ist so lang wie der Abschnitt oder länger — es bleibt keine Arbeitszeit.',
+    )
+  })
+
+  // ── Nur produktive Zeiten (Entscheidung zu Frage 21) ────────────────────
+  it('beanstandet eine Position ohne Stunden — eine Abwesenheit wird nicht erfasst', () => {
+    const verletzungen = pruefeZeitposition(tagessumme({ hours: 0 }))
+    expect(verletzungen.map((eintrag) => eintrag.grund.slice(0, 40))).toContain(
+      'Erfasst werden ausschließlich produktive',
+    )
+  })
+
+  it('beanstandet negative Stunden', () => {
+    expect(pruefeZeitposition(tagessumme({ hours: -1 })).length).toBeGreaterThan(0)
+  })
+
+  // ── Invariante 4 ────────────────────────────────────────────────────────
+  it('nimmt zwei Abschnitte desselben Tages an, die sich nicht überlappen', () => {
+    expect(
+      pruefeZeitpositionen([
+        abschnitt({ startMinute: 6 * 60, endMinute: 10 * 60, breakMinutes: null, hours: 4 }),
+        abschnitt({ startMinute: 14 * 60, endMinute: 18 * 60, breakMinutes: null, hours: 4 }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('beanstandet zwei überlappende Abschnitte — dieselbe Stunde zweimal', () => {
+    const verletzungen = pruefeZeitpositionen([
+      abschnitt({ startMinute: 6 * 60, endMinute: 12 * 60, breakMinutes: null, hours: 6 }),
+      abschnitt({ startMinute: 10 * 60, endMinute: 14 * 60, breakMinutes: null, hours: 4 }),
+    ])
+    expect(verletzungen).toHaveLength(1)
+    expect(verletzungen[0]?.grund).toContain('überlappen')
+  })
+
+  it('beanstandet eine Überlappung über Mitternacht hinweg', () => {
+    const verletzungen = pruefeZeitpositionen([
+      abschnitt({ startMinute: 22 * 60, endMinute: 2 * 60, breakMinutes: null, hours: 4 }),
+      abschnitt({ startMinute: 23 * 60, endMinute: 1 * 60, breakMinutes: null, hours: 2 }),
+    ])
+    expect(verletzungen).toHaveLength(1)
+  })
+
+  it('lässt Abschnitte verschiedener Tage unberührt', () => {
+    expect(
+      pruefeZeitpositionen([
+        abschnitt({ startMinute: 8 * 60, endMinute: 16 * 60, breakMinutes: null, hours: 8 }),
+        abschnitt({
+          workDate: new Date('2026-11-12T00:00:00.000Z'),
+          startMinute: 8 * 60,
+          endMinute: 16 * 60,
+          breakMinutes: null,
+          hours: 8,
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('prüft Tagessummen nicht auf Überlappung — sie tragen keine Uhrzeit', () => {
+    expect(pruefeZeitpositionen([tagessumme(), tagessumme({ hours: 4 })])).toEqual([])
+  })
+
+  it('wirft mit Fundstelle', () => {
+    expect(() => pruefeZeitpositionOderWirf(tagessumme({ hours: 0 }), 'ZP-1')).toThrow(/SPEC 3\.8/)
+    expect(() => pruefeZeitpositionOderWirf(tagessumme(), 'ZP-1')).not.toThrow()
   })
 })

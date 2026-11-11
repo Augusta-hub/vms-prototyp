@@ -213,7 +213,7 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   `documents.ts`, `staffing.ts`, `supplierStatus.ts` und das Protokoll (3.12)
   haben eine
 
-## M5 — Zeiterfassung und Freigabe ⬜
+## M5 — Zeiterfassung und Freigabe 🟨
 
 - ✅ SPEC Kapitel 3.8 und 4.4 ausgearbeitet — Stundenzettel, Freigabeschritt,
   Zeitposition und Zuschlagsart samt Statusmodell
@@ -229,8 +229,28 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
   DSGVO. Neu offen daraus: **Frage 47** (welche Kundenrolle trägt die erste
   Stufe in der Vorbelegung) und **Frage 48** (Rundung der Stunden) — beide
   blockieren die Umsetzung nicht
-- ⬜ Stundenzettel, Zuschläge, Genehmigungsworkflow
-- ⬜ Zeitbezogene AÜG-Prüfungen (Unterbrechung, Fristenlauf)
+- ✅ **Stundenzettel, Zuschläge, Genehmigungsworkflow** (11.11.2026) —
+  Stundenzettel, Zeitposition, Freigabeschritt und Zuschlagsart mit dem
+  Statusmodell 4.4, dazu die Abrechnungsperiode aus 3.9 in dem Umfang, den 4.4
+  braucht (`open`/`closed`; 3.9 nennt das selbst den „fachlichen
+  Mindestumfang"). Die Freigabestufen sind **Konfiguration je Kunde** (3.1) und
+  werden beim Einreichen in die Schritte **kopiert**; die Betreiberstufe tritt
+  hinzu und ersetzt die Kundenentscheidung nicht. Eine Zeitposition ist
+  Tagessumme **oder** Abschnitt, und die Form entscheidet, welche Zuschläge
+  ableitbar sind (`derived` / `declared`). **Keine** Abwesenheitsart: über die
+  Zeiterfassung entsteht kein Gesundheitsdatum nach Art. 9 DSGVO
+- ✅ **Zeitbezogene AÜG-Prüfungen an den Übergängen** — **Q33 bis Q37** greifen:
+  P1 beim Einreichen und bei der Genehmigung (Warnung, nach 5.5.5 ausdrücklich
+  **keine** Sperre), P3 beim Eröffnen der Freigabe, **P4 als Sperre** bei
+  erreichter Equal-Pay-Fälligkeit ohne verwendbares Vergleichsentgelt (Q36) und
+  P10 für die Unterweisung am Standort. P1 und P3 werden dabei aus den
+  Ergebnisfeldern am Einsatz **gelesen** (5.1.3, 5.2.3), nicht ein zweites Mal
+  aus der Überlassungskette gerechnet
+- ⬜ **Korrekturfassung anlegen** — der Übergang `approved` → `corrected` steht
+  im Statusmodell und ist geprüft; der Dienst legt die Korrekturfassung noch
+  nicht an. Gebraucht wird sie mit dem Belegstorno aus 4.5
+- ⬜ **Periode schließen** — gehört zum vollständigen Statusmodell in 4.5 und zu
+  offener Frage 24; die Prüfung auf „offen" in 4.4 greift trotzdem
 
 ## M6 — Abrechnung und Reporting ⬜
 

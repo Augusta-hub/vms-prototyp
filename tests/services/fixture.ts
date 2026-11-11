@@ -38,6 +38,18 @@ export interface Welt {
   readonly einkauf: string
   /** Administrator des ersten Lieferanten (`LA`) — stellt Nachweise ein (5.4.3). */
   readonly lieferantAdmin: string
+  /** Disponent des ersten Lieferanten (`LD`) — erfasst Zeiten ([27], 4.4). */
+  readonly lieferantDisponent: string
+  /** Disponent des **zweiten** Lieferanten — die Mandantengrenze (2.3). */
+  readonly zweiterLieferantDisponent: string
+  /**
+   * Ein **zweiter** Disponent des Betreibers (`MD`).
+   *
+   * Nötig für das Vier-Augen-Prinzip an der Betreiberstufe (4.4, 2.4 Regel 5):
+   * wer den Zettel erfasst oder eingereicht hat, entscheidet keine Stufe — und
+   * im Prototyp erfasst der Betreiber im Namen des Leiharbeitnehmers ([27]).
+   */
+  readonly zweiterDisponent: string
   readonly kunde: string
   readonly standort: string
   readonly kostenstelle: string
@@ -172,10 +184,46 @@ export async function baueWelt(): Promise<Welt> {
       familyName: 'Lieferant',
     },
   })
+  // Der Lieferantendisponent (`LD`) erfasst und reicht Zeiten ein ([27],
+  // [20]); der zweite gehört zum **anderen** Lieferanten und prüft damit die
+  // Mandantengrenze (2.3).
+  const lieferantDisponent = await prisma.user.create({
+    data: {
+      userNumber: 'U-LD',
+      tenantId: lieferantMandant.id,
+      loginIdentifier: 'ld@test.invalid',
+      givenName: 'Lutz',
+      familyName: 'Disponent',
+    },
+  })
+  const zweiterLieferantDisponent = await prisma.user.create({
+    data: {
+      userNumber: 'U-LD2',
+      tenantId: zweiterLieferantMandant.id,
+      loginIdentifier: 'ld2@test.invalid',
+      givenName: 'Lina',
+      familyName: 'Zweitlieferant',
+    },
+  })
+  // Ein zweiter `MD`: das Vier-Augen-Prinzip schließt den Erfasser von jeder
+  // Freigabestufe aus (4.4, 2.4 Regel 5), und erfasst wird im Prototyp vom
+  // Betreiber ([27]).
+  const zweiterDisponent = await prisma.user.create({
+    data: {
+      userNumber: 'U-MD2',
+      tenantId: betreiber.id,
+      loginIdentifier: 'md2@test.invalid',
+      givenName: 'Mara',
+      familyName: 'Zweitdisponentin',
+    },
+  })
   for (const [benutzer, rolle, mandant] of [
     [bedarfstraeger.id, 'demandOwner', kundenMandant.id],
     [einkauf.id, 'procurementController', kundenMandant.id],
     [lieferantAdmin.id, 'supplierAdmin', lieferantMandant.id],
+    [lieferantDisponent.id, 'supplierCoordinator', lieferantMandant.id],
+    [zweiterLieferantDisponent.id, 'supplierCoordinator', zweiterLieferantMandant.id],
+    [zweiterDisponent.id, 'operatorCoordinator', betreiber.id],
   ] as const) {
     await prisma.roleAssignment.create({
       data: {
@@ -506,6 +554,9 @@ export async function baueWelt(): Promise<Welt> {
     bedarfstraeger: bedarfstraeger.id,
     einkauf: einkauf.id,
     lieferantAdmin: lieferantAdmin.id,
+    lieferantDisponent: lieferantDisponent.id,
+    zweiterLieferantDisponent: zweiterLieferantDisponent.id,
+    zweiterDisponent: zweiterDisponent.id,
     kunde: kunde.id,
     standort: standort.id,
     kostenstelle: kostenstelle.id,
@@ -798,4 +849,91 @@ export async function entferneVerleiherzuordnungen(): Promise<void> {
   await prisma.collectiveAgreementAssignment.deleteMany({
     where: { appliesToType: 'supplier' },
   })
+}
+
+/* ------------------------------------------------------------------ */
+/* Zeiterfassung (SPEC 3.8) und Abrechnungsperiode (3.9)               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Eine Abrechnungsperiode (3.9). Sie entsteht **offen**, weil 4.4 nur in einer
+ * offenen Periode erfassen lässt; `geschlossen` ist der Fall, den diese
+ * Vorbedingung prüft.
+ */
+export async function legeAbrechnungsperiodeAn(
+  welt: Welt,
+  eigenes: {
+    readonly nummer: string
+    readonly von: Date
+    readonly bis: Date
+    readonly schlusstermin?: Date
+    readonly status?: 'open' | 'closed'
+    readonly kunde?: string | null
+  },
+): Promise<string> {
+  const periode = await prisma.billingPeriod.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      periodNumber: eigenes.nummer,
+      customerId: eigenes.kunde ?? null,
+      periodFrom: eigenes.von,
+      periodTo: eigenes.bis,
+      closingDate: eigenes.schlusstermin ?? eigenes.bis,
+      status: eigenes.status ?? 'open',
+      openedAt: eigenes.von,
+      openedById: welt.administrator,
+    },
+  })
+  return periode.id
+}
+
+/**
+ * Eine Zuschlagsart (3.8). Die **Ableitungsgrundlage** ist der Kern: sie
+ * entscheidet, ob ein Zuschlag an einer Position abgeleitet werden kann
+ * (Entscheidung zu offener Frage 16).
+ */
+export async function legeZuschlagsartAn(
+  welt: Welt,
+  eigenes: {
+    readonly code: string
+    readonly grundlage: 'timeOfDay' | 'calendarDay' | 'weeklyTotal' | 'manual'
+    readonly anlass?: 'night' | 'sunday' | 'publicHoliday' | 'overtime' | 'hardship' | 'other'
+    readonly vonMinute?: number | null
+    readonly bisMinute?: number | null
+    readonly wochentage?: readonly number[]
+  },
+): Promise<string> {
+  const art = await prisma.premiumType.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      code: eigenes.code,
+      name: `Zuschlag ${eigenes.code} (synthetisch)`,
+      calculationBase: 'percentage',
+      defaultValue: '25.0000',
+      appliesTo: eigenes.anlass ?? 'other',
+      derivationBasis: eigenes.grundlage,
+      legalBasis: 'collectiveAgreement',
+      fromMinute: eigenes.vonMinute ?? null,
+      toMinute: eigenes.bisMinute ?? null,
+      weekdays: [...(eigenes.wochentage ?? [])],
+      validFrom: tag('2025-01-01'),
+    },
+  })
+  return art.id
+}
+
+/**
+ * Eine eigene Freigabestufenfolge für den Kunden der Welt (3.1, Entscheidung
+ * zu offener Frage 5). Ohne sie gilt die Vorbelegung aus 4.4.
+ */
+export async function legeStufenfolgeAn(
+  welt: Welt,
+  rollen: readonly ('demandOwner' | 'approver' | 'procurementController' | 'operatorCoordinator' | 'operatorAdmin')[],
+): Promise<void> {
+  await prisma.customerTimesheetApprovalStage.deleteMany({ where: { customerId: welt.kunde } })
+  for (const [index, roleCode] of rollen.entries()) {
+    await prisma.customerTimesheetApprovalStage.create({
+      data: { customerId: welt.kunde, level: index + 1, roleCode },
+    })
+  }
 }

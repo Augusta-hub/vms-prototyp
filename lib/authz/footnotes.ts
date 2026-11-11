@@ -85,6 +85,14 @@ export interface ConstraintContext {
     readonly engagementTenantIds?: readonly string[]
     /** Bedarfsträger einer Bedarfsanfrage — [11] und Vier-Augen in 4.1. */
     readonly requestedById?: string
+    /** Einreichende Person — Vier-Augen am Stundenzettel ([29], [30]). */
+    readonly submittedById?: string
+    /**
+     * Rolle der **offenen** Freigabestufe eines Stundenzettels (3.1, 4.4) —
+     * Grundlage von [29]. Nur die Rolle, der die Stufe zugewiesen ist,
+     * entscheidet sie.
+     */
+    readonly openApprovalRoleCode?: RoleCode
     /** Seite einer Preisliste (3.3) — [41] und [42]. */
     readonly rateCardScope?: 'supplierRateCard' | 'customerRateCard'
     /**
@@ -509,6 +517,60 @@ export const FOOTNOTES = {
     isSatisfied: (ctx) =>
       ownOrganizationOrOwnCustomer(ctx) && targetStatusIn(ctx, ['approved', 'rejected']),
   },
+  27: {
+    number: 27,
+    text:
+      'Erfassung im Namen des Leiharbeitnehmers, solange dieser keinen eigenen Zugang hat ' +
+      '(offene Frage 4).',
+    // Solange *Frage 4* offen ist, hat der Leiharbeitnehmer **keinen** Zugang:
+    // die Bedingung „solange dieser keinen eigenen Zugang hat" ist damit
+    // erfüllt, und `LD` bzw. `MD` erfassen in seinem Namen. Fällt die
+    // Entscheidung anders, wird aus dieser Fußnote eine Prüfung auf das
+    // Vorhandensein eines Zugangs — die Stelle ist hier und nur hier.
+    isSatisfied: () => true,
+  },
+  28: {
+    number: 28,
+    text:
+      'Korrektur nur mit Begründung und Protokolleintrag (Kapitel 3.12); genehmigte Zeiten nur ' +
+      'über eine Korrekturfassung (Kapitel 4.4).',
+    // Zwei Aussagen, zwei Schichten. Die **Begründung** ist eine Bedingung an
+    // den Schreibvorgang und steht als Invariante in 3.8 bzw. als
+    // Pflichtangabe im Dienst; der **Protokolleintrag** entsteht nach 3.12
+    // ohnehin bei jeder Änderung. Hier steht die Aussage, die ein *Recht*
+    // einschränkt: nach der Genehmigung gibt es keine Änderung mehr, auch
+    // keine begründete. Der Weg ist dann die Korrekturfassung — ein **neuer**
+    // Vorgang, und für den gilt `A`, nicht `Ä`.
+    isSatisfied: (ctx) =>
+      ctx.resource.status !== 'approved' && ctx.resource.status !== 'corrected',
+  },
+  29: {
+    number: 29,
+    text:
+      'Genehmigen oder ablehnen, und nur die Stufe, die timesheetApprovalConfig (3.1) dieser ' +
+      'Rolle zuweist. Anzahl und Reihenfolge der Stufen sind Konfiguration je Kunde (4.4); wer ' +
+      'den Zettel erfasst oder eingereicht hat, entscheidet keine Stufe (2.4, Regel 5).',
+    // Drei Bedingungen, alle drei aus 4.4:
+    //
+    //  1. Es geht um eine Entscheidung über eine Stufe — Zielstatus
+    //     `inApproval` (weitere Stufen offen), `approved` oder `rejected`.
+    //  2. Die offene Stufe ist **dieser Rolle** zugewiesen. Geprüft wird
+    //     `grant.roleCode`, also die Funktion, in der gehandelt wird — nicht,
+    //     welche Rollen die Person sonst noch trägt.
+    //  3. Vier-Augen-Prinzip: wer erfasst oder eingereicht hat, entscheidet
+    //     nicht. Dieselbe Bedingung steht als Vorbedingung in
+    //     lib/status/timesheet.ts; zwei Schichten, damit keine allein hält.
+    isSatisfied: (ctx) =>
+      targetStatusIn(ctx, ['inApproval', 'approved', 'rejected']) &&
+      ctx.resource.openApprovalRoleCode === ctx.grant.roleCode &&
+      ctx.resource.createdById !== ctx.subject.userId &&
+      ctx.resource.submittedById !== ctx.subject.userId,
+  },
+  33: {
+    number: 33,
+    text: 'Öffnen und Schließen einer Abrechnungsperiode.',
+    isSatisfied: (ctx) => targetStatusIn(ctx, ['open', 'closed']),
+  },
   34: {
     number: 34,
     text: 'Nachweis anerkennen oder zurückweisen (Kapitel 5.4).',
@@ -673,6 +735,19 @@ export const FOOTNOTES = {
     fieldScope: {
       writable: ['links', 'linkedCandidates', 'mergeHistory', 'confirmedAt', 'confirmedById'],
     },
+  },
+  44: {
+    number: 44,
+    text:
+      'Die Zeitposition trägt keinen eigenen Status; genehmigt wird der Stundenzettel ' +
+      '(Kapitel 4.4). X meint das Entfernen einer Position vor der Einreichung; Korrekturen ' +
+      'genehmigter Zeiten laufen über eine Korrekturfassung ([28]).',
+    // `status` trägt am Vorgang „Zeitposition" den Zustand ihres
+    // **Stundenzettels** — die Position hat keinen eigenen (3.8). Entfernt
+    // werden darf nur, solange der Zettel erfasst wird: danach ist er
+    // eingereicht, und eine stillschweigend verschwundene Position wäre eine
+    // Änderung an einem vorliegenden Vorgang.
+    isSatisfied: (ctx) => ctx.resource.status === 'recorded',
   },
   45: {
     number: 45,

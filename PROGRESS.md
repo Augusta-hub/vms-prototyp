@@ -5,6 +5,117 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-11 — M5 gebaut: Zeiterfassung und Freigabe (3.8, 4.4)
+
+### Gemacht
+
+Die Zeiterfassung ist umgesetzt — Stundenzettel, Zeitposition, Freigabeschritt
+und Zuschlagsart samt Statusmodell 4.4 und den fünf Querschnittszeilen, die 4.7
+dem Zettel zuordnet: **Q33** (P1 beim Einreichen), **Q34** (P3 beim Eröffnen
+der Freigabe), **Q35** (P1 bei der Genehmigung), **Q36** (P4, **Sperre**) und
+**Q37** (P10 Unterweisung).
+
+Dazu die **Abrechnungsperiode** aus 3.9, soweit 4.4 sie braucht: 3.9 nennt
+`open`/`closed` ausdrücklich den „fachlichen Mindestumfang", und ohne offene
+Periode wird nicht erfasst. Der Beleg und das vollständige Modell aus 4.5
+bleiben M6.
+
+**Neue Dateien:** `lib/status/timesheet.ts(.test.ts)`,
+`lib/timetracking/premiums.ts(.test.ts)`, `lib/services/timesheets.ts`,
+`app/zeiten/page.tsx(actions.ts)`, `tests/services/timesheets.test.ts`. Dazu
+die Migrationen `20261111093518_zeiterfassung_3_8_stundenzettel` und
+`20261111094343_zuschlagsart_wochentage`. Die Zeilen zu **3.8** und zur
+**Abrechnungsperiode** in 2.2 sind belegt, mit den Fußnoten [27], [28], [29],
+[33] und [44].
+
+### Entscheidungen
+
+1. **Zwei Übergänge aus `inApproval`, nicht einer mit Verzweigung.**
+   `approveStage` bleibt in `inApproval`, `approve` führt nach `approved`.
+   Welcher greift, entscheidet die Lage (`remainingOpenStages`) und nicht der
+   Aufrufer — und beide stehen als eigene Zeile im Typsystem, weil 4.4 sie als
+   zwei Zeilen führt (4.0, Regel 1).
+2. **P1 und P3 werden gelesen, nicht neu gerechnet.** `maxDurationEndDate` und
+   `equalPayDueDate` stehen nach 5.1.3 und 5.2.3 am Einsatz und werden an
+   dessen Übergängen fortgeschrieben. Sie hier ein zweites Mal aus der
+   Überlassungskette zu rechnen wäre eine zweite Fassung derselben Regel — und
+   eine der beiden wäre falsch. Gerechnet wird nur, was der Zettel hergibt: ob
+   Positionen **nach** dem Fristende liegen, und ob die Fälligkeit **in** den
+   Zettelzeitraum fällt.
+3. **Der Prüfzeitraum ist der Zettelzeitraum, nicht „heute".** 5.0 führt dafür
+   eine eigene Zeile. Ein Zettel für den Oktober wird im November genehmigt,
+   und geprüft wird der Oktober.
+4. **Die Stunden eines Abschnitts werden gerechnet, nicht übernommen.**
+   Invariante 3 verlangt, dass `hours` die Dauer ist. Die Eingabe zu nehmen und
+   dann zu beanstanden wäre eine Fehlermeldung über etwas, das das Programm
+   selbst besser weiß. Bei einer Tagessumme ist die Menge die Eingabe — dort
+   gibt es keine Dauer.
+5. **Das Rollenkürzel wird in den Freigabeschritt kopiert.** Ein Test hält das
+   fest: ändert sich die Konfiguration des Kunden, behält ein laufender Zettel
+   seine Folge. Eine getroffene Entscheidung gehört nicht nachträglich einer
+   anderen Rolle.
+6. **Die Zuschlagsart trägt ihre Ableitungsgrundlage als Daten.** `timeOfDay`
+   mit Fenster, `calendarDay` mit Wochentagen — beides Konfiguration, keine
+   Konstanten im Code (CLAUDE.md). Der **Feiertag** bleibt ohne Kalender nicht
+   ableitbar und damit `declared`; das ist *Frage 51*, und der Seed führt ihn
+   bewusst ohne Wochentage.
+7. **Die Pause wird brutto gerechnet und auf die bezahlten Stunden begrenzt.**
+   Wo im Abschnitt sie lag, führt 3.8 nicht (*Frage 50*) — mehr
+   Zuschlagsstunden als Arbeitsstunden wären aber in jedem Fall falsch.
+8. **Zwei Vorbedingungen filtern die Oberfläche mit**, weil keine Eingabe sie
+   heilt: die offene Stufe muss der handelnden Person zugewiesen sein, und wer
+   erfasst oder eingereicht hat, entscheidet keine Stufe. Für `KB` und `KG`
+   prüft das schon Fußnote [29]; die Zelle des `MD` trägt in 2.2 ein `S`
+   **ohne** Fußnote — dort hing der Filter zunächst allein an der
+   Vorbedingung, und die Seite bot dem Erfasser einen Knopf an, der nie trägt.
+   Gefunden hat das die Gegenprüfung durch die Oberfläche.
+
+### Belege
+
+Gemessen: **930** Einheitentests in 40 Dateien (84 neue), **165** Dienst-Tests
+in 6 Dateien (45 neue), AÜG-Suite unverändert **267 Szenarien, 120 grün, 0
+rot**, `npx tsc --noEmit` und `npm run build` fehlerfrei, `npm run db:seed`
+zweimal hintereinander.
+
+**Acht Mutationen, acht Befunde — einer davon in einem Test.** Die Mutation
+„Vier-Augen nur gegen den Erfasser" überlebte die **Dienst**-Tests: dort war
+der Erfasser immer auch der Einreicher, und die Prüfung auf den Erfasser allein
+trug den Fall. Die Einheitentests fingen sie. Der Dienst-Test prüft jetzt den
+Fall, in dem beide **verschiedene** Personen sind — und tötet die Mutation
+auch dort.
+
+**Durch die Oberfläche gegengeprüft.** Eine Nachtschicht 22:00–06:00 mit 30
+Minuten Pause ergibt **7,50 Stunden** Arbeit und **7,00 Stunden**
+Nachtzuschlag, Herkunft **abgeleitet**. Dieselbe Menge als **Tagessumme**
+ergibt **keinen** Zuschlag, mit der Meldung, dass er anzugeben wäre — der Kern
+der Entscheidung zu *Frage 16*. Eine Sonntags-Tagessumme ergibt dagegen einen
+**abgeleiteten** Sonntagszuschlag: `calendarDay` braucht keine Uhrzeit. Beim
+Einreichen entstehen für **Südharz** die konfigurierten Stufen (`approver`,
+`operatorCoordinator`), für **Nordwerk** die Vorbelegung (`demandOwner`,
+`operatorCoordinator`). Stufe 1 durch den Genehmiger lässt den Zettel in
+„in Prüfung" stehen, Stufe 2 durch einen **zweiten** Disponenten führt nach
+„genehmigt" — dem Erfasser wird sie nicht angeboten. Alle vier Schreibwege
+stehen im Protokoll (3.12), der Systemübergang `openApproval` mit
+Systemkennzeichen.
+
+### Offen
+
+- **Korrekturfassung** (`approved` → `corrected`): das Statusmodell trägt den
+  Übergang und er ist geprüft, aber der **Dienst** legt noch keine
+  Korrekturfassung an. Solange genehmigte Zeiten nur gelesen werden, fehlt
+  nichts; mit 4.5 (Belegstorno) wird sie gebraucht.
+- Das **Schließen** der Abrechnungsperiode gehört zu 4.5 und zu *Frage 24* und
+  ist nicht umgesetzt. Die Prüfung auf `open` greift trotzdem — ein Test setzt
+  die Periode dafür unmittelbar.
+- **P5** (Zuschlagsstufe) und der Teil von **P4** am Eintrag des Standorts
+  bleiben unangebunden; **P7** wartet weiter auf *Frage 30*.
+- Neue offene Fragen: **49** (darf `LD` einen abgelehnten Zettel nacharbeiten —
+  4.4 nennt ihn, [20] deckt es nicht), **50** (Verteilung der Pause auf die
+  Zuschlagsfenster), **51** (Feiertagskalender).
+- Benachrichtigungen fehlen weiter; der nächtliche Lauf hat keinen Scheduler.
+
+---
+
 ## 2026-11-11 — Zeiten: die drei Fragen zu 3.8 und 4.4 entschieden
 
 ### Gemacht

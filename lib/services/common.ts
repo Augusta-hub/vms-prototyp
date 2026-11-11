@@ -14,7 +14,7 @@ import {
 import { protokolliereGetrennt } from '../audit/record'
 import type { Decision, ResourceRef } from '../authz/check'
 import type { ModelName } from '../authz/resources'
-import type { TenantType } from '../authz/roles'
+import type { RoleCode, TenantType } from '../authz/roles'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
 
@@ -623,6 +623,123 @@ export function documentRef(
     ...(document.uploadedById !== null ? { createdById: document.uploadedById } : {}),
     engagementTenantIds: [...engaged],
     disclosedToTenantIds: [...disclosed],
+  }
+}
+
+/**
+ * Stundenzettel (3.8) als Vorgang der Prüffunktion.
+ *
+ * Der Zettel gehört dem **Betreibermandanten** — er verbindet beide Seiten und
+ * ist Grundlage beider Belegseiten (3.8, 3.9). Trotzdem geben ihm 2.2 die
+ * Kundenseite (`L[2] S[29]`) und die Lieferantenseite (`A[27] L[7] Ä[28]
+ * S[20]`) frei: das ist die ausdrückliche Ausnahme von der Mandantengrenze aus
+ * 2.3, dieselbe Lage wie bei Einladung und Angebot (3.5). Deshalb trägt er
+ * `disclosedToTenantIds`.
+ *
+ * `openApprovalRoleCode` ist die Rolle der **offenen** Freigabestufe und
+ * Grundlage von [29]: nur sie entscheidet ihre Stufe (4.4).
+ */
+export function timesheetRef(timesheet: {
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly supplierTenantId: string
+  readonly status: string
+  readonly recordedById: string
+  readonly submittedById: string | null
+  readonly openApprovalRoleCode?: RoleCode | null
+  readonly siteId?: string | null
+  readonly costCenterId?: string | null
+}): ResourceRef {
+  return {
+    type: 'timesheet',
+    tenantId: timesheet.tenantId,
+    tenantType: 'operator',
+    customerTenantId: timesheet.customerTenantId,
+    supplierTenantId: timesheet.supplierTenantId,
+    status: timesheet.status,
+    // Erfasser und Einreicher tragen das Vier-Augen-Prinzip in [29] (2.4,
+    // Regel 5). `createdById` ist dort der **Erfasser** (`recordedBy`, 3.8).
+    createdById: timesheet.recordedById,
+    ...(timesheet.submittedById !== null ? { submittedById: timesheet.submittedById } : {}),
+    ...(timesheet.openApprovalRoleCode !== null && timesheet.openApprovalRoleCode !== undefined
+      ? { openApprovalRoleCode: timesheet.openApprovalRoleCode }
+      : {}),
+    ...(timesheet.siteId !== null && timesheet.siteId !== undefined
+      ? { siteId: timesheet.siteId }
+      : {}),
+    ...(timesheet.costCenterId !== null && timesheet.costCenterId !== undefined
+      ? { costCenterId: timesheet.costCenterId }
+      : {}),
+    disclosedToTenantIds: [timesheet.customerTenantId, timesheet.supplierTenantId],
+  }
+}
+
+/**
+ * Zeitposition (3.8) als Vorgang.
+ *
+ * `status` trägt den Zustand des **Stundenzettels**: die Position hat keinen
+ * eigenen ([44], 3.8). Darauf beruhen [28] (keine Änderung nach der
+ * Genehmigung) und [44] (Entfernen nur vor der Einreichung).
+ */
+export function timeEntryRef(entry: {
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly supplierTenantId: string
+  readonly timesheetStatus: string
+  readonly recordedById: string
+  readonly siteId?: string | null
+  readonly costCenterId?: string | null
+}): ResourceRef {
+  return {
+    type: 'timeEntry',
+    tenantId: entry.tenantId,
+    tenantType: 'operator',
+    customerTenantId: entry.customerTenantId,
+    supplierTenantId: entry.supplierTenantId,
+    status: entry.timesheetStatus,
+    createdById: entry.recordedById,
+    ...(entry.siteId !== null && entry.siteId !== undefined ? { siteId: entry.siteId } : {}),
+    ...(entry.costCenterId !== null && entry.costCenterId !== undefined
+      ? { costCenterId: entry.costCenterId }
+      : {}),
+    disclosedToTenantIds: [entry.customerTenantId, entry.supplierTenantId],
+  }
+}
+
+/**
+ * Abrechnungsperiode (3.9) als Vorgang. Betreibermandant; `MD` öffnet und
+ * schließt ([33]).
+ */
+export function billingPeriodRef(period: {
+  readonly tenantId: string
+  readonly customerTenantId: string | null
+  readonly status: string
+  readonly engagedSupplierTenantIds?: readonly string[]
+}): ResourceRef {
+  const offengelegt = [
+    ...(period.customerTenantId !== null ? [period.customerTenantId] : []),
+    ...(period.engagedSupplierTenantIds ?? []),
+  ]
+  return {
+    type: 'billingPeriod',
+    tenantId: period.tenantId,
+    tenantType: 'operator',
+    ...(period.customerTenantId !== null ? { customerTenantId: period.customerTenantId } : {}),
+    status: period.status,
+    disclosedToTenantIds: offengelegt,
+  }
+}
+
+/** Zuschlagsart (3.8) als Vorgang — ein Katalog im Betreibermandanten. */
+export function premiumTypeRef(
+  premiumType: { readonly tenantId: string },
+  offengelegt: readonly string[] = [],
+): ResourceRef {
+  return {
+    type: 'premiumType',
+    tenantId: premiumType.tenantId,
+    tenantType: 'operator',
+    disclosedToTenantIds: offengelegt,
   }
 }
 

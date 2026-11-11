@@ -465,3 +465,204 @@ export function wirfBeiVerletzung(
         .join('\n'),
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* Zeitposition (SPEC 3.8) — die vier Invarianten                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Die Felder einer Zeitposition, soweit die Invarianten sie brauchen (3.8).
+ *
+ * Uhrzeiten als **Minuten seit Mitternacht**: ein Dienstbeginn ist eine
+ * Uhrzeit, kein Zeitpunkt, und eine Zeitzone hätte an ihm nichts zu suchen.
+ */
+export interface Zeitpositionsfelder {
+  readonly workDate: Date
+  readonly startMinute: number | null
+  readonly endMinute: number | null
+  readonly breakMinutes: number | null
+  readonly hours: number
+}
+
+/** Tagessumme oder Abschnitt? Abgeleitet, keine Spalte (3.8, `entryForm`). */
+export type Erfassungsform = 'dayTotal' | 'interval'
+
+export function erfassungsform(felder: {
+  readonly startMinute: number | null
+  readonly endMinute: number | null
+}): Erfassungsform {
+  return felder.startMinute !== null && felder.endMinute !== null ? 'interval' : 'dayTotal'
+}
+
+/**
+ * Die Dauer eines Abschnitts in Minuten, Pause abgezogen (3.8).
+ *
+ * `endMinute` kleiner als `startMinute` heißt Überschreitung von Mitternacht —
+ * der Abschnitt gehört dem Tag seines **Beginns**, und die Dauer läuft über
+ * den Tageswechsel hinweg. Ohne diesen Fall wäre eine Nachtschicht nicht
+ * erfassbar.
+ */
+export function abschnittsdauerInMinuten(felder: {
+  readonly startMinute: number
+  readonly endMinute: number
+  readonly breakMinutes: number | null
+}): number {
+  const brutto =
+    felder.endMinute > felder.startMinute
+      ? felder.endMinute - felder.startMinute
+      : MINUTEN_JE_TAG - felder.startMinute + felder.endMinute
+  return brutto - (felder.breakMinutes ?? 0)
+}
+
+export const MINUTEN_JE_TAG = 24 * 60
+
+/** Toleranz beim Vergleich von Stunden: eine Sekunde, in Stunden. */
+const STUNDEN_TOLERANZ = 1 / 3600
+
+/**
+ * Die Invarianten **einer** Zeitposition (3.8, Nummern 1 bis 3).
+ *
+ * Die vierte — zwei Abschnitte desselben Tages überlappen nicht — betrifft
+ * eine **Menge** von Positionen und steht in `pruefeZeitpositionen`.
+ */
+export function pruefeZeitposition(felder: Zeitpositionsfelder): readonly Verletzung[] {
+  const verletzungen: Verletzung[] = []
+
+  // 1. Beide oder keines. Eine halbe Uhrzeit ist keine Erfassungsform.
+  const halb =
+    (felder.startMinute === null) !== (felder.endMinute === null)
+  if (halb) {
+    verletzungen.push({
+      feld: 'startTime/endTime',
+      grund: 'Beginn und Ende sind beide gesetzt oder beide leer (Invariante 1).',
+      specReference: 'SPEC 3.8, Zeitposition',
+    })
+  }
+
+  const form = erfassungsform(felder)
+
+  for (const [feld, wert] of [
+    ['startTime', felder.startMinute],
+    ['endTime', felder.endMinute],
+  ] as const) {
+    if (wert !== null && (wert < 0 || wert >= MINUTEN_JE_TAG)) {
+      verletzungen.push({
+        feld,
+        grund: 'Eine Uhrzeit liegt zwischen 00:00 und 23:59.',
+        specReference: 'SPEC 3.8, Zeitposition',
+      })
+    }
+  }
+
+  // 2. Pause nur bei abschnittsweiser Erfassung — an einer Tagessumme wäre sie
+  //    doppelt abgezogen.
+  if (form === 'dayTotal' && felder.breakMinutes !== null) {
+    verletzungen.push({
+      feld: 'breakMinutes',
+      grund:
+        'Eine Pause gehört zu einem Abschnitt; an einer Tagessumme ist sie schon abgezogen ' +
+        '(Invariante 2).',
+      specReference: 'SPEC 3.8, Zeitposition',
+    })
+  }
+  if (felder.breakMinutes !== null && felder.breakMinutes < 0) {
+    verletzungen.push({
+      feld: 'breakMinutes',
+      grund: 'Eine Pause ist nicht negativ.',
+      specReference: 'SPEC 3.8, Zeitposition',
+    })
+  }
+
+  // 3. Bei einem Abschnitt ist `hours` die Dauer. Zwei Quellen für dieselbe
+  //    Menge, die auseinanderlaufen können, sind ein Fehler und keine
+  //    Wahlfreiheit.
+  if (form === 'interval' && !halb && felder.startMinute !== null && felder.endMinute !== null) {
+    const dauer = abschnittsdauerInMinuten({
+      startMinute: felder.startMinute,
+      endMinute: felder.endMinute,
+      breakMinutes: felder.breakMinutes,
+    })
+    if (dauer <= 0) {
+      verletzungen.push({
+        feld: 'hours',
+        grund: 'Die Pause ist so lang wie der Abschnitt oder länger — es bleibt keine Arbeitszeit.',
+        specReference: 'SPEC 3.8, Zeitposition',
+      })
+    } else if (Math.abs(dauer / 60 - felder.hours) > STUNDEN_TOLERANZ) {
+      verletzungen.push({
+        feld: 'hours',
+        grund:
+          `Bei abschnittsweiser Erfassung ist die Menge die Dauer: ${(dauer / 60).toFixed(4)} ` +
+          `statt ${felder.hours} Stunden (Invariante 3). Gerundet wird bis zur Antwort auf ` +
+          'offene Frage 48 nicht.',
+        specReference: 'SPEC 3.8, Zeitposition',
+      })
+    }
+  }
+
+  // Nur produktive Zeiten (Entscheidung zu Frage 21): eine Position ohne
+  // Stunden ist kein Nachweis einer Abwesenheit, sondern keine Position.
+  if (!(felder.hours > 0)) {
+    verletzungen.push({
+      feld: 'hours',
+      grund:
+        'Erfasst werden ausschließlich produktive Zeiten; eine Position ohne Stunden gibt es ' +
+        'nicht (3.8, Entscheidung zu offener Frage 21).',
+      specReference: 'SPEC 3.8, Zeitposition',
+    })
+  }
+
+  return verletzungen
+}
+
+/**
+ * Die vierte Invariante (3.8): zwei **Abschnitte** desselben Tages überlappen
+ * nicht. Mehrere Abschnitte sind erlaubt — geteilte Dienste gibt es —, dieselbe
+ * Stunde zweimal nicht.
+ *
+ * Tagessummen bleiben außer Betracht: sie tragen keine Uhrzeit, und zwei
+ * Tagessummen am selben Tag sind eine Frage der Summe, nicht der Überlappung.
+ * Ein Abschnitt über Mitternacht wird auf der Zeitachse seines **Beginntags**
+ * verglichen, deshalb kann er über 24:00 hinausreichen.
+ */
+export function pruefeZeitpositionen(
+  positionen: readonly (Zeitpositionsfelder & { readonly id?: string })[],
+): readonly Verletzung[] {
+  const verletzungen: Verletzung[] = []
+  const abschnitte = positionen
+    .filter((position) => erfassungsform(position) === 'interval')
+    .map((position) => {
+      const start = position.startMinute ?? 0
+      const ende = position.endMinute ?? 0
+      return {
+        tag: position.workDate.toISOString().slice(0, 10),
+        von: start,
+        bis: ende > start ? ende : ende + MINUTEN_JE_TAG,
+      }
+    })
+
+  for (let i = 0; i < abschnitte.length; i += 1) {
+    for (let j = i + 1; j < abschnitte.length; j += 1) {
+      const a = abschnitte[i]
+      const b = abschnitte[j]
+      if (a === undefined || b === undefined || a.tag !== b.tag) continue
+      if (a.von < b.bis && b.von < a.bis) {
+        verletzungen.push({
+          feld: 'startTime/endTime',
+          grund:
+            `Zwei Abschnitte am ${a.tag} überlappen sich (Invariante 4): dieselbe Stunde darf ` +
+            'nicht zweimal abgerechnet werden.',
+          specReference: 'SPEC 3.8, Zeitposition',
+        })
+      }
+    }
+  }
+  return verletzungen
+}
+
+export function pruefeZeitpositionOderWirf(
+  felder: Zeitpositionsfelder,
+  bezeichnung: string,
+): void {
+  wirfBeiVerletzung(pruefeZeitposition(felder), `Zeitposition ${bezeichnung}`)
+}

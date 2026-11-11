@@ -60,6 +60,7 @@ Personen, Firmen und Datumsangaben im Fixture sind synthetisch (Regel 3).
 | `supplierStatus.test.ts` | der Lieferantenstatus aus 4.6 und die Zeilen Q41 bis Q44 |
 | `masterData.test.ts` | bisher nur: die Invarianten der AÜG-Erlaubnis am Schreibweg (3.2) |
 | `audit.test.ts` | das fachliche Protokoll aus 3.12: Lückenlosigkeit, Unveränderlichkeit, abgelehnte Versuche, Vertretungsvermerk, Sichtbarkeit nach [39] und die Offenlegung von Klardaten |
+| `timesheets.test.ts` | die Zeiterfassung aus 3.8 und 4.4: Stufenfolge je Kunde, Erfassungsform und Zuschlagsherkunft, Vier-Augen an der Freigabe und die Zeilen Q33 bis Q37 |
 
 Die Welt ist klein: ein Betreiber, ein Kunde mit Standort und Kostenstelle, ein
 zweites Unternehmen desselben Konzerns, zwei Lieferanten und eine Person mit je
@@ -75,6 +76,6 @@ auch für einen Arbeitgeber aus dem Konzern des Entleihers.
   mittelbar belegt — über die Schreibwege, die `audit.test.ts` anfasst.
 - **P7** ist nirgends angebunden: Kapitel 3 führt für die Arbeitskampfanzeige
   kein Feld (*offene Frage 30*).
-- **Q37, Q38 und Q39 bis Q40** warten auf die Statusmodelle 4.4 (Stundenzettel)
-  und 4.5 (Beleg). Sobald es sie gibt, gehören ihre Sperren und Warnungen
-  hierher. **Q41 bis Q44** sind mit 4.6 angebunden und hier geprüft.
+- **Q38 bis Q40** warten auf das Statusmodell 4.5 (Beleg). Sobald es da ist,
+  gehören ihre Sperren und Warnungen hierher. **Q33 bis Q37** sind mit 4.4
+  angebunden und hier geprüft, **Q41 bis Q44** mit 4.6.

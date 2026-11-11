@@ -239,13 +239,15 @@ describe('Berechtigungsmatrix 2.2 — je Rolle ein erlaubter und ein verweigerte
 })
 
 describe('nicht positiv erlaubter Zugriff wird verweigert (2.3)', () => {
-  // Die Zeile zu 3.8 ist noch nicht belegt; sie steht hier für jede Zeile, die
-  // auf ihr Fachmodul wartet. Als dieser Test entstand, war es die Zeile zur
-  // Bedarfsanfrage (mit 3.4 belegt), danach die zum Kandidaten (mit 3.6
-  // belegt).
+  // Die Zeile zum **Abrechnungsbeleg** (3.9) ist noch nicht belegt; sie steht
+  // hier für jede Zeile, die auf ihr Fachmodul wartet. Als dieser Test
+  // entstand, war es die Zeile zur Bedarfsanfrage (mit 3.4 belegt), danach die
+  // zum Kandidaten (mit 3.6 belegt) und bis zu M5 der Stundenzettel (mit 3.8
+  // belegt). Die **Zusicherung** ist unverändert: eine Zeile ohne Eintrag
+  // verweigert jeden Zugriff, auch dem Betreiberadministrator.
   it('eine Zeile ohne Eintrag in der Matrix verweigert jeden Zugriff', () => {
     const decision = checkPermission(subject('operatorAdmin'), 'read', {
-      type: 'timesheet',
+      type: 'billingDocument',
       tenantId: OPERATOR_TENANT,
       tenantType: 'operator',
     })

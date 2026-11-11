@@ -12,9 +12,10 @@
  * Zuständigkeit gehen vor und werden in lib/authz/check.ts **vor** der Matrix
  * geprüft.
  *
- * Belegt sind die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10, die beiden Zeilen
- * zu 3.11 und die Zeile zu 3.12. Die übrigen Zeilen (3.8, 3.9) kommen mit
- * ihren Fachmodulen hinzu; bis dahin verweigern sie jeden Zugriff.
+ * Belegt sind die Zeilen zu 3.1 bis 3.8, die Zeile zu 3.10, die beiden Zeilen
+ * zu 3.11, die Zeile zu 3.12 und aus 3.9 die **Abrechnungsperiode** — sie
+ * steht hier, weil 4.4 sie braucht. Der Abrechnungsbeleg kommt mit 4.5 hinzu;
+ * bis dahin verweigert seine Zeile jeden Zugriff.
  *
  * Die Zellen stehen in derselben Reihenfolge wie die Spalten in 2.2
  * (MA · MD · KB · KG · KE · LD · LA · AN); über jeder Zeile steht ihr Wortlaut
@@ -334,6 +335,71 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     procurementController: { create: [45], read: [45], delete: [45] },
     supplierCoordinator: { create: [45], read: [45], delete: [45] },
     supplierAdmin: { create: [7], read: [7], update: [7], delete: [7] },
+  },
+
+  // | Stundenzettel, Freigabeschritt (3.8)
+  // | MA: A L Ä S X | MD: A[27] L Ä[28] S | KB: L[2] S[29] | KG: L[2] S[29] |
+  // | KE: L[2] | LD: A[27] L[7] Ä[28] S[20] | LA: L[7] | AN: A[4] L[4] Ä[4] S[4] |
+  //
+  // Der Freigabeschritt teilt diese Zeile (2.2, Lesart). `MD` trägt `S` ohne
+  // Fußnote, weil 4.4 ihm den Systemübergang und — nach der Entscheidung zu
+  // *Frage 5* — eine eigene Stufe zuweist; welche Stufe, prüft [29] am
+  // Vorgang.
+  timesheet: {
+    operatorAdmin: MA_FULL,
+    operatorCoordinator: { create: [27], read: [], update: [28], transition: [] },
+    demandOwner: { read: [2], transition: [29] },
+    approver: { read: [2], transition: [29] },
+    procurementController: { read: [2] },
+    supplierCoordinator: { create: [27], read: [7], update: [28], transition: [20] },
+    supplierAdmin: { read: [7] },
+    temporaryWorker: { create: [4], read: [4], update: [4], transition: [4] },
+  },
+
+  // | Zeitposition (3.8)
+  // | MA: A L Ä X[44] | MD: A[27] L Ä[28] | KB: L[2] | KG: L[2] | KE: L[2] |
+  // | LD: A[27] L[7] Ä[28] | LA: L[7] | AN: A[4] L[4] Ä[4] |
+  //
+  // **Kein `S` in dieser Zeile**, auch nicht für `MA`: die Zeitposition trägt
+  // keinen eigenen Status ([44], 3.8). Und `MA` trägt bei `X` eine Fußnote —
+  // die einzige Stelle, an der die Matrix dem Betreiberadministrator eine
+  // Einschränkung auferlegt: entfernt wird nur vor der Einreichung.
+  timeEntry: {
+    operatorAdmin: { create: [], read: [], update: [], delete: [44] },
+    operatorCoordinator: { create: [27], read: [], update: [28] },
+    demandOwner: { read: [2] },
+    approver: { read: [2] },
+    procurementController: { read: [2] },
+    supplierCoordinator: { create: [27], read: [7], update: [28] },
+    supplierAdmin: { read: [7] },
+    temporaryWorker: { create: [4], read: [4], update: [4] },
+  },
+
+  // | Zuschlagsart (Katalog, 3.8)
+  // | MA: A L Ä X | MD: L | KB: – | KG: – | KE: L[2] | LD: L[9] | LA: – | AN: – |
+  //
+  // Ein Katalog ohne Statusmodell: kein `S`. Der Lieferant sieht nur
+  // Zuschlagsarten, die in seinen eigenen Konditionen vorkommen ([9]).
+  premiumType: {
+    operatorAdmin: MA_WITHOUT_TRANSITION,
+    operatorCoordinator: { read: [] },
+    procurementController: { read: [2] },
+    supplierCoordinator: { read: [9] },
+  },
+
+  // | Abrechnungsperiode (3.9)
+  // | MA: A L Ä S X | MD: L S[33] | KB: – | KG: – | KE: L[2] | LD: L[7] |
+  // | LA: L[7] | AN: – |
+  //
+  // Belegt, weil 4.4 sie braucht: ein Stundenzettel gehört zu genau einer
+  // Periode, und erfasst wird nur in einer offenen (3.9). Der Beleg selbst
+  // (`billingDocument`) bleibt unbelegt, bis 4.5 ausgearbeitet ist.
+  billingPeriod: {
+    operatorAdmin: MA_FULL,
+    operatorCoordinator: { read: [], transition: [33] },
+    procurementController: { read: [2] },
+    supplierCoordinator: { read: [7] },
+    supplierAdmin: { read: [7] },
   },
 
   // | Audit-Eintrag (3.12)

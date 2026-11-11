@@ -146,6 +146,20 @@ export const MATRIX_ROW_BY_OBJECT = {
   // 3.10: der Nachweis hat seine eigene Zeile. Er ist **kein** Unterobjekt
   // seines Bezugsobjekts — er folgt ihm nur im Mandanten (3.10).
   document: 'document',
+  // 3.8: der **Freigabeschritt** teilt die Zeile des Stundenzettels (2.2,
+  // Lesart; 3.8 sagt es ausdrücklich: „teilt dessen Matrixzeile"), und der
+  // Zuschlag an einer Position teilt die Zeile der Zeitposition.
+  timesheet: 'timesheet',
+  timesheetApproval: 'timesheet',
+  timeEntry: 'timeEntry',
+  timeEntryPremium: 'timeEntry',
+  premiumType: 'premiumType',
+  // Die **Freigabestufe** eines Kunden (3.1) ist Konfiguration seines
+  // Stammsatzes — wie der Ansprechpartner und `processDeadlineConfig`. 2.2
+  // führt dafür keine Zeile; sie folgt der des Kunden.
+  customerTimesheetApprovalStage: 'customer',
+  // 3.9: die Abrechnungsperiode. Der Beleg kommt mit 4.5.
+  billingPeriod: 'billingPeriod',
 } as const satisfies Record<string, ResourceType>
 
 export type ModelName = keyof typeof MATRIX_ROW_BY_OBJECT

@@ -222,6 +222,15 @@ async function main(): Promise<void> {
   await prisma.$executeRawUnsafe(
     'INSERT INTO "AuditSequence" ("id", "lastEntryNumber") VALUES (1, 0) ON CONFLICT ("id") DO NOTHING',
   )
+  // 3.8 und 3.9 zuerst: der Zuschlag hängt an der Zeitposition, diese am
+  // Zettel, der Zettel an Einsatz und Periode.
+  await prisma.timeEntryPremium.deleteMany()
+  await prisma.timeEntry.deleteMany()
+  await prisma.timesheetApproval.deleteMany()
+  await prisma.timesheet.deleteMany()
+  await prisma.billingPeriod.deleteMany()
+  await prisma.premiumType.deleteMany()
+  await prisma.customerTimesheetApprovalStage.deleteMany()
   await prisma.document.deleteMany()
   await prisma.assignmentExtension.deleteMany()
   await prisma.assignmentInterruption.deleteMany()
@@ -2542,6 +2551,141 @@ async function main(): Promise<void> {
     })
   }
 
+  // ── Zuschlagsarten und Abrechnungsperiode (3.8, 3.9) ─────────────────────
+  //
+  // Der Katalog ist **Konfiguration** (CLAUDE.md): Zeitfenster und Wochentage
+  // stehen als Daten, nicht als Konstanten im Code. Die `derivationBasis`
+  // entscheidet, ob ein Zuschlag an einer Position abgeleitet werden kann
+  // (3.8, Entscheidung zu Frage 16) — der Feiertagszuschlag bleibt ohne
+  // Kalender (offene Frage 51) bewusst ohne Wochentage und damit nicht
+  // ableitbar.
+  const premiumTypes: readonly {
+    readonly code: string
+    readonly name: string
+    readonly appliesTo: 'night' | 'sunday' | 'publicHoliday' | 'overtime' | 'hardship'
+    readonly derivationBasis: 'timeOfDay' | 'calendarDay' | 'weeklyTotal' | 'manual'
+    readonly defaultValue: string
+    readonly legalBasis: 'statutory' | 'collectiveAgreement' | 'contractual'
+    readonly fromMinute?: number
+    readonly toMinute?: number
+    readonly weekdays?: readonly number[]
+  }[] = [
+    {
+      code: 'NACHT',
+      name: 'Nachtzuschlag 23:00 bis 06:00',
+      appliesTo: 'night',
+      derivationBasis: 'timeOfDay',
+      defaultValue: '25.0000',
+      legalBasis: 'collectiveAgreement',
+      fromMinute: 23 * 60,
+      toMinute: 6 * 60,
+    },
+    {
+      code: 'SONNTAG',
+      name: 'Sonntagszuschlag',
+      appliesTo: 'sunday',
+      derivationBasis: 'calendarDay',
+      defaultValue: '50.0000',
+      legalBasis: 'collectiveAgreement',
+      weekdays: [0],
+    },
+    {
+      code: 'FEIERTAG',
+      name: 'Feiertagszuschlag',
+      appliesTo: 'publicHoliday',
+      derivationBasis: 'calendarDay',
+      defaultValue: '100.0000',
+      legalBasis: 'collectiveAgreement',
+      // Kein Feiertagskalender in Kapitel 3 (offene Frage 51): ohne Wochentage
+      // bleibt dieser Zuschlag nicht ableitbar und damit `declared`.
+      weekdays: [],
+    },
+    {
+      code: 'UEBER',
+      name: 'Überstundenzuschlag',
+      appliesTo: 'overtime',
+      derivationBasis: 'weeklyTotal',
+      defaultValue: '25.0000',
+      legalBasis: 'collectiveAgreement',
+    },
+    {
+      code: 'ERSCH',
+      name: 'Erschwerniszuschlag',
+      appliesTo: 'hardship',
+      derivationBasis: 'manual',
+      defaultValue: '1.5000',
+      legalBasis: 'contractual',
+    },
+  ]
+  for (const art of premiumTypes) {
+    await prisma.premiumType.create({
+      data: {
+        tenantId: tenantId('operator'),
+        code: art.code,
+        name: art.name,
+        calculationBase: art.code === 'ERSCH' ? 'absolute' : 'percentage',
+        defaultValue: art.defaultValue,
+        appliesTo: art.appliesTo,
+        derivationBasis: art.derivationBasis,
+        legalBasis: art.legalBasis,
+        fromMinute: art.fromMinute ?? null,
+        toMinute: art.toMinute ?? null,
+        weekdays: [...(art.weekdays ?? [])],
+        validFrom: new Date('2025-01-01T00:00:00.000Z'),
+        createdById: operatorAdminId,
+        createdAt: SEED_DATE,
+      },
+    })
+  }
+
+  // Zwei offene Perioden, damit ein Zettel anzulegen ist (3.9). Das Schließen
+  // gehört zu 4.5 und ist nicht umgesetzt (offene Frage 24).
+  for (const periode of [
+    {
+      periodNumber: '2026-10',
+      periodFrom: new Date('2026-10-01T00:00:00.000Z'),
+      periodTo: new Date('2026-10-31T00:00:00.000Z'),
+      closingDate: new Date('2026-11-10T00:00:00.000Z'),
+    },
+    {
+      periodNumber: '2026-11',
+      periodFrom: new Date('2026-11-01T00:00:00.000Z'),
+      periodTo: new Date('2026-11-30T00:00:00.000Z'),
+      closingDate: new Date('2026-12-10T00:00:00.000Z'),
+    },
+  ]) {
+    await prisma.billingPeriod.create({
+      data: {
+        tenantId: tenantId('operator'),
+        periodNumber: periode.periodNumber,
+        periodFrom: periode.periodFrom,
+        periodTo: periode.periodTo,
+        closingDate: periode.closingDate,
+        status: 'open',
+        openedAt: SEED_DATE,
+        openedById: operatorAdminId,
+        createdById: operatorAdminId,
+        createdAt: SEED_DATE,
+      },
+    })
+  }
+
+  // Eine **eigene** Stufenfolge für den zweiten Kunden (3.1, Entscheidung zu
+  // Frage 5): Genehmiger, dann Betreiber. Der erste Kunde bleibt ohne
+  // Konfiguration und fährt damit auf der Vorbelegung aus 4.4 — so ist beides
+  // in der Oberfläche zu sehen, die Konfiguration und ihr Ausbleiben.
+  for (const [index, roleCode] of (['approver', 'operatorCoordinator'] as const).entries()) {
+    await prisma.customerTimesheetApprovalStage.create({
+      data: {
+        customerId: customer2.id,
+        level: index + 1,
+        roleCode,
+        createdById: operatorAdminId,
+        createdAt: SEED_DATE,
+      },
+    })
+  }
+
   // ── Mandantenverweis nachtragen und prüfen (3.11) ────────────────────────
   //
   // `organizationRef` ist Pflicht außer beim Betreiber. Der Verweis ist
@@ -2606,6 +2750,9 @@ async function main(): Promise<void> {
     Verlängerungen: await prisma.assignmentExtension.count(),
     Unterbrechungen: await prisma.assignmentInterruption.count(),
     'Nachweise (3.10)': await prisma.document.count(),
+    'Zuschlagsarten (3.8)': await prisma.premiumType.count(),
+    'Abrechnungsperioden (3.9)': await prisma.billingPeriod.count(),
+    'Freigabestufen je Kunde (3.1)': await prisma.customerTimesheetApprovalStage.count(),
   }
   console.log('Synthetische Demo-Daten angelegt:', counts)
 }

@@ -103,6 +103,11 @@ model Tenant {
   accountAssignments   AccountAssignment[]   @relation("AccountAssignmentCustomerTenant")
   auditEntries         AuditEntry[]          @relation("AuditTenant")
 
+  // Fachmodul 3.8 und die Abrechnungsperiode aus 3.9.
+  billingPeriods BillingPeriod[]
+  timesheets     Timesheet[]
+  premiumTypes   PremiumType[]
+
   // Fachmodule 3.1 bis 3.5. Der Mandant trägt die Mandantengrenze aus 2.3;
   // jedes mandantengebundene Objekt hängt deshalb an genau einem Mandanten.
   customer                       Customer?                       @relation("CustomerTenant")
@@ -289,6 +294,29 @@ model User {
   deactivatedInterruptions        AssignmentInterruption[]   @relation("InterruptionDeactivatedBy")
   auditEntries                    AuditEntry[]               @relation("AuditActor")
 
+  // Fachmodul 3.8 (Zeiterfassung) und die Abrechnungsperiode aus 3.9.
+  createdApprovalStages     CustomerTimesheetApprovalStage[] @relation("ApprovalStageCreatedBy")
+  openedBillingPeriods      BillingPeriod[]                  @relation("PeriodOpenedBy")
+  closedBillingPeriods      BillingPeriod[]                  @relation("PeriodClosedBy")
+  createdBillingPeriods     BillingPeriod[]                  @relation("PeriodCreatedBy")
+  updatedBillingPeriods     BillingPeriod[]                  @relation("PeriodUpdatedBy")
+  deactivatedBillingPeriods BillingPeriod[]                  @relation("PeriodDeactivatedBy")
+  recordedTimesheets        Timesheet[]                      @relation("TimesheetRecordedBy")
+  submittedTimesheets       Timesheet[]                      @relation("TimesheetSubmittedBy")
+  approvedTimesheets        Timesheet[]                      @relation("TimesheetApprovedBy")
+  createdTimesheets         Timesheet[]                      @relation("TimesheetCreatedBy")
+  updatedTimesheets         Timesheet[]                      @relation("TimesheetUpdatedBy")
+  deactivatedTimesheets     Timesheet[]                      @relation("TimesheetDeactivatedBy")
+  decidedApprovals          TimesheetApproval[]              @relation("ApprovalDecidedBy")
+  createdApprovals          TimesheetApproval[]              @relation("ApprovalCreatedBy")
+  updatedApprovals          TimesheetApproval[]              @relation("ApprovalUpdatedBy")
+  createdTimeEntries        TimeEntry[]                      @relation("TimeEntryCreatedBy")
+  updatedTimeEntries        TimeEntry[]                      @relation("TimeEntryUpdatedBy")
+  createdEntryPremiums      TimeEntryPremium[]               @relation("PremiumCreatedBy")
+  createdPremiumTypes       PremiumType[]                    @relation("PremiumTypeCreatedBy")
+  updatedPremiumTypes       PremiumType[]                    @relation("PremiumTypeUpdatedBy")
+  deactivatedPremiumTypes   PremiumType[]                    @relation("PremiumTypeDeactivatedBy")
+
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
   @@index([tenantId])
@@ -431,7 +459,8 @@ model Delegation {
   deactivatedById String?
   deactivatedBy   User?     @relation("DelegationDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  auditEntries AuditEntry[] @relation("AuditDelegation")
+  auditEntries       AuditEntry[]        @relation("AuditDelegation")
+  timesheetApprovals TimesheetApproval[] @relation("ApprovalDelegation")
 
   @@index([delegatedRoleAssignmentId])
   @@index([delegateUserId])
@@ -682,10 +711,10 @@ enum SupplierOfferStatus {
 model Customer {
   /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
   documents                     Document[]
-  id                            String                         @id @default(cuid())
-  tenantId                      String                         @unique
-  tenant                        Tenant                         @relation("CustomerTenant", fields: [tenantId], references: [id])
-  customerNumber                String                         @unique
+  id                            String                           @id @default(cuid())
+  tenantId                      String                           @unique
+  tenant                        Tenant                           @relation("CustomerTenant", fields: [tenantId], references: [id])
+  customerNumber                String                           @unique
   legalName                     String
   legalForm                     String?
   addressStreet                 String
@@ -697,11 +726,16 @@ model Customer {
   corporateGroup                String?
   /// Tarifbindung des Entleihers (3.1) — Grundlage für Equal Pay (5.2).
   customerCollectiveAgreementId String?
-  customerCollectiveAgreement   CollectiveAgreementAssignment? @relation("CustomerCollectiveAgreement", fields: [customerCollectiveAgreementId], references: [id])
+  customerCollectiveAgreement   CollectiveAgreementAssignment?   @relation("CustomerCollectiveAgreement", fields: [customerCollectiveAgreementId], references: [id])
   /// Eskalationsfristen je Kunde (2.4, Regel 5; Schlüssel und Vorbelegungen
   /// in 4.0). Satz von Fristwerten in Tagen, deshalb ein Schlüssel-Wert-Satz
   /// und keine Spalte je Frist.
   processDeadlineConfig         Json?
+  /// Freigabestufen der Zeiten (3.1, Entscheidung zu Frage 5). **Geordnete**
+  /// Liste, deshalb ein eigenes Unterobjekt und kein Json-Satz: die Reihenfolge
+  /// ist fachlich tragend, und das Rollenkürzel ist ein Aufzählungswert.
+  /// Fehlt die Liste, gilt die Vorbelegung aus 4.4.
+  timesheetApprovalStages       CustomerTimesheetApprovalStage[]
   validFrom                     DateTime
   validTo                       DateTime?
   externalReference             String?
@@ -723,6 +757,7 @@ model Customer {
   demandRequests                 DemandRequest[]
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("CustomerCollectiveAgreementTarget")
   assignments                    Assignment[]
+  billingPeriods                 BillingPeriod[]
 }
 
 /// Ansprechpartner (3.1, 3.2) — personenbezogene Kontaktangabe zu einem
@@ -854,6 +889,7 @@ model CostCenter {
 
   demandRequests DemandRequest[]
   assignments    Assignment[]
+  timeEntries    TimeEntry[]
 
   @@unique([customerId, costCenterNumber])
   @@index([tenantId])
@@ -1941,6 +1977,7 @@ model Assignment {
 
   extensions    AssignmentExtension[]
   interruptions AssignmentInterruption[]
+  timesheets    Timesheet[]
 
   @@index([tenantId])
   @@index([customerId])
@@ -2284,4 +2321,377 @@ model AuditEntry {
 model AuditSequence {
   id              Int @id @default(1)
   lastEntryNumber Int @default(0)
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Fachmodul 3.8 — Zeiterfassung und Freigabe (Statusmodell 4.4)
+//
+// Drei Entscheidungen prägen diese Modelle, alle drei aus SPEC Kapitel 7:
+//
+//  - **Frage 5:** Die Freigabestufen sind Konfiguration je Kunde
+//    (`CustomerTimesheetApprovalStage`), nicht Code. Das Rollenkürzel wird
+//    beim Einreichen in den Freigabeschritt **kopiert** — eine spätere
+//    Änderung der Konfiguration darf einen laufenden Zettel nicht umhängen.
+//  - **Frage 16:** Zwei Erfassungsformen in **einer** Tabelle, Tagessumme oder
+//    Abschnitt. Welche es ist, steht nicht als Spalte da: es folgt daraus, ob
+//    `startTime` und `endTime` gesetzt sind (3.8, `entryForm` ist *abgeleitet*).
+//  - **Frage 21:** Es gibt **kein** Feld für eine Abwesenheitsart. Erfasst
+//    werden ausschließlich produktive Zeiten; über die Zeiterfassung entsteht
+//    damit kein Gesundheitsdatum nach Art. 9 DSGVO.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Freigabestufe eines Kunden (3.1, 4.4) — eine Zeile der Stufenfolge.
+model CustomerTimesheetApprovalStage {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  /// 1-basiert; die Reihenfolge der Freigabe.
+  level      Int
+  roleCode   RoleCode
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("ApprovalStageCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+
+  @@unique([customerId, level])
+  @@index([customerId])
+}
+
+/// Status der Abrechnungsperiode (3.9). Die beiden Werte sind der fachliche
+/// Mindestumfang; das vollständige Modell gehört nach 4.5.
+enum BillingPeriodStatus {
+  open
+  closed
+}
+
+/// Abrechnungsperiode (`billingPeriod`, SPEC 3.9).
+///
+/// Hier nur, weil 4.4 sie braucht: ein Stundenzettel gehört zu genau einer
+/// Periode, und erfasst wird nur in einer **offenen**. Der Abrechnungsbeleg
+/// und das vollständige Statusmodell sind M6 (3.9, 4.5).
+model BillingPeriod {
+  id           String              @id @default(cuid())
+  tenantId     String
+  tenant       Tenant              @relation(fields: [tenantId], references: [id])
+  periodNumber String              @unique
+  /// Leer heißt betreiberweite Periode (3.9).
+  customerId   String?
+  customer     Customer?           @relation(fields: [customerId], references: [id])
+  periodFrom   DateTime
+  periodTo     DateTime
+  /// Frist für die Genehmigung; Eskalationsanlass in 2.4.
+  closingDate  DateTime
+  status       BillingPeriodStatus
+
+  openedAt   DateTime
+  openedById String
+  openedBy   User      @relation("PeriodOpenedBy", fields: [openedById], references: [id])
+  closedAt   DateTime?
+  closedById String?
+  closedBy   User?     @relation("PeriodClosedBy", fields: [closedById], references: [id])
+
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("PeriodCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("PeriodUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("PeriodDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  timesheets Timesheet[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([status])
+}
+
+/// Zustände des Stundenzettels (3.8, Statusmodell 4.4).
+enum TimesheetStatus {
+  recorded
+  submitted
+  inApproval
+  approved
+  rejected
+  corrected
+}
+
+/// Entscheidung eines Freigabeschritts (3.8). Leer heißt offen.
+enum ApprovalDecision {
+  approved
+  rejected
+}
+
+/// Stundenzettel (`timesheet`, SPEC 3.8, Statusmodell 4.4).
+///
+/// Geführt im **Betreibermandanten**: er verbindet beide Seiten und ist
+/// Grundlage beider Belegseiten (3.8, 3.9).
+model Timesheet {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  timesheetNumber String        @unique
+  assignmentId    String
+  assignment      Assignment    @relation(fields: [assignmentId], references: [id])
+  billingPeriodId String
+  billingPeriod   BillingPeriod @relation(fields: [billingPeriodId], references: [id])
+  periodFrom      DateTime
+  periodTo        DateTime
+
+  /// Erfasst von — Leiharbeitnehmer (offene Frage 4) oder `LD`/`MD` in dessen
+  /// Namen ([27]).
+  recordedById String
+  recordedBy   User   @relation("TimesheetRecordedBy", fields: [recordedById], references: [id])
+
+  submittedAt   DateTime?
+  submittedById String?
+  submittedBy   User?     @relation("TimesheetSubmittedBy", fields: [submittedById], references: [id])
+
+  /// Der **letzte** Freigabeschritt (4.4).
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("TimesheetApprovedBy", fields: [approvedById], references: [id])
+
+  /// Pflicht bei Ablehnung (4.4).
+  rejectionReason String?
+
+  /// Genehmigte Zeiten werden nur über eine Korrekturfassung geändert ([28], 4.4).
+  correctionOfId String?    @unique
+  correctionOf   Timesheet? @relation("TimesheetCorrection", fields: [correctionOfId], references: [id])
+  correction     Timesheet? @relation("TimesheetCorrection")
+
+  status TimesheetStatus
+
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("TimesheetCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("TimesheetUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("TimesheetDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  entries   TimeEntry[]
+  approvals TimesheetApproval[]
+
+  /// Je Einsatz und Periode genau **ein** Zettel (3.13) — Korrekturfassungen
+  /// bilden eine Kette und sind deshalb über `correctionOfId` abgegrenzt, nicht
+  /// über diesen Index. Die Eindeutigkeit prüft der Dienst (4.4).
+  @@index([tenantId])
+  @@index([assignmentId])
+  @@index([billingPeriodId])
+  @@index([status])
+}
+
+/// Freigabeschritt (`timesheetApproval`, SPEC 3.8) — eine Stufe der Genehmigung.
+///
+/// Das Objekt existiert, damit die **Stufenzahl in den Daten steht, nicht im
+/// Statusmodell** (4.4).
+model TimesheetApproval {
+  id               String    @id @default(cuid())
+  timesheetId      String
+  timesheet        Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  /// 1-basiert.
+  level            Int
+  /// Aus der Stufenfolge des Kunden **kopiert**, nicht verwiesen (3.8).
+  assignedRoleCode RoleCode
+
+  /// Leer = offen (3.8).
+  decision     ApprovalDecision?
+  decidedAt    DateTime?
+  decidedById  String?
+  decidedBy    User?             @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  /// Vertretungsvermerk (2.4, Regel 6).
+  delegationId String?
+  delegation   Delegation?       @relation("ApprovalDelegation", fields: [delegationId], references: [id])
+  comment      String?
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("ApprovalCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+  updatedById String?
+  updatedBy   User?     @relation("ApprovalUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([timesheetId, level])
+  @@index([timesheetId])
+}
+
+/// Zeitposition (`timeEntry`, SPEC 3.8) — ein Tag oder ein Abschnitt eines Tages.
+///
+/// **Kein** Feld für eine Abwesenheitsart (Entscheidung zu Frage 21) und
+/// **keine** Spalte `entryForm`: die Form folgt daraus, ob `startTime` und
+/// `endTime` gesetzt sind. Die vier Invarianten aus 3.8 prüft
+/// lib/masterdata/invariants.ts — Prisma kann Bedingungen über mehrere Spalten
+/// nicht erzwingen.
+model TimeEntry {
+  id          String    @id @default(cuid())
+  timesheetId String
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  workDate    DateTime
+
+  /// Beide oder keines (3.8, Invariante 1). Als Minuten seit Mitternacht, damit
+  /// keine Zeitzone mitgeführt wird: ein Dienstbeginn ist eine Uhrzeit, kein
+  /// Zeitpunkt. `endTime` kleiner als `startTime` heißt Überschreitung von
+  /// Mitternacht; der Abschnitt gehört dem Tag seines Beginns.
+  startMinute  Int?
+  endMinute    Int?
+  /// Nur bei abschnittsweiser Erfassung (3.8, Invariante 2).
+  breakMinutes Int?
+
+  /// Die abzurechnende Menge. Bei abschnittsweiser Erfassung die Dauer
+  /// (3.8, Invariante 3); ungerundet, bis *Frage 48* entschieden ist.
+  hours Decimal @db.Decimal(8, 4)
+
+  /// Wenn sie von der des Einsatzes abweicht (3.1).
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  note String?
+
+  correctedFromId  String?    @unique
+  correctedFrom    TimeEntry? @relation("TimeEntryCorrection", fields: [correctedFromId], references: [id])
+  correction       TimeEntry? @relation("TimeEntryCorrection")
+  /// Pflicht bei Korrektur ([28]).
+  correctionReason String?
+
+  externalReference String?
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("TimeEntryCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+  updatedById String?
+  updatedBy   User?     @relation("TimeEntryUpdatedBy", fields: [updatedById], references: [id])
+
+  premiums TimeEntryPremium[]
+
+  @@index([timesheetId])
+  @@index([workDate])
+}
+
+/// Herkunft eines Zuschlags an einer Zeitposition (3.8, Entscheidung zu Frage 16).
+///
+/// `derived` = aus der Erfassungsform gerechnet, `declared` = von Hand
+/// angegeben, weil die Grundlage fehlt. Die Unterscheidung trägt bis in den
+/// Abrechnungsbeleg: wer einen Betrag prüft, muss sehen, woher die Stunden
+/// kommen.
+enum PremiumOrigin {
+  derived
+  declared
+}
+
+/// Ein Zuschlag an einer Zeitposition (3.8).
+model TimeEntryPremium {
+  id            String        @id @default(cuid())
+  timeEntryId   String
+  timeEntry     TimeEntry     @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  premiumTypeId String
+  premiumType   PremiumType   @relation(fields: [premiumTypeId], references: [id])
+  hours         Decimal       @db.Decimal(8, 4)
+  origin        PremiumOrigin
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("PremiumCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+
+  @@unique([timeEntryId, premiumTypeId])
+  @@index([timeEntryId])
+}
+
+/// Berechnungsart einer Zuschlagsart (3.8).
+enum PremiumCalculationBase {
+  percentage
+  absolute
+}
+
+/// Anlass einer Zuschlagsart (3.8).
+enum PremiumAppliesTo {
+  night
+  sunday
+  publicHoliday
+  overtime
+  hardship
+  other
+}
+
+/// **Woraus** sich die Zuschlagsstunden rechnen lassen (3.8, Entscheidung zu
+/// Frage 16). Entscheidet, ob ein Zuschlag an einer Position `derived` sein
+/// kann: ein Nachtzuschlag braucht eine Uhrzeit, ein Sonntagszuschlag nur den
+/// Tag, ein Überstundenzuschlag die Summe der Woche.
+enum PremiumDerivationBasis {
+  timeOfDay
+  calendarDay
+  weeklyTotal
+  manual
+}
+
+/// Rechtsgrundlage einer Zuschlagsart (3.8).
+enum PremiumLegalBasis {
+  statutory
+  collectiveAgreement
+  contractual
+}
+
+/// Zuschlagsart (`premiumType`, SPEC 3.8) — der Katalog.
+///
+/// Die Zuschlagsart sagt, *dass* und *wie* gerechnet wird; *wie viel* steht in
+/// der Preisposition (3.3). Betreibermandant, Pflege nur durch `MA`.
+model PremiumType {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  /// Betreiberweit eindeutig (3.8).
+  code     String @unique
+  name     String
+
+  calculationBase PremiumCalculationBase
+  /// Überschreibbar je Preisposition (3.3).
+  defaultValue    Decimal?               @db.Decimal(12, 4)
+  appliesTo       PremiumAppliesTo
+  derivationBasis PremiumDerivationBasis
+  legalBasis      PremiumLegalBasis
+
+  /// Nur bei `derivationBasis = timeOfDay`: der Zeitraum, in dem der Zuschlag
+  /// anfällt, als Minuten seit Mitternacht. Über Mitternacht hinweg ist
+  /// `fromMinute` größer als `toMinute` (Nachtzuschlag 23:00 bis 06:00).
+  /// Tarifwerte sind Konfiguration (CLAUDE.md), deshalb Daten und keine
+  /// Konstanten im Code.
+  fromMinute Int?
+  toMinute   Int?
+
+  /// Nur bei `derivationBasis = calendarDay`: die Wochentage, an denen der
+  /// Zuschlag anfällt (0 = Sonntag). Konfiguration und kein Naturgesetz — ein
+  /// Tarifvertrag kann die Samstagnacht einbeziehen. Der **Feiertag** braucht
+  /// darüber hinaus einen Kalender, den Kapitel 3 nicht führt (*Frage 51*);
+  /// bis dahin ist er nicht ableitbar und damit `declared`.
+  weekdays Int[]
+
+  validFrom DateTime
+  validTo   DateTime?
+
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  createdById     String?
+  createdBy       User?     @relation("PremiumTypeCreatedBy", fields: [createdById], references: [id])
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("PremiumTypeUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("PremiumTypeDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  entryPremiums TimeEntryPremium[]
+
+  @@index([tenantId])
+  @@index([appliesTo])
 }
