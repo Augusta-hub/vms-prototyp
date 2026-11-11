@@ -216,10 +216,19 @@ Tabelle nieder (siehe [tests/aueg/README.md](tests/aueg/README.md)).
 ## M5 — Zeiterfassung und Freigabe ⬜
 
 - ✅ SPEC Kapitel 3.8 und 4.4 ausgearbeitet — Stundenzettel, Freigabeschritt,
-  Zeitposition und Zuschlagsart samt Statusmodell stehen; **offene Frage 5**
-  (Anzahl und Zuständigkeit der Genehmigungsstufen) zieht sich durch das Modell
-  und ist vor der Umsetzung zu entscheiden, dazu Frage 16 (Erfassung je Tag
-  oder je Abschnitt) und Frage 21 (Abwesenheitsart, Art. 9 DSGVO)
+  Zeitposition und Zuschlagsart samt Statusmodell
+- ✅ **Die drei Fragen entschieden, die M5 blockiert haben** (11.11.2026):
+  **Frage 5** — die Freigabestufen sind Konfiguration je Kunde
+  (`timesheetApprovalConfig`, 3.1), Vorbelegung zwei Stufen, zuerst die
+  Kundenseite, dann der Betreiber; die Betreiberstufe tritt **hinzu** und
+  ersetzt die Kundenentscheidung nicht. **Frage 16** — **beide**
+  Erfassungsformen, Tagessumme und Abschnitt, und die Form entscheidet, welche
+  Zuschläge ableitbar sind (`derived` / `declared`, `derivationBasis`).
+  **Frage 21** — **nur produktive Zeiten**: `absenceType` entfällt ersatzlos,
+  damit entsteht über die Zeiterfassung kein Gesundheitsdatum nach Art. 9
+  DSGVO. Neu offen daraus: **Frage 47** (welche Kundenrolle trägt die erste
+  Stufe in der Vorbelegung) und **Frage 48** (Rundung der Stunden) — beide
+  blockieren die Umsetzung nicht
 - ⬜ Stundenzettel, Zuschläge, Genehmigungsworkflow
 - ⬜ Zeitbezogene AÜG-Prüfungen (Unterbrechung, Fristenlauf)
 

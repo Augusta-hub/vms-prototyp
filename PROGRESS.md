@@ -5,6 +5,112 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-11 — Zeiten: die drei Fragen zu 3.8 und 4.4 entschieden
+
+### Gemacht
+
+Die drei Fragen, die M5 blockiert haben, sind beantwortet und in die
+Spezifikation eingearbeitet — **kein** Anwendungscode, wie es
+[CLAUDE.md](CLAUDE.md) vorgibt: Änderungen an der Fachlogik beginnen in
+SPEC.md.
+
+**Frage 5 — Freigabestufen.** Die Stufenfolge ist **Konfiguration je Kunde**
+(`timesheetApprovalConfig`, neu in 3.1). Vorbelegung sind **zwei** Stufen:
+zuerst die Kundenseite, die bestätigt, dass die Zeiten erbracht wurden — das
+weiß nur sie —, dann der Betreiber, der sie gegen Einsatz, Preisposition und
+Periode prüft, bevor beide Belegseiten daraus entstehen (4.5).
+
+**Frage 16 — Granularität.** **Beide** Formen. Eine Zeitposition ist entweder
+eine **Tagessumme** oder ein **Abschnitt**; mehrere Abschnitte je Tag sind
+erlaubt.
+
+**Frage 21 — Abwesenheit.** **Nur produktive Zeiten.** `absenceType` entfällt
+ersatzlos.
+
+Geändert wurden: 1.5 (Glossar), 2.1 (Aufgaben `KG`), 2.2 (Fußnote [29]), 2.4
+(Eskalationstabelle), 3.1 (neues Konfigurationsfeld), 3.7 (Querverweis
+Unterbrechungsgrund), 3.8 (Stundenzettel, Freigabeschritt, Zeitposition,
+Zuschlagsart), 4.4 (Kasten, Zustände, Übergänge, Ausschlüsse, Diagramm) und
+Kapitel 7 (Fragen 5, 16, 21 entschieden; 47 und 48 neu).
+
+### Entscheidungen
+
+1. **Die Betreiberstufe tritt hinzu, sie ersetzt nichts.** 4.4 schloss eine
+   Freigabe durch den Betreiber zuvor **ganz** aus, mit Verweis auf 2.1 und
+   2.4 Regel 3 („Der Betreiber ersetzt keine Kundenentscheidung"). Die Antwort
+   verlangt eine Betreiberstufe — der Ausschluss war zu weit gefasst: der
+   Grundsatz verbietet, die Kundenentscheidung zu **ersetzen**, nicht, ihr eine
+   zweite Prüfung **hinzuzufügen**. Daraus folgt dreierlei, und alles drei
+   steht jetzt unter „Ausgeschlossen": jede Stufenfolge enthält mindestens eine
+   Kundenstufe; eine offene Kundenstufe wird nie übersprungen, delegiert oder
+   durch Fristablauf ersetzt, sondern eskaliert; und hat die Kundenseite
+   abgelehnt, kann eine folgende Betreiberstufe die Ablehnung nicht aufheben.
+2. **Das Rollenkürzel wird in den Freigabeschritt kopiert, nicht verwiesen.**
+   Sonst hinge ein laufender Zettel an der Konfiguration, und eine Änderung
+   der Stufenfolge würde ihn rückwirkend umhängen — eine Entscheidung, die
+   getroffen wurde, gehört nicht nachträglich einer anderen Rolle.
+3. **Eine Sperre an der letzten Stufe nimmt die früheren nicht zurück.**
+   Erreicht der Zettel die letzte Stufe und sperrt dort Q36, bleibt er in
+   `inApproval` (4.0, Regel 5) — die schon getroffenen Stufenentscheidungen
+   bleiben gültig. Sie sind Tatsachen mit Zeitpunkt und Person, kein
+   Zwischenergebnis. Genau deshalb steht die Entscheidung am Freigabeschritt
+   und nicht am Zettel.
+4. **Die Erfassungsform entscheidet über die Rechenbarkeit, nicht über die
+   Darstellung.** Aus einer Tagessumme folgt kein Nachtzuschlag — sie trägt
+   keine Uhrzeit. Deshalb trägt jeder Zuschlag an einer Position seine
+   **Herkunft** (`derived` oder `declared`), und die Zuschlagsart nennt ihre
+   **Ableitungsgrundlage** (`timeOfDay`, `calendarDay`, `weeklyTotal`,
+   `manual`). Ohne diese Angabe wäre an jeder Rechenstelle neu zu entscheiden,
+   was ableitbar ist — und eine dieser Stellen wäre falsch. Ein
+   `declared`-Zuschlag ist zulässig, aber er ist eine **Angabe**, und sie trägt
+   bis in den Abrechnungsbeleg: wer einen Betrag prüft, muss sehen, ob die
+   Stunden aus einer Uhrzeit folgen oder ob jemand sie eingetragen hat.
+5. **Vier Invarianten statt zweier Tabellen.** Beide Formen stehen in
+   **einer** Tabelle, zusammengehalten von Bedingungen über mehrere Felder:
+   Beginn und Ende beide oder keines; Pause nur beim Abschnitt (an einer
+   Tagessumme wäre sie doppelt abgezogen); `hours` beim Abschnitt gleich der
+   gerundeten Dauer, weil zwei Quellen für dieselbe Menge auseinanderlaufen
+   können; und Abschnitte desselben Tages überlappen nicht.
+6. **Nur produktive Zeiten ist mehr als ein weggelassenes Feld.** Damit
+   gelangt über die Zeiterfassung **kein** Gesundheitsdatum nach Art. 9 DSGVO
+   in das System — nicht als Katalogwert, nicht als Rechenergebnis. Die
+   Datenminimierung aus 6.4 wird hier nicht durch eine Regel hergestellt,
+   sondern dadurch, dass das Datum nicht entsteht. Das ist die belastbarere
+   Form.
+7. **Was das System dadurch nicht weiß, steht ausdrücklich da.** Ein Tag ohne
+   Position heißt „nicht gearbeitet" **oder** „noch nicht erfasst" — das
+   System kann die beiden nicht unterscheiden. Eine Vollständigkeitsprüfung
+   des Zettels ist deshalb **nicht ableitbar**: die Einreichung ist eine
+   **Erklärung** der erfassenden Seite, und die Stufen entscheiden über das,
+   was vorliegt. Dass ein Zettel ausbleibt, fängt die Eskalation aus 2.4 ab,
+   nicht eine Rechnung. Diese Folge aufzuschreiben ist wichtiger als das Feld,
+   das entfällt.
+8. **Eine veraltete Aussage in 6.3 berichtigt.** Die Datenkategorie des
+   Stundenzettels sagte, er ergebe „zusammen mit dem Einsatz ein vollständiges
+   Bild von Anwesenheit **und Abwesenheit**". Mit Entscheidung 6 ist das nicht
+   mehr wahr — der Zettel ist kein Bild der Abwesenheit, und aus einem Tag
+   ohne Position folgt nichts über die Person.
+
+### Offen
+
+- **Frage 47** (neu): Welche Kundenrolle trägt die erste Stufe in der
+  **Vorbelegung** — `KB` oder `KG`? 2.2 gibt beiden `S[29]`, beide sind
+  zulässig. Die Spezifikation belegt `KB` vor, weil die erste Stufe die
+  **Leistung** bestätigt und nicht das Budget; jeder Kunde kann es
+  überschreiben. Blockiert die Umsetzung nicht.
+- **Frage 48** (neu): Wie wird gerundet, wenn Stunden aus einem Abschnitt
+  folgen? Einheit (Viertel-, Zehntel-, halbe Stunde), Richtung (auf, ab,
+  kaufmännisch) und **Ebene** (je Abschnitt, je Tag, erst auf der Summe) —
+  die drei Ebenen ergeben verschiedene Beträge. Bis zur Antwort rechnet die
+  Umsetzung **ungerundet** und hält die Minutendifferenz sichtbar.
+- Unverändert offen in diesem Bereich: **Frage 4** (eigener Zugang für
+  Leiharbeitnehmer — bestimmt, wer erfasst) und **Frage 24** (Periodenschluss
+  bei hängendem Zettel).
+- M5 ist damit **implementierbar**: 3.8 und 4.4 haben keine offene Frage mehr,
+  die ein Feld oder einen Übergang betrifft.
+
+---
+
 ## 2026-11-10 — Protokoll 3.12: das fachliche Protokoll greift
 
 ### Gemacht

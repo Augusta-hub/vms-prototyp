@@ -126,9 +126,12 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Vorzeitige Beendigung | `earlyTermination` | Beendigung vor dem geplanten Ende |
 | Stundenzettel | `timesheet` | Zeitnachweis eines Einsatzes für einen Abrechnungszeitraum (Kapitel 3.8) |
 | Zeitposition | `timeEntry` | einzelner Zeitnachweis eines Tages bzw. Abschnitts (Kapitel 3.8) |
-| Freigabeschritt | `timesheetApproval` | eine Stufe der Stundenzettelgenehmigung (offene Frage 5) |
+| Freigabeschritt | `timesheetApproval` | eine Stufe der Stundenzettelgenehmigung (4.4) |
+| Freigabestufen der Zeiten | `timesheetApprovalConfig` | geordnete Stufenfolge je Kunde (3.1, 4.4) |
 | Zuschlagsart | `premiumType` | Katalogwert für Zuschläge (Nacht, Sonntag, Feiertag …) (Kapitel 3.8) |
-| Abwesenheitsart | `absenceType` | Grund für fehlende Arbeitsleistung (offene Frage 21) |
+| Erfassungsform | `entryForm` | Tagessumme oder Abschnitt einer Zeitposition (3.8) |
+| Ableitungsgrundlage | `derivationBasis` | woraus sich die Stunden einer Zuschlagsart rechnen (3.8) |
+| Herkunft eines Zuschlags | `derived` / `declared` | gerechnet oder von Hand angegeben (3.8) |
 | Abrechnungsperiode | `billingPeriod` | Zeitraum, für den abgerechnet wird (Kapitel 3.9) |
 | Abrechnungsbeleg | `billingDocument` | kaufmännischer Beleg über Überlassungsleistung (Kapitel 3.9) |
 | Belegposition | `billingDocumentItem` | eine Position eines Abrechnungsbelegs |
@@ -190,7 +193,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Beantragt | `requested` | Verlängerung beantragt, nicht entschieden (4.3) |
 | Wirksam | `effective` | Verlängerung vollzogen, `plannedEndDate` verschoben (4.3) |
 | Erfasst | `recorded` | Stundenzettel in Erfassung, Zeitpositionen änderbar (4.4) |
-| In Prüfung (Stundenzettel) | `inApproval` | mindestens ein Freigabeschritt offen (4.4) *(offene Frage 5)* |
+| In Prüfung (Stundenzettel) | `inApproval` | mindestens ein Freigabeschritt offen (4.4) |
 | Korrigiert | `corrected` | Stundenzettel durch eine genehmigte Korrekturfassung ersetzt (4.4) |
 | Korrekturfassung | `correctionOf` | neuer Stundenzettel, der einen genehmigten ersetzt (3.8, 4.4) |
 | Offen (Periode) | `open` | Abrechnungsperiode nimmt Zeiten und Belege auf (4.5) |
@@ -354,8 +357,8 @@ Zeitfreigaben.
 - Bedarfsanfragen freigeben oder ablehnen (Kapitel 4.1)
 - Verlängerung und vorzeitige Beendigung von Einsätzen genehmigen
   (Kapitel 4.3)
-- Stundenzettel genehmigen oder ablehnen, soweit Kapitel 4.4 ihm diese Stufe
-  zuweist — Stufenzahl und Zuständigkeit sind **offene Frage 5**
+- Stundenzettel genehmigen oder ablehnen, soweit `timesheetApprovalConfig`
+  des Kunden (3.1) ihm eine Stufe zuweist (4.4)
 - Kostenwirkung des zu genehmigenden Vorgangs beurteilen
 
 **Abgrenzung.** Gegenüber dem Bedarfsträger: er beschreibt keinen Bedarf und
@@ -542,7 +545,7 @@ Tabelle.
 | [26] | Genehmigung von Verlängerung und vorzeitiger Beendigung, soweit Kapitel 4.3 sie der Kundenseite zuweist. |
 | [27] | Erfassung im Namen des Leiharbeitnehmers, solange dieser keinen eigenen Zugang hat *(offene Frage 4)*. |
 | [28] | Korrektur nur mit Begründung und Protokolleintrag (Kapitel 3.12); genehmigte Zeiten nur über eine Korrekturfassung (Kapitel 4.4). |
-| [29] | Genehmigen oder ablehnen; Anzahl der Stufen und die jeweils zuständige Rolle sind **offene Frage 5**. |
+| [29] | Genehmigen oder ablehnen, und nur die Stufe, die `timesheetApprovalConfig` (3.1) dieser Rolle zuweist. Anzahl und Reihenfolge der Stufen sind Konfiguration je Kunde (4.4); wer den Zettel erfasst oder eingereicht hat, entscheidet keine Stufe (2.4, Regel 5). |
 | [30] | Freigabe nicht durch dieselbe Person, die den Beleg erstellt hat (Vier-Augen-Prinzip, Kapitel 2.4). |
 | [31] | Beanstandung; die Statusführung des Belegs bleibt beim Betreiber. |
 | [32] | Bestätigen oder beanstanden. Im Gutschriftverfahren (Entscheidung zu offener Frage 6) legt der Lieferant keinen Beleg an — deshalb trägt die Zeile kein `A`. |
@@ -741,7 +744,7 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
 | Ausschreibung ohne Angebot bis zum Ende der Angebotsfrist | LD | Vertretung → LA → MD | 4.2 |
 | Vorgelegtes Profil ohne Rückmeldung des Kunden | KB | Vertretung → KG → MD | 4.2 |
 | Stundenzettel nicht eingereicht | AN *(offene Frage 4)* bzw. LD | LD → LA → MD | 4.4 |
-| Stundenzettel nicht genehmigt vor Periodenschluss | KG *(offene Frage 5)* | Vertretung → KE → MD | 4.4, 3.9 |
+| Stundenzettel nicht genehmigt vor Periodenschluss | die Rolle der **offenen** Stufe (3.1, 4.4) | Vertretung → KE → MD; bei einer Betreiberstufe Vertretung → MA | 4.4, 3.9 |
 | AÜG-Erlaubnis läuft ab oder Nachweis fehlt | LA | LD → MD → MA | 5.4 |
 | Warnschwelle Höchstüberlassungsdauer erreicht | MD | MA, zusätzlich Information an KB | 5.1 |
 | Equal-Pay-Frist erreicht, Vergleichsentgelt fehlt | MD | MA, zusätzlich Information an KE | 5.2 |
@@ -841,6 +844,7 @@ je Kostenstelle.
 | Konzernzugehörigkeit | `corporateGroup` | Text oder Verweis | optional | relevant für die Drehtürklausel (5.3) |
 | Ansprechpartner | `contacts` | Liste (Name, Funktion, E-Mail, Telefon) | mindestens einer | personenbezogen |
 | Prozessfristen | `processDeadlineConfig` | Satz von Fristwerten in Tagen | optional | Eskalationsfristen je Kunde (2.4, Regel 5); die Werte legt Kapitel 4 bzw. 5 fest, nicht dieses Kapitel |
+| Freigabestufen der Zeiten | `timesheetApprovalConfig` | **geordnete** Liste von Stufen, je Stufe ein Rollenkürzel (2.1) | optional | wer den Stundenzettel in welcher Reihenfolge freigibt (4.4). Fehlt die Angabe, gilt die Vorbelegung aus 4.4: Kundenseite, dann Betreiber. Die Liste ist **Konfiguration, kein Code** — ein Kunde mit einer Stufe und ein Kunde mit drei Stufen ändern am Statusmodell nichts |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | Ende der Beauftragung |
 | Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
 
@@ -1616,8 +1620,11 @@ Einsatzes.
 „unterbrochen" steht in 4.3.
 
 **Datenkategorie (→ 6.3).** Der Unterbrechungsgrund kann auf Abwesenheitsgründe
-hinauslaufen und damit auf Gesundheitsdaten — siehe die Festlegung zu 3.8 und
-*offene Frage 21*.
+hinauslaufen und damit auf Gesundheitsdaten. Er bleibt deshalb eine
+**Kategorie** ohne medizinischen Gehalt — die Zeiterfassung führt seit der
+Entscheidung zu *Frage 21* überhaupt keine Abwesenheitsart mehr (3.8), und die
+Unterbrechung ist die einzige Stelle, an der Nichtleistung überhaupt sichtbar
+wird. Was sie über die Person sagt, soll sie deshalb nicht präzisieren.
 
 > **Entschieden (vormals offene Frage 19).** Mehrere **gleichzeitige** Einsätze
 > derselben Person beim selben Kunden sind **zulässig** (Teilzeit über zwei
@@ -1647,7 +1654,7 @@ Stundenzettel wird genehmigt, nicht die einzelne Zeitposition
 | Eingereicht am / von | `submittedAt` / `submittedBy` | Zeitpunkt / Verweis | Pflicht ab Status „eingereicht" | |
 | Summe Stunden | `totalHours` | Dezimalzahl | *abgeleitet* | Summe der Zeitpositionen |
 | Summe je Zuschlagsart | `totalPremiumHours` | Liste (Zuschlagsart, Stunden) | *abgeleitet* | Grundlage der Belegpositionen (3.9) |
-| Freigabeschritte | `approvals` | Liste von `timesheetApproval` | Pflicht ab Einreichung | Anzahl und Zuständigkeit sind **offene Frage 5** |
+| Freigabeschritte | `approvals` | Liste von `timesheetApproval` | Pflicht ab Einreichung | erzeugt aus `timesheetApprovalConfig` des Kunden (3.1); Vorbelegung zwei Stufen, Kundenseite dann Betreiber (4.4) |
 | Endgültig genehmigt am / von | `approvedAt` / `approvedBy` | Zeitpunkt / Verweis | Pflicht ab Status „genehmigt" | der letzte Freigabeschritt |
 | Ablehnungsgrund | `rejectionReason` | Text | Pflicht bei Ablehnung | |
 | Korrekturfassung zu | `correctionOf` | Verweis auf `timesheet` | optional | genehmigte Zeiten werden nur über eine Korrekturfassung geändert ([28], 4.4) |
@@ -1668,19 +1675,26 @@ n Freigabeschritte · 1 Stundenzettel : n Belegpositionen (3.9) ·
 **Statusmodell.** → **4.4** (erfasst → eingereicht → in Prüfung → genehmigt →
 abgelehnt → korrigiert).
 
-**Datenkategorie (→ 6.3).** Arbeitszeitdaten einer natürlichen Person;
-zusammen mit dem Einsatz ein vollständiges Bild von Anwesenheit und Abwesenheit.
+**Datenkategorie (→ 6.3).** Arbeitszeitdaten einer natürlichen Person. Mit der
+Entscheidung zu *Frage 21* trägt der Zettel **nur produktive Zeiten**: er ist
+damit kein Bild der Abwesenheit, und aus einem Tag ohne Position folgt nichts
+über die Person. Zusammen mit dem Einsatz ergibt er ein Bild der
+**Anwesenheit** — das bleibt ein Beschäftigtendatum und unterliegt der
+Zweckbindung aus 6.3.
 
 #### Freigabeschritt (`timesheetApproval`)
 
 **Zweck.** Eine Stufe der Genehmigung. Das Objekt existiert, damit die Zahl der
-Stufen **nicht** im Datenmodell festgeschrieben ist — *(offene Frage 5)*.
+Stufen **nicht** im Datenmodell festgeschrieben ist: sie kommt aus
+`timesheetApprovalConfig` des Kunden (3.1), und ein Kunde mit einer Stufe
+braucht dasselbe Modell wie ein Kunde mit drei.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
 | Stundenzettel | `timesheetRef` | Verweis | Pflicht | |
 | Stufe | `level` | Ganzzahl ≥ 1 | Pflicht | |
-| Zuständige Rolle | `assignedRoleCode` | Rollenkürzel (2.1) | Pflicht | welche Rolle welche Stufe trägt, ist **offene Frage 5** |
+| Zuständige Rolle | `assignedRoleCode` | Rollenkürzel (2.1) | Pflicht | aus der Stufenfolge des Kunden (3.1) **kopiert**, nicht verwiesen: eine spätere Änderung der Konfiguration darf einen laufenden Zettel nicht umhängen |
+| Seite | `side` | `customer`, `operator` | *abgeleitet* | aus `appliesToTenantType` der Rolle (2.1). Kein eigener Wert — die Angabe macht nur lesbar, dass jede Stufenfolge **mindestens eine** Kundenstufe braucht (4.4) |
 | Entscheidung | `decision` | `approved`, `rejected` | optional | leer = offen |
 | Entschieden am / von | `decidedAt` / `decidedBy` | Zeitpunkt / Verweis | Pflicht bei Entscheidung | |
 | Vertretungsvermerk | `delegationRef` | Verweis (3.11) | optional | Handlung in Vertretung (2.4, Regel 6) |
@@ -1700,19 +1714,53 @@ Objekt bleibt dann trivial, aber die Struktur muss nicht geändert werden.
 **Abgrenzung:** Die Zeitposition trägt **keinen eigenen Status**; genehmigt wird
 der Stundenzettel ([44]).
 
+**Zwei Erfassungsformen, eine Tabelle.** Eine Position ist **entweder** eine
+**Tagessumme** (nur `hours`) **oder** ein **Abschnitt** (`startTime`, `endTime`,
+dazu `breakMinutes`). Beide sind zulässig, und mehrere Abschnitte je Tag sind
+erlaubt — geteilte Dienste und Nachtschichten über Mitternacht gibt es. Welche
+Form eine Position hat, entscheidet, **welche Zuschläge aus ihr abgeleitet
+werden können**: eine Tagessumme trägt keine Uhrzeit, aus ihr folgt kein
+Nachtzuschlag. Die Form ist deshalb keine Darstellungsfrage, sondern die
+Grundlage der Rechenbarkeit.
+
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
 | Stundenzettel | `timesheetRef` | Verweis | Pflicht | |
 | Tag | `workDate` | Datum | Pflicht | |
-| Beginn / Ende | `startTime` / `endTime` | Uhrzeit | optional | nur bei abschnittsweiser Erfassung — **offene Frage 16** |
-| Pause | `breakMinutes` | Ganzzahl, Minuten | optional | |
-| Stunden | `hours` | Dezimalzahl ≥ 0 | Pflicht | die abzurechnende Menge |
-| Zuschläge | `premiums` | Liste (Zuschlagsart, Stunden) | optional | mehrere Zuschlagsarten je Position möglich |
+| Erfassungsform | `entryForm` | `dayTotal`, `interval` | *abgeleitet* | `interval`, wenn `startTime` und `endTime` gesetzt sind, sonst `dayTotal` |
+| Beginn / Ende | `startTime` / `endTime` | Uhrzeit | **beide oder keines** | gesetzt = Abschnitt. `endTime` vor `startTime` heißt Überschreitung von Mitternacht; der Abschnitt gehört dann dem Tag seines **Beginns** |
+| Pause | `breakMinutes` | Ganzzahl, Minuten | optional | nur bei `interval`; an einer Tagessumme ist die Pause schon abgezogen |
+| Stunden | `hours` | Dezimalzahl > 0 | Pflicht | die abzurechnende Menge. Bei `interval` **abgeleitet** aus Ende − Beginn − Pause und auf die vereinbarte Einheit gerundet (*Frage 48*) — abweichend ist die Position fehlerhaft, nicht wahlweise |
+| Zuschläge | `premiums` | Liste (Zuschlagsart, Stunden, Herkunft) | optional | mehrere Zuschlagsarten je Position möglich. **Herkunft** ist `derived` oder `declared`: aus der Uhrzeit gerechnet oder von Hand angegeben (siehe unten) |
 | Abweichende Kostenstelle | `costCenterRef` | Verweis (3.1) | optional | wenn sie von der des Einsatzes abweicht |
-| Abwesenheit | `absenceType` | Katalogwert | optional | **offene Frage 21** — siehe Festlegung unten |
 | Bemerkung | `note` | Text | optional | |
 | Korrektur von | `correctedFrom` | Verweis auf `timeEntry` | optional | |
 | Korrekturgrund | `correctionReason` | Text | Pflicht bei Korrektur | ([28]) |
+
+**Invarianten.** Vier Bedingungen, die über mehrere Felder laufen:
+
+1. `startTime` und `endTime` sind **beide** gesetzt oder **beide** leer. Eine
+   halbe Uhrzeit ist keine Erfassungsform.
+2. `breakMinutes` nur bei `interval`. An einer Tagessumme wäre die Pause
+   doppelt abgezogen — `hours` ist dort schon die Netto-Menge.
+3. Bei `interval` ist `hours` die gerundete Dauer aus Ende − Beginn − Pause.
+   Zwei Quellen für dieselbe Menge, die auseinanderlaufen können, sind ein
+   Fehler und keine Wahlfreiheit.
+4. Zwei Abschnitte desselben Tages **überlappen nicht**. Mehrere Abschnitte
+   sind erlaubt, dieselbe Stunde zweimal nicht.
+
+**Zuschläge: abgeleitet oder angegeben.** Jeder Zuschlag an einer Position
+trägt seine **Herkunft**. `derived` heißt: aus der Erfassungsform gerechnet —
+möglich nur, wenn die Zuschlagsart es zulässt (`derivationBasis`, siehe
+Zuschlagsart) und die Position die nötige Angabe trägt. `declared` heißt: von
+Hand angegeben, weil die Grundlage fehlt — der Regelfall bei einer Tagessumme
+mit Nachtzuschlag.
+
+Die Unterscheidung steht hier und nicht in der Oberfläche, weil sie bis in den
+Abrechnungsbeleg trägt (3.9): wer einen Betrag prüft, muss sehen, ob die
+Zuschlagsstunden aus einer Uhrzeit folgen oder ob jemand sie eingetragen hat.
+Ein `declared`-Zuschlag ist zulässig und keine Beanstandung — aber er ist eine
+**Angabe**, und die freigebende Stufe entscheidet über sie mit (4.4).
 
 **Mandant und Eigentümer.** Wie der Stundenzettel; erfasst durch
 Leiharbeitnehmer *(offene Frage 4)* oder `LD` ([27]).
@@ -1722,20 +1770,47 @@ m Zuschlagsarten · n Zeitpositionen : 0..1 abweichende Kostenstelle.
 
 **Statusmodell.** Keines ([44]).
 
-**Datenkategorie (→ 6.3).** Arbeitszeitdaten. **Festlegung:** Die
-Abwesenheitsart wird im Prototyp **nicht** mit medizinischem Gehalt geführt.
-Ob überhaupt eine Abwesenheitsart erfasst wird — und wenn ja, ob differenziert
-(„krank", „Urlaub", „Feiertag") oder nur als „keine Arbeitsleistung" — ist
-**offene Frage 21**: „krank" ist ein Gesundheitsdatum nach Art. 9 DSGVO, und
-die Lohnabrechnung ist nach 1.4 nicht im Umfang. Das Feld ist deshalb optional
-und entfällt ersatzlos, wenn die Frage mit „nur keine Arbeitsleistung"
-beantwortet wird.
+**Datenkategorie (→ 6.3).** Arbeitszeitdaten.
+
+> **Entschieden (vormals offene Frage 21).** Erfasst werden **ausschließlich
+> produktive Zeiten**. Es gibt **keine** Abwesenheitsart — weder differenziert
+> („krank", „Urlaub", „Feiertag") noch als „keine Arbeitsleistung". Das Feld
+> `absenceType` ist ersatzlos entfallen.
+>
+> **Warum das mehr ist als ein weggelassenes Feld.** Damit gelangt über die
+> Zeiterfassung **kein Gesundheitsdatum** nach Art. 9 DSGVO in das System —
+> nicht als Katalogwert, nicht als Bemerkung, nicht als Rechenergebnis. Die
+> Datenminimierung aus 6.4 wird hier nicht durch eine Regel hergestellt,
+> sondern dadurch, dass das Datum nicht entsteht. Das ist die belastbarere
+> Form.
+>
+> **Was das System dadurch nicht weiß.** Ein Tag ohne Position bedeutet
+> entweder „nicht gearbeitet" oder „noch nicht erfasst" — das System kann die
+> beiden **nicht** unterscheiden. Eine Vollständigkeitsprüfung des
+> Stundenzettels ist deshalb nicht ableitbar: die Einreichung ist eine
+> **Erklärung** der erfassenden Seite, dass der Zeitraum vollständig erfasst
+> ist, und die Freigabestufen entscheiden über das, was vorliegt (4.4). Dass
+> ein Zettel ausbleibt, fängt die Eskalation aus 2.4 ab, nicht eine Rechnung.
+>
+> **Wo Abwesenheit trotzdem steht.** Eine längere Nichtleistung ist eine
+> **Unterbrechung** des Einsatzes (3.7, 4.3) und damit Gegenstand von P2
+> (5.1.4). Der Unterbrechungsgrund ist dort als Kategorie geführt und bleibt
+> ohne medizinischen Gehalt.
 
 #### Zuschlagsart (`premiumType`)
 
 **Zweck.** Der Katalog der Zuschlagsarten — Nacht, Sonntag, Feiertag,
 Überstunde, Erschwernis. **Abgrenzung:** Die Zuschlagsart sagt, *dass* und *wie*
 gerechnet wird; *wie viel* steht in der Preisposition (3.3).
+
+**Die Ableitungsgrundlage ist der Kern dieses Katalogs.** Seit der Entscheidung
+zu *Frage 16* führt die Zeitposition zwei Erfassungsformen. Welche Zuschläge
+sich aus einer Position **rechnen** lassen, folgt damit nicht aus dem Anlass
+allein, sondern aus dem Zusammentreffen von Anlass und Form: ein Nachtzuschlag
+(`timeOfDay`) braucht eine Uhrzeit, ein Sonntagszuschlag (`calendarDay`) nur
+den Tag, ein Überstundenzuschlag (`weeklyTotal`) die Summe der Woche. Ohne
+diese Angabe wäre an jeder Rechenstelle neu zu entscheiden, was ableitbar ist —
+und eine dieser Stellen wäre falsch.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
@@ -1744,6 +1819,7 @@ gerechnet wird; *wie viel* steht in der Preisposition (3.3).
 | Berechnungsart | `calculationBase` | `percentage`, `absolute` | Pflicht | |
 | Vorbelegung | `defaultValue` | Prozentsatz oder Betrag | optional | überschreibbar je Preisposition |
 | Anlass | `appliesTo` | Katalogwert | Pflicht | Nacht, Sonntag, Feiertag, Überstunde, Erschwernis … |
+| Ableitungsgrundlage | `derivationBasis` | `timeOfDay`, `calendarDay`, `weeklyTotal`, `manual` | Pflicht | **woraus** sich die Zuschlagsstunden rechnen lassen: aus der Uhrzeit (Nacht), aus dem Datum (Sonntag, Feiertag), aus der Wochensumme (Überstunde) oder aus nichts (Erschwernis). Entscheidet, ob ein Zuschlag an einer Position `derived` sein kann (3.8, Zeitposition) |
 | Rechtsgrundlage | `legalBasis` | `statutory`, `collectiveAgreement`, `contractual` | Pflicht | |
 | Laufzeit | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | |
 
@@ -2890,13 +2966,24 @@ stateDiagram-v2
 Objekte: `timesheet` und `timesheetApproval` (3.8). Matrixzeile „Stundenzettel,
 Freigabeschritt (3.8)" in 2.2; der Freigabeschritt teilt die Zeile.
 
-> **Abhängigkeit von offener Frage 5.** Wie viele Genehmigungsstufen es gibt und
-> welche Rolle welche Stufe trägt, ist offen. Dieses Modell ist deshalb so
-> gebaut, dass die **Stufenzahl in den Daten steht, nicht im Statusmodell**: die
-> Zustände und Übergänge unten gelten für eine wie für fünf Stufen. Was sich mit
-> der Antwort ändert, ist allein der Inhalt von `assignedRoleCode` je
-> `timesheetApproval` (3.8) — kein Zustand, kein Übergang, keine Nebenwirkung.
-> Die betroffenen Stellen sind mit *(offene Frage 5)* gekennzeichnet.
+> **Entschieden (vormals offene Frage 5).** Die Stufenfolge ist **Konfiguration
+> je Kunde** (`timesheetApprovalConfig`, 3.1). Die **Vorbelegung sind zwei
+> Stufen**: zuerst die **Kundenseite**, die bestätigt, dass die Zeiten erbracht
+> wurden — das weiß nur sie —, dann der **Betreiber**, der sie gegen Einsatz,
+> Preisposition und Periode prüft, bevor beide Belegseiten daraus entstehen
+> (4.5). Welche Kundenrolle die erste Stufe trägt, ist *Frage 47*; die Rundung
+> der Stunden ist *Frage 48*.
+>
+> Das Modell war von Anfang an so gebaut, dass die **Stufenzahl in den Daten
+> steht, nicht im Statusmodell** — daran ändert die Antwort nichts: die
+> Zustände und Übergänge unten gelten für eine wie für fünf Stufen.
+>
+> **Geändert hat sie einen Ausschluss.** Dieses Kapitel schloss eine Freigabe
+> durch den Betreiber zuvor **ganz** aus, mit Verweis auf 2.1 und 2.4 Regel 3
+> („Der Betreiber ersetzt keine Kundenentscheidung"). Das war zu weit: der
+> Grundsatz verbietet, die Kundenentscheidung zu **ersetzen**, nicht, ihr eine
+> zweite Prüfung **hinzuzufügen**. Die Betreiberstufe ist additiv — unter
+> „Ausgeschlossen" steht, was daraus folgt.
 
 #### Zustände
 
@@ -2904,7 +2991,7 @@ Freigabeschritt (3.8)" in 2.2; der Freigabeschritt teilt die Zeile.
 |---|---|---|
 | Erfasst | `recorded` | Zeiten werden erfasst oder nachgearbeitet. Der **einzige** Zustand, in dem Zeitpositionen frei angelegt, geändert und entfernt werden dürfen ([44]). |
 | Eingereicht | `submitted` | Der Zettel liegt zur Genehmigung vor; `submittedAt` / `submittedBy` gesetzt. Keine Änderung durch die erfassende Seite mehr. |
-| In Prüfung | `inApproval` | Mindestens ein Freigabeschritt ist offen. Bei mehreren Stufen bleibt der Zettel so lange hier, bis die letzte Stufe entschieden ist *(offene Frage 5)*. |
+| In Prüfung | `inApproval` | Mindestens ein Freigabeschritt ist offen. Bei mehreren Stufen bleibt der Zettel so lange hier, bis die letzte Stufe entschieden ist. |
 | Genehmigt | `approved` | Alle Stufen haben zugestimmt; `approvedAt` / `approvedBy` tragen die **letzte** Stufe. Grundlage für Abrechnungsbelege (4.5). |
 | Abgelehnt | `rejected` | Eine Stufe hat abgelehnt; `rejectionReason` ist Pflicht. Der Zettel ist zur Nacharbeit freigegeben. |
 | Korrigiert | `corrected` | Eine genehmigte Korrekturfassung hat diesen Zettel ersetzt (`correctionOf` am neuen Zettel). **Endzustand.** |
@@ -2917,13 +3004,22 @@ der Zettel; die Zeitpositionen folgen seinem Zustand.
 | Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
 |---|---|---|---|---|
 | — | `recorded` | `AN` *(offene Frage 4)*, `LD` im Namen des Leiharbeitnehmers ([27]), `MD` ([27]) | Einsatz in `active`, `interrupted`, `completed` oder `terminatedEarly`; Abrechnungsperiode `open` (4.5); je Einsatz und Periode genau **ein** Zettel (3.13) | `recordedBy` wird gesetzt; `timesheetSubmissionDeadlineDays` beginnt mit dem Periodenende |
-| `recorded` | `submitted` | `AN` *(offene Frage 4)*, `LD` ([20]), `MD` | Mindestens eine Zeitposition; Summen abgeleitet; Zeitpositionen liegen innerhalb `periodFrom` / `periodTo` und außerhalb einer laufenden Unterbrechung (4.3) | Freigabeschritte werden nach der konfigurierten Stufenfolge erzeugt *(offene Frage 5)*; Benachrichtigung an die Rolle der ersten Stufe; AÜG-Prüfungen P1 und P4 |
+| `recorded` | `submitted` | `AN` *(offene Frage 4)*, `LD` ([20]), `MD` | Mindestens eine Zeitposition; Summen abgeleitet; Zeitpositionen liegen innerhalb `periodFrom` / `periodTo` und außerhalb einer laufenden Unterbrechung (4.3); jede Position erfüllt die vier Invarianten aus 3.8 | Freigabeschritte werden aus `timesheetApprovalConfig` des Kunden erzeugt (3.1), mit **kopiertem** Rollenkürzel je Stufe; Benachrichtigung an die Rolle der ersten Stufe; AÜG-Prüfungen P1 und P4. Die Einreichung ist zugleich die **Erklärung**, dass der Zeitraum vollständig erfasst ist — ableitbar ist das nicht (3.8, Entscheidung zu *Frage 21*) |
 | `submitted` | `inApproval` | System | Mindestens ein Freigabeschritt vorhanden | Erste Stufe wird geöffnet; `timesheetApprovalDeadlineDays` läuft gegen `closingDate` der Periode (4.5) |
-| `inApproval` | `inApproval` | Rolle der offenen Stufe — `KB` oder `KG` ([29]) *(offene Frage 5)* | Entscheidung `approved` am Freigabeschritt; weitere Stufen offen | Nächste Stufe wird geöffnet; Benachrichtigung an deren Rolle; **kein** Statuswechsel des Zettels |
-| `inApproval` | `approved` | Rolle der **letzten** Stufe ([29]) *(offene Frage 5)* | Alle Stufen `approved`; P4 ohne Sperre (Q36); P1 als **Warnung mit Pflicht-Eskalation** zulässig — Zeiten nach Fristende sperren die Genehmigung nicht, weil sie erbracht sind (5.5.5, Q35) | `approvedAt` / `approvedBy` gesetzt; Zeitpositionen sind gesperrt — Änderungen nur über eine Korrekturfassung ([28]); der Zettel wird für die Belegerstellung verfügbar (4.5); Benachrichtigung an `MD` und `LD` |
-| `inApproval` | `rejected` | Rolle einer offenen Stufe ([29]) *(offene Frage 5)* | `rejectionReason` Pflicht | Noch offene Stufen entfallen; Benachrichtigung an die erfassende Seite mit Begründung; Protokolleintrag mit Begründung |
+| `inApproval` | `inApproval` | Rolle der offenen Stufe ([29]) — kundenseitig `KB` oder `KG`, betreiberseitig `MD` oder `MA` | Entscheidung `approved` am Freigabeschritt; weitere Stufen offen; der Entscheidende hat den Zettel weder erfasst noch eingereicht (2.4, Regel 5) | Nächste Stufe wird geöffnet; Benachrichtigung an deren Rolle; **kein** Statuswechsel des Zettels |
+| `inApproval` | `approved` | Rolle der **letzten** Stufe ([29]) | Alle Stufen `approved`, darunter **mindestens eine Kundenstufe**; P4 ohne Sperre (Q36); P1 als **Warnung mit Pflicht-Eskalation** zulässig — Zeiten nach Fristende sperren die Genehmigung nicht, weil sie erbracht sind (5.5.5, Q35) | `approvedAt` / `approvedBy` gesetzt; Zeitpositionen sind gesperrt — Änderungen nur über eine Korrekturfassung ([28]); der Zettel wird für die Belegerstellung verfügbar (4.5); Benachrichtigung an `MD` und `LD` |
+| `inApproval` | `rejected` | Rolle einer offenen Stufe ([29]) | `rejectionReason` Pflicht | Noch offene Stufen entfallen; Benachrichtigung an die erfassende Seite mit Begründung; Protokolleintrag mit Begründung |
 | `rejected` | `recorded` | `AN` *(offene Frage 4)*, `LD`, `MD` | Abrechnungsperiode noch `open` (4.5) | Vorhandene Freigabeschritte werden verworfen und bei der nächsten Einreichung neu erzeugt; Korrekturen tragen Begründung und Protokolleintrag ([28]) |
 | `approved` | `corrected` | System, als Folge der Genehmigung einer Korrekturfassung | Neuer Zettel mit `correctionOf` auf diesen Zettel ist `approved` | Belegpositionen, die auf diesem Zettel beruhen, sind zu stornieren und neu zu erstellen (4.5); Benachrichtigung an `KE` bzw. `LD` |
+
+**Eine Sperre an der letzten Stufe nimmt die früheren nicht zurück.** Erreicht
+der Zettel die letzte Stufe und sperrt dort eine Prüfung aus Kapitel 5 — Q36
+etwa, wenn das Vergleichsentgelt fehlt —, bleibt er in `inApproval` stehen
+(4.0, Regel 5). Die schon getroffenen Stufenentscheidungen bleiben **gültig**:
+sie sind Tatsachen mit Zeitpunkt und Person, kein Zwischenergebnis. Behoben
+wird die Sperre an ihrer Ursache, nicht durch ein erneutes Durchlaufen der
+Stufen. Das ist der Grund, warum die Entscheidung am **Freigabeschritt** steht
+und nicht am Zettel.
 
 **Korrekturen nach der Genehmigung.** Ein genehmigter Zettel wird nie wieder
 geändert. Die Korrektur ist ein **neuer** Zettel mit `correctionOf` (3.8), der
@@ -2942,9 +3038,19 @@ keine Korrekturfassung genehmigt wird.
 - **Keine** Genehmigung durch die erfassende Seite. Wer den Zettel eingereicht
   hat, genehmigt ihn nicht — auch nicht in Vertretung (2.4, Regel 5). Das
   schließt insbesondere `LD` und `AN` von jeder Freigabestufe aus.
-- **Keine** Genehmigung durch den Betreiber. `MD` darf erfassen und korrigieren
-  ([27], [28]), aber keine Stufe entscheiden: die Zeitfreigabe ist eine
-  Kundenentscheidung (2.1, 2.4 Regel 3).
+- **Keine Genehmigung des Betreibers _anstelle_ der Kundenseite.** Der
+  Betreiber darf eine **eigene** Stufe tragen — die Vorbelegung gibt ihm die
+  zweite —, aber er ersetzt die Kundenstufe nicht (2.1, 2.4 Regel 3). Daraus
+  folgt dreierlei: jede Stufenfolge enthält **mindestens eine** Kundenstufe;
+  eine offene Kundenstufe kann **nicht** übersprungen, delegiert oder durch
+  Fristablauf ersetzt werden, sondern wird eskaliert; und hat die Kundenseite
+  abgelehnt, ist der Zettel `rejected` — eine folgende Betreiberstufe entfällt
+  und kann die Ablehnung nicht aufheben.
+- **Keine Stufe durch den, der erfasst oder eingereicht hat.** Das gilt
+  unverändert und trifft den Betreiber genauso wie den Lieferanten: hat `MD`
+  den Zettel im Namen des Leiharbeitnehmers erfasst ([27]), fällt die
+  Betreiberstufe an eine **andere** Person — ein zweiter `MD`-Benutzer oder
+  `MA`. Auch nicht in Vertretung (2.4, Regel 5).
 - **Kein** Übergang durch Fristablauf. Ein nicht genehmigter Zettel wird mit
   Erreichen von `closingDate` eskaliert und bleibt in `inApproval`; er gilt
   **nicht** als genehmigt (2.4, Regel 1). Er kann dadurch die Abrechnung
@@ -2964,9 +3070,9 @@ stateDiagram-v2
     [*] --> recorded : erfassen (AN, LD, MD)
     recorded --> submitted : einreichen (AN, LD, MD)
     submitted --> inApproval : Freigabeschritte eroeffnen (System)
-    inApproval --> inApproval : Stufe genehmigt, weitere offen (KB, KG)
-    inApproval --> approved : letzte Stufe genehmigt (KB, KG)
-    inApproval --> rejected : ablehnen (KB, KG)
+    inApproval --> inApproval : Stufe genehmigt, weitere offen (KB/KG, MD/MA)
+    inApproval --> approved : letzte Stufe genehmigt (KB/KG, MD/MA)
+    inApproval --> rejected : ablehnen (KB/KG, MD/MA)
     rejected --> recorded : nacharbeiten (AN, LD, MD)
     approved --> corrected : Korrekturfassung genehmigt (System)
     corrected --> [*]
@@ -4845,7 +4951,7 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 2 | Konkreter Hoster und Betriebsmodell (Hetzner / IONOS / anderer DE-EU-Anbieter) | Kapitel 6.9 | offen |
 | 3 | Welcher Tarifvertrag ist zugrunde zu legen (iGZ/BAP, Branchenzuschläge)? | Kapitel 5.1, 5.2 | **entschieden:** Tarifwerk ist Konfiguration an der Tarifzuordnung (3.3), nicht verdrahtet; Kapitel 5 spezifiziert nur die Mechanik |
 | 4 | Bekommen Leiharbeitnehmer einen eigenen Zugang (z. B. Zeiterfassung)? | Kapitel 2 | offen |
-| 5 | Mehrstufige Genehmigung der Stundenzettel: wie viele Stufen, welche Rollen? | Kapitel 4.4 | offen |
+| 5 | Mehrstufige Genehmigung der Stundenzettel: wie viele Stufen, welche Rollen? | Kapitel 3.1, 4.4 | **entschieden:** **je Kunde konfigurierbar** (`timesheetApprovalConfig`, 3.1). Vorbelegung sind **zwei** Stufen — zuerst die **Kundenseite**, dann der **Betreiber**. Die Betreiberstufe tritt **hinzu**, sie ersetzt die Kundenentscheidung nicht (2.1, 2.4 Regel 3); welche Kundenrolle die erste Stufe trägt, ist *Frage 47* |
 | 6 | Gutschriftverfahren oder Rechnungseingang des Lieferanten? | Kapitel 3.9 | **entschieden:** Gutschriftverfahren; der Rechnungseingang bleibt als Variante dokumentiert, im Prototyp nicht umgesetzt |
 | 7 | Schnittstellen zu Fremdsystemen (ERP, Zeitwirtschaft, HR4YOU) im Prototyp? | Kapitel 1.4 | offen |
 | 8 | Werden mehrere Kunden eines MSP in einer Instanz oder getrennt betrieben? | Kapitel 1.3 | offen |
@@ -4856,12 +4962,12 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 13 | Wie wird eine Organisation behandelt, die gleichzeitig Kunde und Lieferant ist (Mandantenzuordnung, Sichtbarkeit)? | Kapitel 2.3 | offen |
 | 14 | Dürfen Kundenrollen (Bedarfsträger, Genehmiger) für mehrere Standorte und Kostenstellen eingeschränkt werden, und wer pflegt diese Zuständigkeit? | Kapitel 2.2, 3.1, 3.11 | offen |
 | 15 | Wie wird das Vergleichsentgelt für Equal Pay geführt, und in welcher Form liefert der Entleiher es? | Kapitel 3.3, 3.7, 5.2 | **entschieden:** je Tätigkeit am Standort als `comparableWageEntry` (3.3), mit Herkunftsangabe; der Einsatz erbt den Wert |
-| 16 | Granularität der Zeiterfassung: Zeitposition je Tag mit Stundensumme oder je Abschnitt mit Beginn, Ende und Pause? | Kapitel 3.8, 4.4 | offen |
+| 16 | Granularität der Zeiterfassung: Zeitposition je Tag mit Stundensumme oder je Abschnitt mit Beginn, Ende und Pause? | Kapitel 3.8, 4.4 | **entschieden:** **beide**. Eine Position ist entweder Tagessumme oder Abschnitt (`entryForm`, 3.8), mehrere Abschnitte je Tag sind erlaubt. Die Form entscheidet, welche Zuschläge **ableitbar** sind: jeder Zuschlag trägt seine Herkunft `derived` oder `declared`, und die Zuschlagsart nennt ihre `derivationBasis`. Die Rundung ist *Frage 48* |
 | 17 | Darf je Einsatz ein von der Preisliste abweichender Satz vereinbart werden, und wer genehmigt die Abweichung? | Kapitel 3.3, 3.5, 3.7 | offen |
 | 18 | Führt der Betreiber eine Personenidentität über Lieferanten hinweg, und mit welchen Merkmalen? | Kapitel 3.6, 5.1, 5.3 | **entschieden:** ja; abschließender Merkmalssatz Name, Geburtsdatum, Geburtsort, manuelle Bestätigung, enge Zweckbindung (3.6). Rechtsgrundlage → Frage 25 |
 | 19 | Sind mehrere gleichzeitige Einsätze derselben Person beim selben Kunden zulässig, und wie zählen sie auf die Höchstüberlassungsdauer? | Kapitel 3.7, 5.1 | **entschieden:** zulässig; gezählt werden Kalendertage der Überlassung an denselben Entleiher, überlappende Tage genau einmal |
 | 20 | Welche Nachweisarten sind Pflicht, und blockiert ein fehlender Nachweis oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | **entschieden:** fester Katalog mit gestufter Wirkung — Sperre bei AÜG-Erlaubnis, Arbeitserlaubnis und Unterweisung am Standort, sonst Warnung oder Information (5.4) |
-| 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | offen |
+| 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | **entschieden:** **nur produktive Zeiten**. `absenceType` entfällt ersatzlos — damit entsteht über die Zeiterfassung kein Gesundheitsdatum nach Art. 9 DSGVO. Folge: ein Tag ohne Position ist nicht von „noch nicht erfasst" zu unterscheiden; die Vollständigkeit ist eine **Erklärung** der erfassenden Seite, keine Rechnung (3.8, 4.4) |
 | 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | offen |
 | 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? | Kapitel 2.2, 3.5, 4.2 | **entschieden:** ja, eng begrenzt auf die eigene Einladung; Matrix 2.2 trägt dafür `S[46]` |
 | 24 | Darf eine Abrechnungsperiode geschlossen werden, solange einzelne Stundenzettel nicht entschieden sind — und wer entscheidet das? Heute verhindert ein hängender Zettel das Schließen der ganzen Periode. | Kapitel 3.9, 4.4, 4.5 | offen — mit der Änderung von Q35 (5.5.5) entfällt ein Anlass für hängende Zettel, der Grundkonflikt bleibt |
@@ -4890,5 +4996,8 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 45 | **In welcher Granularität werden lesende Zugriffe protokolliert?** 3.12 verlangt den Eintrag für mandantenübergreifende Lesezugriffe (Nummer 2) und für jeden Lesezugriff auf Klardaten von Kandidaten (Nummer 3), führt `objectRef` aber als **Pflicht** — ein Eintrag benennt genau ein Objekt. Eine Liste, die der Betreiber über die Mandantengrenze liest, ergibt damit einen Eintrag je Zeile und je Seitenaufruf; bei der Querschnittssicht ist das der Regelfall, nicht die Ausnahme. Die Umsetzung protokolliert deshalb die Offenlegung von **Klardaten** nach der Zusage (4.2.3, 6.4) und den Zugriff auf **einzeln** geladene Objekte, nicht jede Zeile jeder Liste. Zu entscheiden: Eintrag je Objekt (vollständig, aber in Masse), Eintrag je Zugriff mit einer Objektmenge (dann braucht 3.12 ein zweites Feld), oder Beschränkung auf die Offenlegung personenbezogener Daten. Hängt an Frage 22 (Aufbewahrung) und an 6.8 (`clientContext`). | Kapitel 2.3, 3.12, 6.4, 6.8 | offen |
 
 | 46 | **Sieht der Disponent (`MD`) das Protokoll zu den Lieferanten, die er steuert?** Fußnote [39] lässt ihm „Einträge zu Objekten der eigenen Organisation bzw. des betreuten Kunden“, und 3.12 sagt dazu ausdrücklich „`MD` zu Objekten der betreuten Kunden“ — ein Lieferantenmandant ist keines von beidem. Dabei weist 4.6 gerade **ihm** die Sperre eines Lieferanten zu ([5]): er vollzieht den Übergang und kann den Eintrag darauf nicht lesen, während `LA` ihn als Eintrag der eigenen Organisation sieht. Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt das Protokoll zu Lieferanten damit nur `MA` (ohne Fußnote) und dem Lieferanten selbst. Zu entscheiden: [39] auf „betreute Kunden **und** Lieferanten“ erweitern (dann hängt sie an *Frage 34*, weil die Betreuungszuordnung Lieferanten nicht kennt), oder beim Wortlaut bleiben und die Durchsicht des Lieferantenprotokolls dem `MA` zuweisen. | Kapitel 2.2, 3.12, 4.6 | offen |
+
+| 47 | **Welche Kundenrolle trägt die kundenseitige Freigabestufe in der Vorbelegung — `KB` oder `KG`?** Die Entscheidung zu *Frage 5* macht die Stufenfolge zur Konfiguration je Kunde; welche Rolle in der **Vorbelegung** steht, ist damit noch nicht gesagt. 2.2 gibt beiden `S[29]`, beide sind also zulässig. Fachlich sprechen Gründe für beide: der **Bedarfsträger** (`KB`) hat die Person angefordert und führt sie fachlich — er weiß, ob die Stunden erbracht wurden; der **Genehmiger** (`KG`) ist nach 2.1 die Rolle, die Freigaben trägt, und sieht die Kostenwirkung ([8]). Die Umsetzung belegt vorerst `KB` vor, weil die erste Stufe die **Leistung** bestätigt und nicht das Budget — die kaufmännische Prüfung ist die zweite Stufe. Zu entscheiden ist die Vorbelegung; jeder Kunde kann sie ohnehin überschreiben. | Kapitel 2.1, 2.2, 3.1, 4.4 | offen |
+| 48 | **Wie werden Stunden gerundet, wenn sie aus einem Abschnitt gerechnet werden?** Mit der Entscheidung zu *Frage 16* kann `hours` aus Ende − Beginn − Pause folgen — und damit auf die Minute genau. Abgerechnet wird in der Arbeitnehmerüberlassung aber üblicherweise in Einheiten (Viertel-, Zehntel- oder halbe Stunde), und ob **auf**, **ab** oder **kaufmännisch** gerundet wird, ist eine Vertragsfrage mit unmittelbarer Geldwirkung. Zu entscheiden sind Einheit und Richtung sowie die Ebene, auf der die Rundung gilt: je Abschnitt, je Tag oder erst auf der Summe des Zettels — die drei ergeben verschiedene Beträge. Denkbar als Konfiguration am Rahmenvertrag (3.3), weil sie zwischen Betreiber und Gegenpartei vereinbart wird. Solange die Frage offen ist, rechnet die Umsetzung **ungerundet** und hält die Minutendifferenz damit sichtbar, statt sie stillschweigend zu glätten. | Kapitel 3.3, 3.8, 3.9 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.
