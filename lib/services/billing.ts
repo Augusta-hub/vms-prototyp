@@ -49,6 +49,7 @@ import {
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { pruefeAbrechnungsbeleg } from '../masterdata/invariants'
 import { prisma } from '../prisma'
+import { benachrichtigeUebergang, rolleDesHandelnden } from './notifications'
 import {
   BILLING_DOCUMENT_MODEL,
   BILLING_DOCUMENT_STATE_LABELS,
@@ -644,6 +645,34 @@ export interface NewBillingPeriodInput {
  * ausdrücklich als Statusvorgang des `MD`, und die Matrix gibt ihm auf dieser
  * Zeile kein `A`.
  */
+/**
+ * Die **beteiligten Lieferanten** einer Periode (4.5.1): wer in ihrem Zeitraum
+ * einen Einsatz bei diesem Kunden hat, dessen `LD` erwartet Zeiterfassung und
+ * Abrechnung — und wird adressiert.
+ *
+ * Jeder erhält seine **eigene** Nachricht (2.3, Regel 2); eine gemeinsame
+ * würde den Lieferanten verraten, wer sonst beim Kunden arbeitet.
+ */
+async function beteiligteLieferanten(periode: {
+  readonly customerId: string | null
+  readonly periodFrom: Date
+  readonly periodTo: Date
+}): Promise<readonly string[]> {
+  const einsaetze = await prisma.assignment.findMany({
+    where: {
+      ...(periode.customerId === null ? {} : { customerId: periode.customerId }),
+      plannedStartDate: { lte: periode.periodTo },
+      OR: [
+        { plannedEndDate: null },
+        { plannedEndDate: { gte: periode.periodFrom } },
+        { actualEndDate: { gte: periode.periodFrom } },
+      ],
+    },
+    select: { supplier: { select: { tenantId: true } } },
+  })
+  return [...new Set(einsaetze.map((einsatz) => einsatz.supplier.tenantId))]
+}
+
 export async function openBillingPeriod(
   identity: LoadedIdentity,
   input: NewBillingPeriodInput,
@@ -699,6 +728,12 @@ export async function openBillingPeriod(
     return failure(outcome.rejection.reason, outcome.rejection.specReference)
   }
 
+  const lieferanten = await beteiligteLieferanten({
+    customerId: input.customerId,
+    periodFrom: input.periodFrom,
+    periodTo: input.periodTo,
+  })
+
   try {
     await prisma.$transaction(async (tx) => {
       const periode = await tx.billingPeriod.create({
@@ -724,6 +759,18 @@ export async function openBillingPeriod(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.5.1: „Benachrichtigung an `LD` der beteiligten Lieferanten" (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'billingPeriod',
+        objectRef: periode.id,
+        tenantId: periode.tenantId,
+        uebergang: 'open',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Abrechnungsperiode ${periode.periodNumber}`,
+        lage: { operator: operatorTenant.id, supplier: lieferanten },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Abrechnungsperiode konnte nicht geöffnet werden')
@@ -781,6 +828,7 @@ export async function closeBillingPeriod(
   if (periode === null) return failure('Unbekannte Abrechnungsperiode.')
 
   const stand = await periodenstand(periode.id)
+  const lieferanten = await beteiligteLieferanten(periode)
   const outcome = attemptTransition(BILLING_PERIOD_MODEL, 'close', {
     currentStatus: periode.status,
     subject: identity.subject,
@@ -825,6 +873,23 @@ export async function closeBillingPeriod(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.5.1: „Benachrichtigung an `KE` und `LD`" (3.14). `KE` beim Kunden,
+      // `LD` je beteiligtem Lieferanten — jeder einzeln (2.3, Regel 2).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'billingPeriod',
+        objectRef: periode.id,
+        tenantId: periode.tenantId,
+        uebergang: 'close',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Abrechnungsperiode ${periode.periodNumber}`,
+        lage: {
+          operator: periode.tenantId,
+          customer: periode.customer?.tenantId ?? null,
+          supplier: lieferanten,
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Abrechnungsperiode konnte nicht geschlossen werden')
@@ -1281,6 +1346,30 @@ export interface BillingTransitionInput {
  * Der **Storno** ist die Ausnahme: er erzeugt zusätzlich einen neuen Beleg
  * (3.9) und steht deshalb in `cancelBillingDocument`.
  */
+/**
+ * Die Mandantenlage eines Belegs (3.14).
+ *
+ * Die **Seite** bestimmt die Gegenseite: 4.5.2 adressiert bei der Freigabe
+ * „`KE` bzw. `LD`" und beim Storno „die Gegenseite" — `KE` auf der Verkaufs-,
+ * `LD` auf der Einkaufsseite. Die **beanstandende** Seite ist dieselbe Rolle:
+ * 4.5.2 gibt die Beanstandung im Verkauf `KE` ([31]) und im Einkauf `LD`
+ * ([32]), eine dritte Möglichkeit führt die Tabelle nicht.
+ */
+function beleglage(row: {
+  readonly direction: BillingDirection
+  readonly customer: { readonly tenantId: string } | null
+  readonly supplier: { readonly tenantId: string } | null
+  readonly tenantId: string
+}) {
+  return {
+    operator: row.tenantId,
+    customer: row.customer?.tenantId ?? null,
+    supplier: row.supplier?.tenantId ?? null,
+    richtung: row.direction,
+    beanstandendeSeite: row.direction === 'sales' ? ('KE' as const) : ('LD' as const),
+  }
+}
+
 export async function transitionBillingDocument(
   identity: LoadedIdentity,
   input: BillingTransitionInput,
@@ -1352,6 +1441,20 @@ export async function transitionBillingDocument(
           reason: input.disputeReason ?? input.disputeResolutionNote ?? null,
         }),
       )
+      // 4.5.2, Spalte „Nebenwirkungen": Freigabe an die Gegenseite,
+      // Beanstandung an `MD`, Klärung an die beanstandende Seite. Prüfung und
+      // Bestätigung nennen keine Nachricht (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'billingDocument',
+        objectRef: row.id,
+        tenantId: row.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Abrechnungsbeleg ${row.documentNumber}`,
+        lage: beleglage(row),
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Der Übergang am Abrechnungsbeleg konnte nicht gespeichert werden')
@@ -1495,6 +1598,21 @@ export async function cancelBillingDocument(
           reason: input.cancellationReason,
         }),
       )
+      // 4.5.2: „Benachrichtigung an die Gegenseite" (3.14). Sie nennt den
+      // stornierten Beleg, nicht den Storno: der Vorgang, von dem die
+      // Gegenseite weiß, ist der, den sie bekommen hat. Die Spalte verlangt
+      // beim Storno **keine** Begründung in der Nachricht.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'billingDocument',
+        objectRef: row.id,
+        tenantId: row.tenantId,
+        uebergang: 'cancel',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Abrechnungsbeleg ${row.documentNumber}`,
+        lage: beleglage(row),
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Der Beleg konnte nicht storniert werden')

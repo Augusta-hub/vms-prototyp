@@ -2399,8 +2399,9 @@ E-Mail, im System oder beides erscheint, ist *(offene Frage 56)*.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
-| Anlass | `trigger` | Katalogwert | Pflicht | ein Eskalationsanlass aus 2.4 oder eine Zeile des nächtlichen Laufs aus 5.5.1 |
+| Anlass | `trigger` | Katalogwert | Pflicht | ein Eskalationsanlass aus 2.4, eine Zeile des nächtlichen Laufs aus 5.5.1 oder ein **Übergang** aus Kapitel 4 (`statusTransition`) |
 | Objektart / Vorgang | `objectType` / `objectRef` | Text / Verweis | Pflicht | derselbe Zuschnitt wie im Audit-Eintrag (3.12) |
+| Statuswechsel | `statusFrom` / `statusTo` | Statuswerte (Kapitel 4) | optional | gesetzt bei `trigger = statusTransition`; derselbe Zuschnitt wie im Audit-Eintrag (3.12). `statusFrom` bleibt leer, wo Kapitel 4 „—" führt, also bei der Anlage |
 | Mandant | `tenantId` | Verweis (3.11) | Pflicht | Mandant des **betroffenen Objekts**, wie in 3.12 |
 | Adressat: Rolle | `recipientRoleCode` | Rollenkürzel (2.1) | Pflicht | 2.4 adressiert die **zuständige Rolle**, nicht eine Person |
 | Adressat: Organisation | `recipientTenantId` | Verweis (3.11) | Pflicht | die Organisation, in der die Rolle wirkt |
@@ -2416,13 +2417,80 @@ Betreiber und ist dem Mandanten des **betroffenen Objekts** zugeordnet — wie
 der Audit-Eintrag (3.12). Lesen darf sie nur, wer die adressierte
 Rollenzuweisung trägt ([47]).
 
-**Eindeutigkeit.** Je Anlass, Vorgang, Adressat, Stufe und Lauftag **eine**
-Benachrichtigung. Der nächtliche Lauf läuft täglich über denselben Bestand;
-ohne diese Bedingung entstünde an jedem Tag dieselbe Nachricht erneut, und die
-Stufenfolge aus 2.4 wäre nicht mehr erkennbar.
+**Eindeutigkeit — nur für den Lauf.** Je Anlass, Vorgang, Adressat, Stufe und
+**Lauftag** eine Benachrichtigung. Der nächtliche Lauf läuft täglich über
+denselben Bestand; ohne diese Bedingung entstünde an jedem Tag dieselbe
+Nachricht erneut, und die Stufenfolge aus 2.4 wäre nicht mehr erkennbar.
+
+Eine Benachrichtigung **aus einem Übergang** trägt keinen Lauftag und
+unterliegt der Bedingung nicht. Sie entsteht genau einmal, nämlich mit ihrem
+Übergang, und derselbe Übergang kann an demselben Vorgang mehrfach
+stattfinden: 4.4 führt `inApproval` → `inApproval` je Freigabestufe, und ein
+Beleg kann nach einer geklärten Beanstandung erneut freigegeben und erneut
+beanstandet werden (4.5). Eine Eindeutigkeitsbedingung ohne Lauftag würde
+genau diese zweite Nachricht unterdrücken — also die, auf die jemand wartet.
 
 **Beziehungen.** n Benachrichtigungen : 1 Vorgang (polymorph wie in 3.12) ·
 n Benachrichtigungen : 1 Rollenzuweisung, über Rolle und Mandant.
+
+#### Benachrichtigung aus einem Übergang
+
+**Der Katalog ist die Spalte „Nebenwirkungen" in Kapitel 4.** Wo dort
+„Benachrichtigung an `KG`" steht, entsteht mit dem Übergang eine
+Benachrichtigung an `KG`; wo nichts steht, entsteht keine. Das ist keine
+Auslegung, sondern eine Abschrift — und sie ist vollständig zu lesen: `4.2.2`
+sagt zu `submitted` → `reviewed` ausdrücklich „keine Benachrichtigung an andere
+Lieferanten", und zu `released` → `confirmed` (4.5) sagt die Spalte nichts.
+Beide Übergänge erzeugen deshalb keine.
+
+**Art und Stufe.** Ein Übergang hat stattgefunden; die Nachricht darüber ist
+eine `information` auf Stufe 1. `escalation` trägt sie nur, wo Kapitel 4 das
+Wort selbst benutzt: `active` → `blocked` in 4.6 nennt „Benachrichtigung an
+`LA`; **Eskalation** an `MA`" — die zweite Stufe desselben Anlasses. Ein
+Eskalations*anlass*, den die Spalte nennt (4.2.1 „Ausschreibung ohne Angebot",
+4.5 „Beleg beanstandet und nicht geklärt", 5.4 „Nachweis fehlt"), ist dagegen
+**keine** Eskalation dieses Übergangs: er läuft nach Zeit und gehört dem
+nächtlichen Lauf (5.5.1 c, 2.4 Regel 2).
+
+**Relative Adressaten.** Kapitel 4 benennt einige Adressaten nicht mit dem
+Rollenkürzel, sondern aus dem Vorgang heraus. Sie lösen sich so auf:
+
+| Wortlaut in Kapitel 4 | Adressat | Verweis |
+|---|---|---|
+| „an den Antragsteller" | die Rolle, die den Antrag gestellt hat (`requestedBy`) | 4.3 Verlängerung |
+| „an beide Seiten" | `KB` des Kunden **und** `LD` des Lieferanten | 4.3 |
+| „an die jeweils andere Seite" | die Seite, die den Antrag **nicht** gestellt hat | 4.3 |
+| „an alle Beteiligten" | `KB`, `KG`, `KE`, `LD` und `MD` — die Rollen, die 4.3 am Einsatz und an seiner Verlängerung nennt | 4.3 |
+| „an die Rolle der ersten / nächsten Stufe" | das **kopierte** Rollenkürzel des offenen Freigabeschritts | 4.4, 3.1 |
+| „an die erfassende Seite" | die Rolle, die den Zettel eingereicht hat | 4.4 |
+| „an `KE` bzw. `LD`", „an die Gegenseite" (Beleg) | `KE` auf der Verkaufs-, `LD` auf der Einkaufsseite | 4.5 |
+| „an `KE` bzw. `LD`" (Korrekturfassung) | **beide** — die Korrektur storniert Belegpositionen auf der Verkaufs- und auf der Einkaufsseite; der Zettel selbst hat keine Seite | 4.4 |
+| „an die beanstandende Seite" | die Seite, von der die Beanstandung kam | 4.5 |
+| „an den Einsteller" | die Rolle, die den Nachweis eingestellt hat | 5.4 |
+
+Eine Rolle ohne Organisation im Vorgang ist **nicht adressierbar**: eine
+Nachricht an `KE` zu einem Vorgang ohne Kunden hätte keinen Empfänger. Sie
+entfällt, statt an irgendwen zu gehen (2.3).
+
+**„über `MD`".** 4.2.3 schreibt „Benachrichtigung an `MD`, von dort an `LD`"
+und „Benachrichtigung an `LD` über `MD`". Ein Weiterleitungsmechanismus ist
+damit nicht gemeint und wird nicht gebaut: beide Rollen erhalten die
+Nachricht, jede auf Stufe 1 in ihrer Organisation. Der Zusatz sagt, **wer sie
+verantwortet** — der Betreiber —, nicht, auf welchem Weg sie läuft.
+
+**Begründung.** Die Meldung enthält die Pflichtbegründung des Übergangs nur
+dort, wo Kapitel 4 es sagt: `terminatedEarly` (4.3), `rejected` am
+Stundenzettel (4.4) und `rejected` am Nachweis (5.4) tragen „mit Begründung".
+Sonst nicht — eine Begründung ohne diesen Auftrag wäre eine Offenlegung, die
+2.3 nicht deckt.
+
+**Warnungen aus 4.7.** Ein Übergang, dessen Prüfung nach 4.7 eine **Warnung**
+ergibt, „erzeugt eine Benachrichtigung an die zuständige Rolle und einen
+Eskalationsanlass (2.4)". Das ist ein **eigener** Anlass desselben Übergangs:
+`trigger = ruleWarning`, `kind = warning`, `ruleRef` gesetzt, Adressaten nach
+5.5.2 Nr. 6. Er tritt neben die Nachricht aus der Spalte „Nebenwirkungen", er
+ersetzt sie nicht — die eine sagt, dass der Vorgang weitergegangen ist, die
+andere, womit.
 
 **Statusmodell.** Keines. Eine Benachrichtigung wird erzeugt und bleibt; sie
 hat keinen Lebenslauf, den Kapitel 4 führen müsste. Ob sie einen Zustand
@@ -2499,7 +2567,8 @@ den einzelnen Abschnitten nicht wiederholt.
 8. **Benachrichtigungen unterliegen den Sichtbarkeitsregeln.** Eine
    Benachrichtigung aus einem Übergang enthält nur Daten, die der Empfänger
    nach 2.3 sehen darf; mehrere Lieferanten stehen nie gemeinsam im Adressfeld
-   (2.3, Regel 2).
+   (2.3, Regel 2). Das Objekt und die Auflösung der Adressaten stehen in
+   **3.14**; die Spalte „Nebenwirkungen" dieses Kapitels ist ihr Katalog.
 9. **Endzustände sind endgültig.** Aus einem Endzustand führt kein Übergang
    zurück. Ein Vorgang, der nach einem Endzustand wiederholt werden soll,
    entsteht als **neues** Objekt (neue Ausschreibungsrunde, neuer Einsatz,
@@ -5087,5 +5156,6 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 
 | 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg: E-Mail, Anzeige im System, beides, oder eine Übergabe an ein Fremdsystem (*Frage 7*). Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. Mit dem Weg hängt zusammen, ob die Nachricht einen Zustand „gelesen" trägt — die **Eskalation** braucht ihn nicht, sie läuft nach Zeit (2.4, Regel 2), eine Anzeige mit Postfach dagegen schon. Die Umsetzung erzeugt die Benachrichtigung als **Objekt** (3.14) und zeigt sie im System an; sie versendet nichts und führt keinen Lesezustand. | Kapitel 2.4, 3.14, 6 | offen |
 | 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0) — der nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. Zu entscheiden sind der Abstand und die Ebene, auf der er gilt (je Anlass oder je Kunde, 2.4 Regel 5). Bis zur Antwort erzeugt der nächtliche Lauf für diese Anlässe die Stufe der **zuständigen Rolle** und keine weitere — eine geratene Taktzahl wäre eine Entscheidung über die Belastung des Betreibers. | Kapitel 2.4, 3.14, 4.0 | offen |
+| 58 | **Welche Rolle ist „der Antragsteller", wenn eine Person mehrere Rollen in derselben Organisation trägt?** Kapitel 4 adressiert mehrere Nachrichten relativ: „an den Antragsteller" (4.3), „an die erfassende Seite" (4.4), „an den Einsteller" (5.4). 3.14 adressiert aber eine **Rolle in einer Organisation**, nicht eine Person — und 3.11 erlaubt einer Person mehrere Rollenzuweisungen im selben Mandanten. Trägt der Antragsteller `KB` **und** `KG`, ist offen, welche Rolle die Nachricht erhält: beide, die höhere, oder die, in der gehandelt wurde (dann wäre die Rollenzuweisung der Handlung festzuhalten, über den Audit-Eintrag hinaus). Die Umsetzung nimmt bis zur Antwort die **erste** Rolle nach der Reihenfolge in 2.1; die Nachricht bleibt damit in der Organisation, in der gehandelt wurde, und offenbart nichts über 2.3 hinaus. | Kapitel 2.1, 3.11, 3.14, 4.3, 4.4 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

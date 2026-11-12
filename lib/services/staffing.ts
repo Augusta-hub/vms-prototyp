@@ -85,6 +85,10 @@ import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type Decision, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
+import type { TenantType } from '../authz/roles'
+import type { Rollenkuerzel } from '../aueg/typen'
+import type { Vorgangslage } from '../notifications/uebergaenge'
+import { benachrichtigeUebergang, rolleDesHandelnden } from './notifications'
 import {
   ASSIGNMENT_MODEL,
   type AssignmentFacts,
@@ -831,6 +835,17 @@ export interface SubmissionListEntry {
   readonly assignmentNumber: string | null
 }
 
+/**
+ * Die Mandantenlage eines Profilvorschlags (3.14). Der Vorschlag liegt im
+ * Mandanten des Lieferanten (3.6); der Kunde kommt über die Bedarfsanfrage.
+ */
+function vorschlagslage(submission: {
+  readonly tenantId: string
+  readonly demandRequest: { readonly tenantId: string }
+}): Omit<Vorgangslage, 'operator'> {
+  return { customer: submission.demandRequest.tenantId, supplier: submission.tenantId }
+}
+
 const SUBMISSION_INCLUDE = {
   // P10 an Q10 (5.4.4): die Pflichtnachweise des **Kandidaten**.
   candidate: { include: { supplier: true, qualifications: true, documents: true } },
@@ -1206,13 +1221,30 @@ export async function submitCandidate(
           }),
         )
       }
+      // 4.2.3: „Benachrichtigung an `MD`" (3.14). Die Meldung nennt die
+      // Vorschlagsnummer, nicht den Namen: die Offenlegungsstufe ist
+      // `pseudonymized`, und sie gilt auch für eine Nachricht (2.3, 6.4).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'candidateSubmission',
+        objectRef: vorschlag.id,
+        tenantId: vorschlag.tenantId,
+        uebergang: 'submit',
+        statusFrom: submitted.from,
+        statusTo: submitted.to,
+        bezeichnung: `Profilvorschlag ${vorschlag.submissionNumber}`,
+        lage: {
+          customer: demandRequest.tenantId,
+          supplier: vorschlag.tenantId,
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Profilvorschlag konnte nicht eingereicht werden')
   }
-  // Nebenwirkung aus 4.2.3: Benachrichtigung an `MD`. Für den Kunden ist der
-  // Vorschlag **nicht** sichtbar — das trägt `candidateSubmissionRef` über
-  // `releasedToCustomerAt`, nicht die Oberfläche.
+  // Für den Kunden ist der Vorschlag **nicht** sichtbar — das trägt
+  // `candidateSubmissionRef` über `releasedToCustomerAt`, nicht die
+  // Oberfläche.
   return success('Profilvorschlag eingereicht; für den Kunden noch nicht sichtbar (4.2.3).')
 }
 
@@ -1321,6 +1353,20 @@ export async function transitionSubmission(
           reason,
         }),
       )
+      // 4.2.3 (3.14): Vorlage an `KB`, Interview an `MD` und von dort an
+      // `LD`, Ablehnung an `LD` über `MD`, Rückzug an `MD` und `KB`. Die
+      // Zusage nennt keine Nachricht — sie steht am Angebot (4.2.2).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'candidateSubmission',
+        objectRef: submission.id,
+        tenantId: submission.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Profilvorschlag ${submission.submissionNumber}`,
+        lage: vorschlagslage(submission),
+        raisedAt: evaluationDate,
+      })
       // 4.2.3: mit der Zusage wechselt die Offenlegungsstufe auf
       // `identified` — ab dann sind Klardaten sichtbar, und **jeder** Zugriff
       // darauf ist zu protokollieren (3.12, Nummer 3; 6.4). Der Wechsel selbst
@@ -1418,6 +1464,19 @@ async function moveRequestToSelection(
         occurredAt: evaluationDate,
       }),
     )
+    // 4.1: „Benachrichtigung an `KB`" (3.14) — der Bedarfsträger hat jetzt
+    // etwas zu entscheiden.
+    await benachrichtigeUebergang(tx, {
+      objectType: 'demandRequest',
+      objectRef: demandRequestId,
+      tenantId: request.tenantId,
+      uebergang: 'releaseToSelection',
+      statusFrom: outcome.from,
+      statusTo: outcome.to,
+      bezeichnung: `Bedarfsanfrage ${request.requestNumber}`,
+      lage: { customer: request.tenantId },
+      raisedAt: evaluationDate,
+    })
   })
   return ' Die Bedarfsanfrage steht jetzt auf „inSelection" (4.1).'
 }
@@ -1485,6 +1544,39 @@ export interface AssignmentListEntry {
   readonly interruptions: readonly InterruptionSummary[]
   /** Offener Antrag auf vorzeitige Beendigung (3.7) — ohne eigenen Zustand. */
   readonly openTerminationRequest: string | null
+}
+
+/**
+ * Die Rolle des Antragstellers einer vorzeitigen Beendigung oder einer
+ * Verlängerung (4.3.1, Fußnote [25]).
+ *
+ * Abgelesen wird sie am **Mandanten** des Antragstellers und nicht an seinen
+ * Rollenzuweisungen: [25] gibt den Antrag `KB`, `LD` und `MD`, und in jeder
+ * der drei Organisationen gibt es dafür genau eine Rolle. Damit stellt sich
+ * *offene Frage 58* hier nicht.
+ */
+function antragstellerRolle(tenantType: TenantType | null): Rollenkuerzel | null {
+  if (tenantType === 'customer') return 'KB'
+  if (tenantType === 'supplier') return 'LD'
+  if (tenantType === 'operator') return 'MD'
+  return null
+}
+
+/**
+ * Die Mandantenlage eines Einsatzes (3.14). Der Einsatz liegt im Mandanten des
+ * Betreibers (3.7); `KB`, `KG` und `KE` wirken beim Kunden, `LD` und `LA` beim
+ * Lieferanten.
+ */
+function einsatzlage(assignment: {
+  readonly tenantId: string
+  readonly customer: { readonly tenantId: string }
+  readonly supplier: { readonly tenantId: string }
+}): Vorgangslage {
+  return {
+    operator: assignment.tenantId,
+    customer: assignment.customer.tenantId,
+    supplier: assignment.supplier.tenantId,
+  }
 }
 
 const ASSIGNMENT_INCLUDE = {
@@ -2239,14 +2331,28 @@ export async function createAssignment(
           occurredAt: new Date(),
         }),
       )
+      // 4.3.1: „Benachrichtigung an `KB`, `KE` und `LD`" (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'assignment',
+        objectRef: einsatz.id,
+        tenantId: einsatz.tenantId,
+        uebergang: 'create',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Einsatz ${einsatz.assignmentNumber}`,
+        lage: {
+          operator: einsatz.tenantId,
+          customer: customerTenantId,
+          supplier: supplierTenantId,
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Einsatz konnte nicht angelegt werden')
   }
-  // Nebenwirkungen aus 4.3.1, die der Prototyp noch nicht hat:
-  // Benachrichtigung an `KB`, `KE` und `LD`. `equalPayDueDate` rechnet P3
-  // (5.2) und wird mit dem Übergang fortgeschrieben. Die Bedarfsanfrage auf `filled` zu setzen
-  // ist ein eigener Übergang (4.1) und bleibt beim Betreiber.
+  // Offen aus 4.3.1: die Bedarfsanfrage auf `filled` zu setzen ist ein eigener
+  // Übergang (4.1) und bleibt beim Betreiber.
   return success('Einsatz angelegt; Status „planned" (4.3.1).')
 }
 
@@ -2282,6 +2388,9 @@ export async function transitionAssignment(
 
   const status = assignment.status as AssignmentState
   const running = assignment.interruptions.find((entry) => entry.interruptionTo === null)
+  const antragsteller = antragstellerRolle(
+    assignment.terminationRequestedBy?.tenant.tenantType ?? null,
+  )
   const overrides: Partial<AssignmentFacts> = {
     ...(input.actualStartDate !== null ? { actualStartDate: input.actualStartDate } : {}),
     ...(input.actualEndDate !== null ? { actualEndDate: input.actualEndDate } : {}),
@@ -2368,6 +2477,28 @@ export async function transitionAssignment(
           reason: input.interruptionReason ?? null,
         }),
       )
+      // 4.3.1 (3.14): Beginn an `KB` und `LD`, Unterbrechung und
+      // Wiederaufnahme „an beide Seiten", vorzeitige Beendigung „an die
+      // jeweils andere Seite mit Begründung". Das planmäßige Ende nennt keine
+      // Nachricht — es stand im Einsatz von Anfang an.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'assignment',
+        objectRef: assignment.id,
+        tenantId: assignment.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Einsatz ${assignment.assignmentNumber}`,
+        begruendung: assignment.terminationReason,
+        lage: {
+          ...einsatzlage(assignment),
+          // „Die jeweils andere Seite" ist die, die den Antrag **nicht**
+          // gestellt hat (4.3.1). Welche das war, sagt der Mandant des
+          // Antragstellers — der Antrag selbst hat keinen Status (3.7).
+          ...(antragsteller === null ? {} : { antragsteller }),
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Einsatz konnte nicht gespeichert werden')
@@ -2591,13 +2722,25 @@ export async function requestExtension(
           reason: input.reason.trim(),
         }),
       )
+      // 4.3.2: „Benachrichtigung an `KG`" (3.14) — die Verlängerung ist
+      // immer genehmigungspflichtig durch die Kundenseite.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'assignmentExtension',
+        objectRef: verlaengerung.id,
+        tenantId: assignment.tenantId,
+        uebergang: 'request',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Verlängerung zu Einsatz ${assignment.assignmentNumber}`,
+        lage: einsatzlage(assignment),
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Verlängerung konnte nicht beantragt werden')
   }
-  // Nebenwirkungen aus 4.3.2: Benachrichtigung an `KG`,
-  // `extensionApprovalDeadlineDays` beginnt, und P1 und P3 stehen als
-  // `ruleCheckResult` am Vorgang — beide rechnet Kapitel 5.
+  // Offen aus 4.3.2: `extensionApprovalDeadlineDays` beginnt, und P1 und P3
+  // stehen als `ruleCheckResult` am Vorgang — beide rechnet Kapitel 5.
   return success('Verlängerung beantragt; sie wird von der Kundenseite genehmigt (4.3.2).')
 }
 
@@ -2620,11 +2763,17 @@ export async function transitionExtension(
 ): Promise<ActionResult> {
   const extension = await prisma.assignmentExtension.findUnique({
     where: { id: input.extensionId },
-    include: { assignment: { include: ASSIGNMENT_INCLUDE } },
+    include: {
+      assignment: { include: ASSIGNMENT_INCLUDE },
+      // Der Mandant des Antragstellers bestimmt seine Rolle ([25]) und damit
+      // den Adressaten „an den Antragsteller" (4.3.2, 3.14).
+      requestedBy: { include: { tenant: true } },
+    },
   })
   if (extension === null) return failure('Unbekannte Verlängerung.')
 
   const assignment = extension.assignment
+  const antragsteller = antragstellerRolle(extension.requestedBy.tenant.tenantType)
   const status = extension.status as AssignmentExtensionState
   const reason = input.rejectionReason?.trim() === '' ? null : (input.rejectionReason ?? null)
   const ref = assignmentSubObjectRef(
@@ -2707,6 +2856,24 @@ export async function transitionExtension(
           reason,
         }),
       )
+      // 4.3.2 (3.14): Genehmigung an `MD` und den Antragsteller, Ablehnung an
+      // den Antragsteller, Rückzug an `KG`, Wirksamkeit „an alle Beteiligten".
+      await benachrichtigeUebergang(tx, {
+        objectType: 'assignmentExtension',
+        objectRef: extension.id,
+        tenantId: assignment.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Verlängerung zu Einsatz ${assignment.assignmentNumber}`,
+        lage: {
+          ...einsatzlage(assignment),
+          // Der Antragsteller steht an der Verlängerung (3.7); seine Rolle
+          // liest sich an seinem Mandanten ab ([25]).
+          ...(antragsteller === null ? {} : { antragsteller }),
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel an der Verlängerung konnte nicht gespeichert werden')

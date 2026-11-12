@@ -25,6 +25,7 @@ import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
+import { benachrichtigeUebergang } from './notifications'
 import {
   attemptTransition,
   isTerminal,
@@ -721,12 +722,28 @@ export async function transitionDemandRequest(
           reason: reason,
         }),
       )
+      // 4.1, Spalte „Nebenwirkungen" (3.14): Einreichen an `KG`, Genehmigung
+      // an `KB` und `MD`, Rückweisung und Auswahl an `KB`. Besetzung und
+      // Storno nennen „einzeln adressierte Benachrichtigungen" — die
+      // entstehen an den beendeten Einladungen, Angeboten und Vorschlägen
+      // (4.2), jede in ihrem eigenen Mandanten.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'demandRequest',
+        objectRef: request.id,
+        tenantId: request.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Bedarfsanfrage ${request.requestNumber}`,
+        begruendung: reason,
+        lage: { customer: request.tenantId },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel konnte nicht gespeichert werden')
   }
-  // Offen: Benachrichtigungen und Fristenlauf aus 4.1 — der
-  // Benachrichtigungsweg ist nicht umgesetzt.
+  // Offen: der Fristenlauf aus 4.1.
   return success(
     `${outcome.label}: ${request.requestNumber} steht jetzt auf „${outcome.to}" (${outcome.specReference}).`,
   )
@@ -916,6 +933,20 @@ export async function publishTender(
             occurredAt: evaluationDate,
           }),
         )
+        // 4.2.1: „Einzeln adressierte Benachrichtigung an `LD`" (2.3, Regel 2).
+        // Sie nennt die Ausschreibungsrunde, nicht die Einladungsliste: welche
+        // Lieferanten sonst eingeladen sind, erfährt hier niemand.
+        await benachrichtigeUebergang(tx, {
+          objectType: 'tenderInvitation',
+          objectRef: einladung.id,
+          tenantId: einladung.tenantId,
+          uebergang: 'invite',
+          statusFrom: einladungsUebergang.from,
+          statusTo: einladungsUebergang.to,
+          bezeichnung: `Ausschreibung ${tender.tenderNumber}`,
+          lage: { operator: operatorTenant.id, supplier: supplier.tenantId },
+          raisedAt: evaluationDate,
+        })
       }
       await tx.demandRequest.update({
         where: { id: request.id },
@@ -934,13 +965,16 @@ export async function publishTender(
           occurredAt: evaluationDate,
         }),
       )
+      // Die Anfrage selbst erzeugt beim Ausschreiben **keine** Nachricht: 4.1
+      // nennt dort „je Lieferant eine einzeln adressierte Benachrichtigung",
+      // und die sind eben an den Einladungen entstanden. Der Katalog führt die
+      // Zeile mit leerer Adressatenliste und dieser Begründung
+      // (lib/notifications/uebergaenge.ts).
     })
   } catch (error) {
     return asFailure(error, 'Ausschreibung konnte nicht veröffentlicht werden')
   }
 
-  // Offen: je Lieferant **eine einzeln adressierte** Benachrichtigung (2.3,
-  // Regel 2) — der Benachrichtigungsweg ist noch nicht umgesetzt.
   return success(
     `Runde ${round} veröffentlicht: ${suppliers.length} Einladung(en), Anfrage auf „${requestOutcome.to}".`,
   )
@@ -1222,11 +1256,29 @@ export async function declineInvitation(
           reason: input.declineReason.trim(),
         }),
       )
+      // 4.2.1: „Benachrichtigung an `MD`; die Absage enthält keinen Bezug auf
+      // andere Lieferanten" (3.14). Der Grund steht deshalb **nicht** in der
+      // Meldung: die Spalte schreibt ihn nicht hinein, und er ist der Satz,
+      // der am ehesten einen Fremdbezug trüge.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'tenderInvitation',
+        objectRef: invitation.id,
+        tenantId: invitation.tenantId,
+        uebergang: 'decline',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Ausschreibung ${invitation.tender.tenderNumber}`,
+        lage: {
+          operator: invitation.tenantId,
+          customer: invitation.tender.demandRequest.tenantId,
+          supplier: invitation.supplier.tenantId,
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Absage konnte nicht gespeichert werden')
   }
-  // Offen: Benachrichtigung an `MD` (4.2.1) — ohne Bezug auf andere Lieferanten.
   return success('Einladung abgesagt (4.2.1, Fußnote [46]).')
 }
 
@@ -1424,6 +1476,37 @@ export async function submitOffer(
           occurredAt: evaluationDate,
         }),
       )
+      // Zwei Vorgänge, zwei Nachrichten — beide an `MD`: 4.2.2 nennt sie am
+      // eingereichten Angebot, 4.2.1 an der Einladung, die dadurch auf
+      // `offerSubmitted` geht (3.14). Sie betreffen verschiedene Vorgänge und
+      // sind deshalb nicht dieselbe Nachricht.
+      const lage = {
+        operator: invitation.tenantId,
+        customer: invitation.tender.demandRequest.tenantId,
+        supplier: invitation.supplier.tenantId,
+      }
+      await benachrichtigeUebergang(tx, {
+        objectType: 'supplierOffer',
+        objectRef: angebot.id,
+        tenantId: angebot.tenantId,
+        uebergang: 'submit',
+        statusFrom: submitted.from,
+        statusTo: submitted.to,
+        bezeichnung: `Angebot ${angebot.offerNumber}`,
+        lage,
+        raisedAt: evaluationDate,
+      })
+      await benachrichtigeUebergang(tx, {
+        objectType: 'tenderInvitation',
+        objectRef: invitation.id,
+        tenantId: invitation.tenantId,
+        uebergang: 'recordOfferSubmitted',
+        statusFrom: invitationOutcome.from,
+        statusTo: invitationOutcome.to,
+        bezeichnung: `Ausschreibung ${invitation.tender.tenderNumber}`,
+        lage,
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Angebot konnte nicht eingereicht werden')
@@ -1504,6 +1587,26 @@ export async function transitionOffer(
           reason,
         }),
       )
+      // 4.2.2 (3.14): Zuschlag und Ablehnung an `LD`, Rückzug an `MD`. Die
+      // Sichtung erzeugt **keine** Nachricht — „keine Benachrichtigung an
+      // andere Lieferanten", und die Spalte nennt auch für den eigenen keine.
+      // Die Begründung steht nicht in der Meldung: 4.2.2 verlangt sie „ohne
+      // Fremdbezug" im Protokoll, nicht in der Nachricht.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'supplierOffer',
+        objectRef: offer.id,
+        tenantId: offer.tenantId,
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Angebot ${offer.offerNumber}`,
+        lage: {
+          operator: offer.tenderInvitation.tenantId,
+          customer: offer.tenderInvitation.tender.demandRequest.tenantId,
+          supplier: offer.tenantId,
+        },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel am Angebot konnte nicht gespeichert werden')
@@ -1601,6 +1704,21 @@ export async function runSystemDeadlineRun(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.2.1: „Benachrichtigung an `MD`; Eskalationsanlass ‚Ausschreibung
+      // ohne Angebot' (2.4)". Die Nachricht ist eine Information über den
+      // Ablauf; der Eskalationsanlass läuft nach Zeit und gehört dem
+      // nächtlichen Lauf (5.5.1 c).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'tenderInvitation',
+        objectRef: invitation.id,
+        tenantId: invitation.tenantId,
+        uebergang: 'expire',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Ausschreibung ${invitation.tender.tenderNumber}`,
+        lage: { operator: invitation.tenantId, supplier: invitation.supplier.tenantId },
+        raisedAt: evaluationDate,
+      })
     })
     log.push(`Einladung ${invitation.id}: ${outcome.label} (4.2.1)`)
   }
@@ -1638,6 +1756,21 @@ export async function runSystemDeadlineRun(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.2.2: „Benachrichtigung an `LD` und `MD`" (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'supplierOffer',
+        objectRef: offer.id,
+        tenantId: offer.tenantId,
+        uebergang: 'expire',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Angebot ${offer.offerNumber}`,
+        lage: {
+          operator: offer.tenderInvitation.tenantId,
+          supplier: offer.tenantId,
+        },
+        raisedAt: evaluationDate,
+      })
     })
     log.push(`Angebot ${offer.offerNumber}: ${outcome.label} (4.2.2)`)
   }
@@ -1681,6 +1814,19 @@ export async function runSystemDeadlineRun(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.1: „Benachrichtigung an `KB` und `MD`" (3.14). Der Ablauf entzieht
+      // nur — er genehmigt nichts (4.0, Regel 4).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'demandRequest',
+        objectRef: request.id,
+        tenantId: request.tenantId,
+        uebergang: 'expire',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Bedarfsanfrage ${request.requestNumber}`,
+        lage: { customer: request.tenantId },
+        raisedAt: evaluationDate,
+      })
     })
     log.push(`Bedarfsanfrage ${request.requestNumber}: ${outcome.label} (4.1)`)
   }

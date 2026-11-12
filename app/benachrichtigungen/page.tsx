@@ -62,6 +62,13 @@ export default async function BenachrichtigungenPage({
         (2.4, Regel 1). Adressiert wird eine <strong>Rolle in einer Organisation</strong>, nicht
         eine Person: wer sie gerade trägt, steht in den Rollenzuweisungen (3.11).
       </p>
+      <p>
+        Zwei Quellen führen hierher. Der <strong>nächtliche Lauf</strong> prüft die Vorgänge, bei
+        denen Zeit allein die Lage ändert (5.5.1 c). Jeder <strong>Übergang</strong> aus Kapitel 4
+        erzeugt die Nachrichten, die seine Spalte „Nebenwirkungen" nennt — und nur die: wo dort
+        nichts steht, entsteht keine. Eine Nachricht aus einem Übergang trägt den Statuswechsel
+        und keinen Lauftag.
+      </p>
       <p className="hint">
         Die <strong>Stufe</strong> kommt bei den Anlässen aus Kapitel 5 aus der Restzeit: 5.4.4
         und 5.1.6 nennen Vorlaufwerte je Stufe, und die Adressaten sind kumulativ — die Warnung
@@ -160,7 +167,17 @@ function Nachricht({ nachricht }: { readonly nachricht: NotificationView }) {
       <td>
         <Status value={nachricht.kindLabel} />
       </td>
-      <td>{NOTIFICATION_TRIGGER_LABELS[nachricht.trigger] ?? nachricht.trigger}</td>
+      <td>
+        {NOTIFICATION_TRIGGER_LABELS[nachricht.trigger] ?? nachricht.trigger}
+        {nachricht.statusTo === null ? null : (
+          <>
+            <br />
+            <span className="hint">
+              <code>{nachricht.statusFrom ?? '—'}</code> → <code>{nachricht.statusTo}</code>
+            </span>
+          </>
+        )}
+      </td>
       <td>{nachricht.escalationLevel}</td>
       <td>
         <code>{nachricht.recipientRoleCode}</code>

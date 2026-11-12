@@ -27,7 +27,7 @@ import { katalogwirkung, passtZumBezugsobjekt } from '../aueg/regeln/p10Nachweis
 import { alsNachweiszeile, nachweisstand } from '../aueg/anbindung'
 import type { Nachweisart } from '../aueg/regelwerk'
 import { leseEintrag, type Protokollbezug } from '../audit/entry'
-import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { protokolliere, protokolliereGetrennt, type Transaktion } from '../audit/record'
 import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission, type Decision, type ResourceRef } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
@@ -37,6 +37,8 @@ import {
   type Sichtbarkeitsklasse,
 } from '../masterdata/invariants'
 import { prisma } from '../prisma'
+import type { Vorgangslage } from '../notifications/uebergaenge'
+import { benachrichtigeUebergang, rolleDesHandelnden } from './notifications'
 import {
   DOCUMENT_MODEL,
   DOCUMENT_STATE_LABELS,
@@ -447,13 +449,27 @@ export async function submitDocument(
           occurredAt: uploadedAt,
         }),
       )
+      // 5.4.3: „Benachrichtigung an `MD`" (3.14). Der Nachweis liegt im
+      // Mandanten des Einstellers; adressiert wird der Betreiber, der ihn
+      // anerkennt oder zurückweist.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'document',
+        objectRef: document.id,
+        tenantId: document.tenantId,
+        uebergang: 'submit',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Nachweis ${documentNumber}`,
+        lage: {},
+        raisedAt: uploadedAt,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Nachweis konnte nicht eingestellt werden')
   }
 
-  // 5.4.3, Nebenwirkung: „Benachrichtigung an `MD`". Der Prototyp verschickt
-  // nichts; die Zuständigkeit steht im Ergebnis, damit sie nicht verschwindet.
+  // Die Zuständigkeit steht zusätzlich im Ergebnis, damit sie nicht
+  // verschwindet; zugestellt wird nichts (*offene Frage 56*).
   return success(
     `${outcome.label}: ${documentNumber} steht auf „eingereicht" und wartet auf die ` +
       `Anerkennung durch MD (${outcome.specReference}). ` +
@@ -582,6 +598,22 @@ async function decide(
           reason: transition === 'reject' ? input.rejectionReason : null,
         }),
       )
+      // 5.4.3: „Benachrichtigung an den Einsteller" — bei der Zurückweisung
+      // „mit Begründung" (3.14). Der Einsteller ist eine Person; adressiert
+      // wird die Rolle, in der sie im Mandanten des Nachweises gehandelt hat
+      // (*offene Frage 58*).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'document',
+        objectRef: row.id,
+        tenantId: row.tenantId,
+        uebergang: transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Nachweis ${row.documentNumber}`,
+        begruendung: transition === 'reject' ? input.rejectionReason : null,
+        lage: await einstellerlage(tx, row, verifiedAt),
+        raisedAt: verifiedAt,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Die Entscheidung über den Nachweis konnte nicht gespeichert werden')
@@ -661,6 +693,36 @@ function unbefristetHinweis(
 /* ------------------------------------------------------------------ */
 /* Laden des Umfelds                                                   */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Die Mandantenlage für die Nachricht an den **Einsteller** (5.4.3, 3.14).
+ *
+ * Der Nachweis liegt im Mandanten dessen, der ihn eingestellt hat (3.10:
+ * „Eigentümer ist, wer eingestellt hat"). Welche Rolle dort adressiert wird,
+ * sagt die Rollenzuweisung des Einstellers — `LA` oder `LD` beim Lieferanten,
+ * `KB` beim Kunden, `MA` beim Betreiber (5.4.3, Spalte „Auslösende Rolle").
+ * Deshalb wird der Mandant nicht nach Lieferant und Kunde geraten, sondern aus
+ * der gefundenen Rolle abgeleitet.
+ */
+async function einstellerlage(
+  tx: Transaktion,
+  row: { readonly tenantId: string; readonly uploadedById: string | null },
+  stichtag: Date,
+): Promise<Omit<Vorgangslage, 'operator'>> {
+  const rolle = await rolleDesHandelnden(tx, {
+    userId: row.uploadedById,
+    tenantId: row.tenantId,
+    stichtag,
+  })
+  if (rolle === null) return {}
+  const kundenseitig = rolle === 'KB' || rolle === 'KG' || rolle === 'KE'
+  const lieferantenseitig = rolle === 'LA' || rolle === 'LD'
+  return {
+    einsteller: rolle,
+    ...(kundenseitig ? { customer: row.tenantId } : {}),
+    ...(lieferantenseitig ? { supplier: row.tenantId } : {}),
+  }
+}
 
 const DOCUMENT_INCLUDE = {
   uploadedBy: { select: { id: true, givenName: true, familyName: true, tenantId: true } },

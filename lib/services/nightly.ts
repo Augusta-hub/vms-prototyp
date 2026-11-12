@@ -39,19 +39,7 @@ import {
 } from '../nightly/befunde'
 import { prisma } from '../prisma'
 import { asFailure, failure, notificationRef, success, type ActionResult } from './common'
-
-/** Kürzel aus 2.2 → Rollenbezeichner aus 2.1 (3.11). */
-const ROLLE_JE_KUERZEL: Readonly<Record<Rollenkuerzel, RoleCode | null>> = {
-  MA: 'operatorAdmin',
-  MD: 'operatorCoordinator',
-  KB: 'demandOwner',
-  KG: 'approver',
-  KE: 'procurementController',
-  LD: 'supplierCoordinator',
-  LA: 'supplierAdmin',
-  // *Offene Frage 4*: ohne eigenen Zugang gibt es niemanden zu adressieren.
-  AN: null,
-}
+import { KUERZEL_JE_ROLLE, ROLLE_JE_KUERZEL } from './notifications'
 
 /** Vorbelegung aus 4.0: 3 Kalendertage nach `periodTo`. */
 const TIMESHEET_SUBMISSION_DEADLINE_DAYS = 3
@@ -421,17 +409,6 @@ function alsZeile(dokument: {
   }
 }
 
-const KUERZEL_JE_ROLLE: Readonly<Partial<Record<RoleCode, Rollenkuerzel>>> = {
-  operatorAdmin: 'MA',
-  operatorCoordinator: 'MD',
-  demandOwner: 'KB',
-  approver: 'KG',
-  procurementController: 'KE',
-  supplierCoordinator: 'LD',
-  supplierAdmin: 'LA',
-  temporaryWorker: 'AN',
-}
-
 function alsKuerzel(roleCode: RoleCode | null): Rollenkuerzel | null {
   return roleCode === null ? null : (KUERZEL_JE_ROLLE[roleCode] ?? null)
 }
@@ -455,6 +432,9 @@ export interface NotificationView {
   readonly kindLabel: string
   readonly objectType: string
   readonly objectRef: string
+  /** Statuswechsel bei `trigger = statusTransition` (3.14). */
+  readonly statusFrom: string | null
+  readonly statusTo: string | null
   readonly recipientRoleCode: RoleCode
   readonly escalationLevel: number
   readonly ruleRef: string | null
@@ -480,6 +460,8 @@ export const NOTIFICATION_TRIGGER_LABELS: Readonly<Record<string, string>> = {
   timesheetNotSubmitted: 'Stundenzettel nicht eingereicht (2.4)',
   timesheetNotApproved: 'Stundenzettel nicht genehmigt vor Periodenschluss (2.4)',
   billingDocumentDisputed: 'Abrechnungsbeleg beanstandet und nicht geklärt (2.4)',
+  statusTransition: 'Statuswechsel (Kapitel 4)',
+  ruleWarning: 'Warnung aus der Prüfung zum Übergang (4.7)',
 }
 
 /**
@@ -518,6 +500,8 @@ export async function loadNotifications(
       kindLabel: NOTIFICATION_KIND_LABELS[row.kind],
       objectType: row.objectType,
       objectRef: row.objectRef,
+      statusFrom: row.statusFrom,
+      statusTo: row.statusTo,
       recipientRoleCode: row.recipientRoleCode,
       escalationLevel: row.escalationLevel,
       ruleRef: row.ruleRef,

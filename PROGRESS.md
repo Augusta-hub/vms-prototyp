@@ -5,6 +5,108 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-12 — Benachrichtigungen aus den Übergängen (Kapitel 4, 3.14)
+
+### Gemacht
+
+Jeder Übergang aus Kapitel 4 erzeugt jetzt die Nachrichten, die seine Spalte
+**„Nebenwirkungen"** nennt — und nur die. Der Katalog steht in
+`lib/notifications/uebergaenge.ts` und ist eine **Abschrift** von Kapitel 4:
+elf Statusmodelle, 71 Übergänge, je Zeile die Adressaten oder die Begründung,
+warum es keine gibt. Geschrieben wird in `lib/services/notifications.ts`, in
+**derselben Transaktion** wie der Übergang; angebunden sind alle Fachdienste,
+die Kapitel 4 führt — Bedarf, Einladung, Angebot, Profilvorschlag, Einsatz,
+Verlängerung, Zeiterfassung, Abrechnung, Lieferantenstatus und Nachweis.
+
+Die Spezifikation hat dafür in **3.14** einen neuen Abschnitt
+„Benachrichtigung aus einem Übergang": Katalog, Art und Stufe, die Tabelle der
+**relativen Adressaten** („an den Antragsteller", „an die Gegenseite", „an die
+Rolle der nächsten Stufe"), die Lesart von „über `MD`", und wo die
+Pflichtbegründung in die Meldung gehört. 4.0 Regel 8 verweist darauf.
+
+**Neue Dateien:** `lib/notifications/uebergaenge.ts(.test.ts)`,
+`lib/services/notifications.ts`, `tests/services/notifications.test.ts`,
+Migration `20261112170000_benachrichtigung_aus_uebergaengen`.
+
+### Entscheidungen
+
+1. **Die Eindeutigkeitsbedingung aus 3.14 gilt nur für den Lauf.** Sie war für
+   den nächtlichen Lauf gebaut, der täglich über denselben Bestand läuft. Eine
+   Nachricht aus einem Übergang entsteht einmal mit ihrem Übergang — und
+   derselbe Übergang kann sich wiederholen: 4.4 führt `inApproval` →
+   `inApproval` je Freigabestufe, und ein Beleg kann nach geklärter
+   Beanstandung erneut freigegeben und erneut beanstandet werden (4.5). Der
+   partielle Index auf `runDate IS NULL` hätte genau die zweite Nachricht
+   verschluckt — die, auf die jemand wartet. Er ist aufgehoben; 3.14 sagt das
+   jetzt ausdrücklich.
+2. **Eine leere Adressatenliste ist eine Aussage, keine Lücke.** 21 der 71
+   Übergänge erzeugen keine Nachricht, und jeder trägt im Katalog den Wortlaut
+   von Kapitel 4, der das begründet — „keine Benachrichtigung an andere
+   Lieferanten" (4.2.2), das planmäßige Ende eines Einsatzes, die Bestätigung
+   eines Belegs. Ein Test erzwingt diese Begründung, und ein zweiter vergleicht
+   den Katalog mit **allen** Übergangstabellen: ein neuer Übergang ohne
+   Entscheidung über seine Nachricht fällt auf, bevor er in den Betrieb kommt.
+3. **Die Benachrichtigung ist ihre eigene Spur.** 3.14 sagt das; ein
+   zusätzlicher Audit-Eintrag entsteht deshalb nur, wo ein Kapitel ihn eigens
+   verlangt — 2.4 Regel 4 für jede Eskalations**stufe** (aus einem Übergang ist
+   das allein die Sperre des Lieferanten, 4.6) und 5.5.2 Nr. 1 für jedes
+   Prüfergebnis. Für die Information über einen vollzogenen Übergang genügt der
+   Eintrag des Übergangs selbst (4.0 Regel 3); ein zweiter je Adressat würde
+   das Protokoll vervielfachen, ohne eine Frage zu beantworten.
+4. **Relative Adressaten werden aufgelöst, nicht geraten.** „An die jeweils
+   andere Seite" ohne Antragsteller, „an die Gegenseite" ohne Belegseite, `KE`
+   in einem Vorgang ohne Kunden: in allen drei Fällen entfällt die Nachricht,
+   statt an irgendwen zu gehen (2.3). Die Rolle des Antragstellers liest sich
+   an seinem **Mandanten** ab — [25] gibt den Antrag `KB`, `LD` und `MD`, und
+   in jeder dieser Organisationen gibt es dafür genau eine Rolle.
+5. **„Über `MD`" ist kein Weiterleitungsmechanismus.** 4.2.3 schreibt
+   „Benachrichtigung an `LD` über `MD`". Beide Rollen erhalten die Nachricht,
+   jede auf Stufe 1 in ihrer Organisation; der Zusatz sagt, wer sie
+   verantwortet, nicht, auf welchem Weg sie läuft.
+6. **Die Warnung aus 4.7 ist ein eigener Anlass.** `trigger = ruleWarning`,
+   `kind = warning`, mit `ruleRef` — sie tritt neben die Nachricht aus der
+   Spalte „Nebenwirkungen", sie ersetzt sie nicht: die eine sagt, dass der
+   Vorgang weitergegangen ist, die andere, womit.
+
+### Offen
+
+- **Die Warnungen aus 4.7 sind erst zur Hälfte angebunden.** Gemeldet wird
+  **P1** am Stundenzettel (Q33 und Q35), weil 5.1.6 für genau diesen Befund
+  die Adressaten nennt. **P3**, **P10** (Zettel) und **P9**, **P4**, **P5**
+  (Beleg) fehlen: ihre Adressaten hängen an einer **Stufe** (5.0 für Equal Pay,
+  5.4.4 je Nachweisart), und die trägt der Befund in `TimesheetFinding` bzw.
+  in der Belegprüfung nicht. Sie durch `lib/aueg/anbindung.ts` zu führen ist
+  die nächste Arbeitseinheit; eine geratene Rolle wäre eine Entscheidung über
+  die Belastung einer Organisation.
+- **Zustellung gibt es weiterhin nicht** (*Frage 56*): die Nachricht entsteht
+  als Objekt und wird angezeigt, mehr nicht.
+- **Ein Zeitplan für den nächtlichen Lauf** fehlt weiter; heute startet ihn
+  eine Schaltfläche.
+- **Neue offene Frage 58:** welche Rolle „der Antragsteller" ist, wenn eine
+  Person mehrere Rollen in derselben Organisation trägt. Die Umsetzung nimmt
+  bis zur Antwort die erste nach der Reihenfolge in 2.1 — deterministisch und
+  innerhalb der Organisation, also ohne Offenlegung über 2.3 hinaus.
+
+### Geprüft
+
+- `npm test` **1102 grün** (42 neu), `npm run test:services` **286 grün**
+  (21 neu), `npm run test:aueg` unverändert **267 Szenarien / 120 grün /
+  0 rot**, Kontrolllauf ohne Überspringen **0 verletzte Zusicherungen**.
+- `npx tsc --noEmit` und `npm run build` sauber, `npm run db:seed` läuft.
+- **18 Mutationen, 0 überlebt** — darunter vertauschte Seiten bei „an die
+  jeweils andere Seite", `KE` beim Lieferanten, nur der erste von mehreren
+  Lieferanten adressiert, Eskalationsstufe nicht protokolliert, Statuswechsel
+  vertauscht, Begründung immer in der Meldung. Die Mutation „Beleg: Seite
+  immer Verkauf" überlebte zunächst — die Prüfung war nur auf der
+  Verkaufsseite; ein Test für die Gutschrift der Einkaufsseite kam dazu.
+- In der Oberfläche: die Sperre eines Lieferanten erzeugt zwei Nachrichten —
+  `LA` Stufe 1 als Information, `MA` Stufe 2 als Warnung mit Eskalation, beide
+  mit `active → blocked` und ohne Lauftag. Die Lieferantenadministratorin sieht
+  **nur ihre eigene**; die Genehmigerin des Kunden sieht **nur** die
+  eingereichte Bedarfsanfrage ihres Mandanten ([47], 2.3).
+
+---
+
 ## 2026-11-12 — Nächtlicher Lauf und Benachrichtigungen (5.5.1, 3.14, 2.4)
 
 ### Gemacht

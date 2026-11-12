@@ -2723,7 +2723,7 @@ model PremiumType {
   deactivatedById String?
   deactivatedBy   User?     @relation("PremiumTypeDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  entryPremiums TimeEntryPremium[]
+  entryPremiums        TimeEntryPremium[]
   /// 1 Zuschlagsart : n Preispositionen (3.3) · 1 Zuschlagsart :
   /// n Belegpositionen (3.9).
   rateCardItems        RateCardItem[]
@@ -2790,22 +2790,22 @@ model BillingNumberRange {
 /// **Der Beleg ist kein Zahlungsvorgang** (1.4): keine Bankverbindung, kein
 /// Mahnwesen, kein Zahlungsstatus.
 model BillingDocument {
-  id              String                @id @default(cuid())
+  id              String              @id @default(cuid())
   tenantId        String
-  tenant          Tenant                @relation(fields: [tenantId], references: [id])
+  tenant          Tenant              @relation(fields: [tenantId], references: [id])
   /// Lückenlos je Nummernkreis (3.9) — vergeben aus `BillingNumberRange`.
-  documentNumber  String                @unique
+  documentNumber  String              @unique
   documentType    BillingDocumentType
   /// Folgt der Belegart (3.9); die Invariante prüft lib/masterdata/invariants.ts.
   direction       BillingDirection
   /// Pflicht bei `sales` (3.9).
   customerId      String?
-  customer        Customer?             @relation(fields: [customerId], references: [id])
+  customer        Customer?           @relation(fields: [customerId], references: [id])
   /// Pflicht bei `purchase` (3.9).
   supplierId      String?
-  supplier        Supplier?             @relation(fields: [supplierId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
   billingPeriodId String
-  billingPeriod   BillingPeriod         @relation(fields: [billingPeriodId], references: [id])
+  billingPeriod   BillingPeriod       @relation(fields: [billingPeriodId], references: [id])
   issueDate       DateTime
 
   /// *Abgeleitet* aus den Positionen (3.9). Vier Nachkommastellen, weil die
@@ -2829,10 +2829,10 @@ model BillingDocument {
   releasedBy   User?     @relation("BillingDocumentReleasedBy", fields: [releasedById], references: [id])
 
   /// Pflicht bei Beanstandung (3.9, 4.5.2).
-  disputeReason String?
-  disputedAt    DateTime?
-  disputedById  String?
-  disputedBy    User?     @relation("BillingDocumentDisputedBy", fields: [disputedById], references: [id])
+  disputeReason         String?
+  disputedAt            DateTime?
+  disputedById          String?
+  disputedBy            User?     @relation("BillingDocumentDisputedBy", fields: [disputedById], references: [id])
   /// Pflicht bei der Rückführung aus `disputed` (4.5.2: „Klärung dokumentiert").
   disputeResolutionNote String?
 
@@ -2966,6 +2966,12 @@ enum NotificationTrigger {
   timesheetNotApproved
   /// 2.4: Abrechnungsbeleg beanstandet und nicht geklärt.
   billingDocumentDisputed
+  /// Kapitel 4: ein Übergang hat stattgefunden. Welcher, sagen `statusFrom`
+  /// und `statusTo`; wer sie erhält, die Spalte „Nebenwirkungen" (3.14).
+  statusTransition
+  /// 4.7: die Prüfung zum Übergang ergab eine **Warnung** — eigener Anlass
+  /// desselben Übergangs, mit `ruleRef` (3.14).
+  ruleWarning
 }
 
 /// Benachrichtigung (`notification`, SPEC 3.14).
@@ -2988,6 +2994,12 @@ model Notification {
   objectType String
   objectRef  String
 
+  /// Statuswechsel bei `trigger = statusTransition` (3.14); derselbe Zuschnitt
+  /// wie im Audit-Eintrag (3.12). `statusFrom` bleibt leer, wo Kapitel 4 „—"
+  /// führt, also bei der Anlage.
+  statusFrom String?
+  statusTo   String?
+
   recipientRoleCode RoleCode
   recipientTenantId String
   recipientTenant   Tenant   @relation("NotificationRecipientTenant", fields: [recipientTenantId], references: [id])
@@ -3007,9 +3019,16 @@ model Notification {
   createdAt DateTime @default(now())
 
   /// Je Anlass, Vorgang, Adressat, Stufe und Lauftag **eine**: der nächtliche
-  /// Lauf läuft täglich über denselben Bestand (3.14, Eindeutigkeit). Ein
-  /// partieller Index in der Migration deckt den Fall `runDate IS NULL`, den
-  /// SQL hier nicht als Gleichheit behandelt.
+  /// Lauf läuft täglich über denselben Bestand (3.14, Eindeutigkeit).
+  ///
+  /// Die Bedingung greift damit **genau** für den Lauf: zwei Zeilen mit
+  /// `runDate IS NULL` sind in SQL nie gleich, und das ist hier richtig — eine
+  /// Benachrichtigung aus einem Übergang entsteht einmal mit ihrem Übergang,
+  /// und derselbe Übergang kann sich am selben Vorgang wiederholen (4.4
+  /// `inApproval` → `inApproval`, 4.5 erneute Freigabe nach Klärung). Ein
+  /// partieller Index auf den Fall `runDate IS NULL` würde genau die zweite
+  /// Nachricht verschlucken; er ist in der Migration zu 3.14 deshalb
+  /// aufgehoben.
   @@unique([trigger, objectRef, recipientRoleCode, recipientTenantId, escalationLevel, runDate])
   @@index([recipientTenantId, recipientRoleCode])
   @@index([tenantId])
@@ -3025,20 +3044,20 @@ model Notification {
 /// das ist bei einem Verfahren, das Fristen überwacht, der wichtigere der
 /// beiden Fälle.
 model NightlyRuleRun {
-  id        String   @id @default(cuid())
+  id            String   @id @default(cuid())
   /// Stichtag des Laufs (5.5.1 c). Je Tag **ein** Lauf.
-  runDate   DateTime @unique
-  startedAt DateTime
+  runDate       DateTime @unique
+  startedAt     DateTime
   /// Zahl der geprüften Vorgänge und der erzeugten Befunde je Ergebnisart.
-  checked      Int
-  informations Int
-  warnings     Int
-  escalations  Int
+  checked       Int
+  informations  Int
+  warnings      Int
+  escalations   Int
   /// Erzeugte Benachrichtigungen; weniger als Befunde, weil ein Befund
   /// mehrere Adressaten hat und ein wiederholter Lauf nichts verdoppelt.
   notifications Int
-  startedById  String?
-  startedBy    User?   @relation("NightlyRunStartedBy", fields: [startedById], references: [id])
+  startedById   String?
+  startedBy     User?    @relation("NightlyRunStartedBy", fields: [startedById], references: [id])
 
   createdAt DateTime @default(now())
 }

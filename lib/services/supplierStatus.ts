@@ -21,8 +21,13 @@
  * beiden Begründungen — und der Audit-Eintrag aus 3.12, in **derselben**
  * Transaktion wie der Statuswechsel. Die Begründung steht in beiden: am Objekt,
  * weil die Vorbedingung sie liest, und im Eintrag, weil 4.6 sie dorthin legt
- * (*offene Frage 43*). Benachrichtigungen (4.6, jede Zeile) hat der Prototyp
- * nicht.
+ * (*offene Frage 43*).
+ *
+ * **Die Benachrichtigungen aus 4.6** entstehen in derselben Transaktion
+ * (3.14): `LA` und `LD` beim Freischalten, Entsperren und Reaktivieren, `LA`
+ * bei der Sperre — und dort zusätzlich die **Eskalation an `MA`**, die einzige
+ * zweite Stufe, die Kapitel 4 aus einem Übergang kennt. Zugestellt wird nichts
+ * (*offene Frage 56*).
  */
 import { alsNachweiszeile, erlaubnisstand, nachweisstand } from '../aueg/anbindung'
 import { protokolliere, protokolliereGetrennt } from '../audit/record'
@@ -30,6 +35,7 @@ import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
+import { benachrichtigeUebergang } from './notifications'
 import { attemptTransition } from '../status/machine'
 import {
   SUPPLIER_MODEL,
@@ -288,14 +294,25 @@ export async function transitionSupplier(
           reason: begruendungFuer(input),
         }),
       )
+      await benachrichtigeUebergang(tx, {
+        ...protokollbezug(supplier),
+        uebergang: input.transition,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Lieferant ${supplier.supplierNumber}`,
+        begruendung: begruendungFuer(input),
+        // Der Lieferantenmandant ist der Mandant des Objekts (3.2): `LA` und
+        // `LD` wirken dort. Ein Kunde ist an diesem Vorgang nicht beteiligt.
+        lage: { supplier: supplier.tenantId },
+        raisedAt: evaluationDate,
+      })
     })
   } catch (error) {
     return asFailure(error, 'Der Statuswechsel am Lieferanten konnte nicht gespeichert werden')
   }
 
-  // 4.6 nennt je Übergang Benachrichtigungen an `LA` und `LD` und eine
-  // Eskalation an `MA`; der Prototyp verschickt nichts. Die Befunde aus
-  // Kapitel 5 stehen im Ergebnis, damit sie nicht verloren gehen.
+  // Die Befunde aus Kapitel 5 stehen im Ergebnis, damit sie nicht verloren
+  // gehen.
   const befunde =
     outcome.to === 'active' ? ` ${erlaubnis.meldung} ${nachweise.meldung}` : ''
   return success(

@@ -84,7 +84,10 @@ describe('Lückenlosigkeit der Eintragsnummern (3.12)', () => {
     expect(zweite.ok).toBe(true)
 
     const nummern = (await alleEintraege()).map((eintrag) => eintrag.entryNumber)
-    expect(nummern).toEqual([1, 2])
+    // Vier Einträge, nicht zwei: jede Sperre trägt den Übergang **und** die
+    // Eskalationsstufe an `MA`, die 4.6 ihr zuweist — 2.4 Regel 4 verlangt für
+    // jede Stufe einen Eintrag mit Anlass, Adressat und Zeitpunkt (3.14).
+    expect(nummern).toEqual([1, 2, 3, 4])
   })
 
   it('rollt der Eintrag mit seinem Vorgang zurück, bleibt die Nummer frei', async () => {
@@ -122,7 +125,8 @@ describe('Lückenlosigkeit der Eintragsnummern (3.12)', () => {
       eingabe({ transition: 'block', blockReason: 'Sperrgrund' }),
       HEUTE,
     )
-    expect((await alleEintraege()).map((eintrag) => eintrag.entryNumber)).toEqual([1])
+    // 1 für den Übergang, 2 für die Eskalationsstufe aus 4.6 (2.4, Regel 4).
+    expect((await alleEintraege()).map((eintrag) => eintrag.entryNumber)).toEqual([1, 2])
     expect((await pruefeLueckenlosigkeit()).missing).toEqual([])
   })
 
@@ -165,8 +169,10 @@ describe('Lückenlosigkeit der Eintragsnummern (3.12)', () => {
 
     const stand = await pruefeLueckenlosigkeit()
     expect(stand.lowest).toBe(1)
-    expect(stand.highest).toBe(6)
-    expect(stand.missing).toEqual([2, 3, 4, 5])
+    // Je Sperre zwei Einträge (Übergang und Eskalationsstufe): 1 und 2 vor dem
+    // Eingriff, 6 und 7 danach.
+    expect(stand.highest).toBe(7)
+    expect(stand.missing).toEqual([3, 4, 5])
   })
 })
 
@@ -416,7 +422,12 @@ describe('Sichtbarkeit des Protokolls ([39])', () => {
 
   it('`MA` sieht den Eintrag zum Lieferanten — seine Zelle trägt `L` ohne Fußnote', async () => {
     const sichtbar = await loadAuditEntries(administrator)
-    expect(sichtbar.map((eintrag) => eintrag.objectType)).toEqual(['supplier'])
+    // Zwei Einträge: der Übergang selbst und die Eskalationsstufe an `MA`, die
+    // 4.6 der Sperre zuweist (2.4 Regel 4, 3.14).
+    expect(sichtbar.map((eintrag) => eintrag.objectType).sort()).toEqual([
+      'notification',
+      'supplier',
+    ])
   })
 
   it('`MD` sieht ihn **nicht**, obwohl er ihn ausgelöst hat (offene Frage 46)', async () => {
@@ -426,7 +437,12 @@ describe('Sichtbarkeit des Protokolls ([39])', () => {
 
   it('`LA` sieht ihn — es ist ein Eintrag zur eigenen Organisation', async () => {
     const sichtbar = await loadAuditEntries(lieferantAdmin)
-    expect(sichtbar.map((eintrag) => eintrag.objectRef)).toEqual([welt.lieferant])
+    // Beide Einträge gehören dem Mandanten des **betroffenen Objekts** (3.12,
+    // 3.14) — dem Lieferanten. Sie nennen nichts über ihn hinaus.
+    expect(new Set(sichtbar.map((eintrag) => eintrag.objectRef))).toEqual(
+      new Set([welt.lieferant]),
+    )
+    expect(sichtbar).toHaveLength(2)
   })
 
   it('`KE` sieht ihn nicht — er gehört einem anderen Mandanten', async () => {
@@ -435,7 +451,9 @@ describe('Sichtbarkeit des Protokolls ([39])', () => {
   })
 
   it('der sichtbare Eintrag nennt Funktion, Objektzeile und Ergebnis in Worten', async () => {
-    const [sichtbar] = await loadAuditEntries(administrator)
+    const sichtbar = (await loadAuditEntries(administrator)).find(
+      (eintrag) => eintrag.objectType === 'supplier',
+    )
     expect(sichtbar).toMatchObject({
       objectLabel: 'Lieferant / Verleiher (3.2)',
       actingAs: 'operatorCoordinator',

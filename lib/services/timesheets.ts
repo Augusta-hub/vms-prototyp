@@ -29,7 +29,7 @@
  */
 import { alsNachweiszeile, entgeltstand, nachweisstand } from '../aueg/anbindung'
 import { schreibEintrag } from '../audit/entry'
-import { protokolliere, protokolliereGetrennt } from '../audit/record'
+import { protokolliere, protokolliereGetrennt, type Transaktion } from '../audit/record'
 import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
 import { checkPermission } from '../authz/check'
 import type { RoleCode } from '../authz/roles'
@@ -42,6 +42,15 @@ import {
   type Erfassungsform,
 } from '../masterdata/invariants'
 import { prisma } from '../prisma'
+import { REGELWERK } from '../aueg/regelwerk'
+import type { Rollenkuerzel } from '../aueg/typen'
+import type { Vorgangslage } from '../notifications/uebergaenge'
+import {
+  benachrichtigeUebergang,
+  benachrichtigeWarnung,
+  KUERZEL_JE_ROLLE,
+  rolleDesHandelnden,
+} from './notifications'
 import { attemptTransition, type TransitionOutcome } from '../status/machine'
 import {
   TIMESHEET_MODEL,
@@ -109,6 +118,40 @@ const TIMESHEET_INCLUDE = {
 type LoadedTimesheet = Awaited<
   ReturnType<typeof prisma.timesheet.findMany<{ include: typeof TIMESHEET_INCLUDE }>>
 >[number]
+
+/**
+ * Die Mandantenlage eines Zettels (3.14).
+ *
+ * Der Zettel gehört zum Einsatz, und 4.4 adressiert beide Seiten: die
+ * **offene Stufe** beim Einreichen und bei jeder weiteren Stufe (mit dem
+ * **kopierten** Rollenkürzel aus dem Freigabeschritt, 3.1), die
+ * **erfassende Seite** bei der Ablehnung, `MD` und `LD` bei der Genehmigung.
+ */
+async function zettellage(
+  tx: Transaktion,
+  row: LoadedTimesheet,
+  stichtag: Date,
+  zusatz: {
+    readonly offeneStufe?: Rollenkuerzel | null
+  } = {},
+): Promise<Vorgangslage> {
+  // „Die erfassende Seite" ist die, die eingereicht hat (4.4). Gesucht wird
+  // zuerst beim Lieferanten und dann beim Betreiber — 4.4 nennt als Einreicher
+  // `AN`, `LD` und `MD`, und der Zettel liegt im Mandanten des Einsatzes, also
+  // beim Betreiber (3.7).
+  const erfassendeSeite = await rolleDesHandelnden(tx, {
+    userId: row.submittedById ?? row.recordedById,
+    tenantId: [row.assignment.supplier.tenantId, row.tenantId],
+    stichtag,
+  })
+  return {
+    operator: row.tenantId,
+    customer: row.assignment.customer.tenantId,
+    supplier: row.assignment.supplier.tenantId,
+    ...(erfassendeSeite === null ? {} : { erfassendeSeite }),
+    ...(zusatz.offeneStufe == null ? {} : { offeneStufe: zusatz.offeneStufe }),
+  }
+}
 
 /** Ein Befund aus Kapitel 5 zu diesem Zettel, in Worten (4.7). */
 export interface TimesheetFinding {
@@ -223,6 +266,58 @@ export async function loadTimesheets(
     views.push(asView(row, identity, arten, decision.crossTenant, findings))
   }
   return views
+}
+
+/**
+ * Rollenbezeichner (2.1) → Kürzel (2.2), für die Adressaten aus Kapitel 4.
+ */
+function alsKuerzel(roleCode: RoleCode | null): Rollenkuerzel | null {
+  return roleCode === null ? null : KUERZEL_JE_ROLLE[roleCode]
+}
+
+/**
+ * Die Benachrichtigungen zu den **Warnungen** aus 4.7: „Der Übergang findet
+ * statt, erzeugt aber eine Benachrichtigung an die zuständige Rolle und einen
+ * Eskalationsanlass" (5.5.2).
+ *
+ * Gemeldet wird **P1**. Ihre Adressaten stehen im Regelwerk und sind durch
+ * 5.1.6 bestimmt: die Zeile „Fristende erreicht, Einsatz läuft weiter" ist
+ * genau dieser Befund — Zeiten, die nach `maxDurationEndDate` liegen —, und
+ * 2.4 führt für den Anlass „Warnschwelle Höchstüberlassungsdauer erreicht"
+ * dieselbe Folge.
+ *
+ * **P3 und P10 fehlen hier**, und zwar nicht aus Nachlässigkeit: ihre
+ * Adressaten hängen an einer **Stufe** (5.0 für Equal Pay, 5.4.4 je
+ * Nachweisart), und die trägt der Befund in `TimesheetFinding` nicht. Sie
+ * durch die AÜG-Anbindung zu führen ist eine eigene Arbeitseinheit; eine
+ * geratene Rolle wäre eine Entscheidung über die Belastung einer Organisation
+ * (CLAUDE.md, Regel 5).
+ */
+async function warnungenMelden(
+  tx: Transaktion,
+  row: LoadedTimesheet,
+  befundliste: readonly TimesheetFinding[],
+  statusFrom: string | null,
+  statusTo: string,
+  raisedAt: Date,
+): Promise<number> {
+  let geschrieben = 0
+  for (const befund of befundliste) {
+    if (befund.satisfied || befund.effect !== 'Warnung' || befund.check !== 'P1') continue
+    geschrieben += await benachrichtigeWarnung(tx, {
+      objectType: 'timesheet',
+      objectRef: row.id,
+      tenantId: row.tenantId,
+      statusFrom,
+      statusTo,
+      ruleRef: befund.check,
+      meldung: befund.message,
+      adressaten: REGELWERK.adressatenDauerErreicht,
+      lage: await zettellage(tx, row, raisedAt),
+      raisedAt,
+    })
+  }
+  return geschrieben
 }
 
 function offeneStufe(row: LoadedTimesheet): { level: number; roleCode: RoleCode } | null {
@@ -1088,6 +1183,27 @@ export async function submitTimesheet(
           }),
         )
       }
+      // 4.4: „Benachrichtigung an die Rolle der ersten Stufe" (3.14). Die
+      // Stufenfolge ist in dieser Transaktion gerade entstanden; adressiert
+      // wird das **kopierte** Rollenkürzel der ersten Stufe (3.1), nicht die
+      // Konfiguration des Kunden — sie kann sich später ändern.
+      await benachrichtigeUebergang(tx, {
+        objectType: 'timesheet',
+        objectRef: row.id,
+        tenantId: row.tenantId,
+        uebergang: 'submit',
+        statusFrom: eingereicht.from,
+        statusTo: eingereicht.to,
+        bezeichnung: `Stundenzettel ${row.timesheetNumber}`,
+        lage: await zettellage(tx, row, evaluationDate, {
+          offeneStufe: alsKuerzel(folge[0] ?? null),
+        }),
+        raisedAt: evaluationDate,
+      })
+      // 4.7, Q33: die Prüfung P1 trägt am Einreichen eine **Warnung**. Sie
+      // erzeugt ihre eigene Nachricht (3.14) — die eine sagt, dass der Zettel
+      // weitergegangen ist, die andere, womit.
+      await warnungenMelden(tx, row, q33, eingereicht.from, eingereicht.to, evaluationDate)
     })
   } catch (error) {
     return asFailure(error, 'Der Stundenzettel konnte nicht eingereicht werden')
@@ -1176,6 +1292,16 @@ export async function decideStage(
 
   const q35 = name === 'approve' ? await befunde(row, 'Q35') : []
 
+  // Die Stufe, die nach dieser Entscheidung offen ist — Adressat der Nachricht
+  // bei `approveStage` (4.4: „Nächste Stufe wird geöffnet; Benachrichtigung an
+  // deren Rolle"). Gelesen wird die **kopierte** Rolle am Freigabeschritt (3.1).
+  const naechsteStufe =
+    name === 'approveStage'
+      ? (row.approvals.find(
+          (approval) => approval.decision === null && approval.level > stufe.level,
+        ) ?? null)
+      : null
+
   // Ist dieser Zettel eine **Korrekturfassung** und wird er jetzt genehmigt,
   // dann ist der ersetzte Zettel damit ersetzt: `approved` → `corrected`
   // (4.4). Das ist ein **Systemübergang** — die Folge der Genehmigung, nicht
@@ -1240,6 +1366,26 @@ export async function decideStage(
           reason: name === 'reject' ? input.rejectionReason : input.comment,
         }),
       )
+      // 4.4: die nächste Stufe erfährt es (`approveStage`), die Genehmigung
+      // geht an `MD` und `LD`, die Ablehnung an die erfassende Seite — mit
+      // Begründung (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'timesheet',
+        objectRef: row.id,
+        tenantId: row.tenantId,
+        uebergang: name,
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Stundenzettel ${row.timesheetNumber}`,
+        begruendung: name === 'reject' ? input.rejectionReason : null,
+        lage: await zettellage(tx, row, evaluationDate, {
+          offeneStufe: alsKuerzel(naechsteStufe?.assignedRoleCode ?? null),
+        }),
+        raisedAt: evaluationDate,
+      })
+      // 4.7, Q35: P1 und P10 tragen bei der Genehmigung eine Warnung; die
+      // Sperre aus Q36 hat den Übergang entweder verhindert oder nicht.
+      await warnungenMelden(tx, row, q35, outcome.from, outcome.to, evaluationDate)
       if (ersetzt !== null && ersetzt.applied && row.correctionOfId !== null) {
         await tx.timesheet.update({
           where: { id: row.correctionOfId },
@@ -1255,6 +1401,19 @@ export async function decideStage(
             reason: `Ersetzt durch die Korrekturfassung ${row.timesheetNumber} (4.4).`,
           }),
         )
+        // 4.4: „Benachrichtigung an `KE` bzw. `LD`" — die Belegpositionen auf
+        // beiden Seiten sind zu stornieren und neu zu erstellen (4.5.2).
+        await benachrichtigeUebergang(tx, {
+          objectType: 'timesheet',
+          objectRef: row.correctionOfId,
+          tenantId: row.tenantId,
+          uebergang: 'markCorrected',
+          statusFrom: 'approved',
+          statusTo: 'corrected',
+          bezeichnung: `Stundenzettel ${row.timesheetNumber}`,
+          lage: await zettellage(tx, row, evaluationDate),
+          raisedAt: evaluationDate,
+        })
       }
     })
   } catch (error) {
