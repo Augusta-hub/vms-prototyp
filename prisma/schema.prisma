@@ -103,6 +103,10 @@ model Tenant {
   accountAssignments   AccountAssignment[]   @relation("AccountAssignmentCustomerTenant")
   auditEntries         AuditEntry[]          @relation("AuditTenant")
 
+  // Fachmodul 3.14.
+  notifications          Notification[]
+  addressedNotifications Notification[] @relation("NotificationRecipientTenant")
+
   // Fachmodule 3.8 und 3.9.
   billingPeriods   BillingPeriod[]
   billingDocuments BillingDocument[]
@@ -328,6 +332,9 @@ model User {
   updatedBillingDocuments     BillingDocument[]     @relation("BillingDocumentUpdatedBy")
   deactivatedBillingDocuments BillingDocument[]     @relation("BillingDocumentDeactivatedBy")
   createdBillingItems         BillingDocumentItem[] @relation("BillingItemCreatedBy")
+
+  // Fachmodul 3.14 und der nächtliche Lauf (5.5.1).
+  startedNightlyRuns NightlyRuleRun[] @relation("NightlyRunStartedBy")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -2923,4 +2930,115 @@ model BillingDocumentItem {
   @@index([billingDocumentId])
   @@index([timesheetId])
   @@index([assignmentId])
+}
+
+/// Art einer Benachrichtigung (3.14) — sie folgt der Ergebnisart aus 5.5.2.
+/// `escalation` ist die „Warnung mit Pflicht-Eskalation": eine Warnung, die
+/// zusätzlich eine weitere Stelle adressiert (2.4).
+enum NotificationKind {
+  information
+  warning
+  escalation
+}
+
+/// Anlass einer Benachrichtigung (3.14): eine Zeile des nächtlichen Laufs aus
+/// 5.5.1 oder ein Eskalationsanlass aus 2.4.
+///
+/// **Nur die Anlässe, die auch erzeugt werden.** Ein Katalogwert ohne Erzeuger
+/// wäre eine Zusicherung, die nichts einlöst — dieselbe Haltung wie bei der
+/// Querschnittstabelle in lib/aueg/querschnitt.ts. `N4` fehlt deshalb: für die
+/// Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene Frage 30), und P7 ist
+/// nicht angebunden.
+enum NotificationTrigger {
+  /// N1 (5.5.1): AÜG-Erlaubnis abgelaufen oder im Vorlauf.
+  permitExpiry
+  /// N2 (5.5.1): `maxDurationEndDate` im Vorlauf oder erreicht.
+  maxDurationThreshold
+  /// N3 (5.5.1): `equalPayDueDate` im Vorlauf oder erreicht, Entgelt fehlt.
+  equalPayThreshold
+  /// N5 (5.5.1): Nachweis läuft ab oder ist abgelaufen.
+  documentExpiry
+  /// N6 (5.5.1): Unterbrechung überschreitet die Drei-Monats-Schwelle.
+  interruptionThreshold
+  /// 2.4: Stundenzettel nicht eingereicht (`timesheetSubmissionDeadlineDays`).
+  timesheetNotSubmitted
+  /// 2.4: Stundenzettel nicht genehmigt vor Periodenschluss (`closingDate`).
+  timesheetNotApproved
+  /// 2.4: Abrechnungsbeleg beanstandet und nicht geklärt.
+  billingDocumentDisputed
+}
+
+/// Benachrichtigung (`notification`, SPEC 3.14).
+///
+/// Sie **ändert nichts**: kein Übergang, keine Vorbedingung, keine
+/// Genehmigungsfiktion (2.4, Regel 1). Sie ist die Nachricht an die zuständige
+/// Rolle und zugleich die Spur, dass sie erzeugt wurde.
+///
+/// Adressiert wird eine **Rolle in einer Organisation**, nicht eine Person:
+/// 2.4 sagt „Erinnerung an die zuständige Rolle", und wer sie gerade trägt,
+/// steht in den Rollenzuweisungen (3.11). Fußnote [47] prüft Rolle **und**
+/// Mandant.
+model Notification {
+  id         String              @id @default(cuid())
+  /// Mandant des **betroffenen Objekts** (3.12, 3.14).
+  tenantId   String
+  tenant     Tenant              @relation(fields: [tenantId], references: [id])
+  trigger    NotificationTrigger
+  kind       NotificationKind
+  objectType String
+  objectRef  String
+
+  recipientRoleCode RoleCode
+  recipientTenantId String
+  recipientTenant   Tenant   @relation("NotificationRecipientTenant", fields: [recipientTenantId], references: [id])
+  /// 1 = die zuständige Rolle; höhere Stufen nach der Stufenfolge in 2.4.
+  escalationLevel   Int
+
+  /// `P1` … `P11`, wo der Anlass aus Kapitel 5 kommt (5.5.2 Nr. 1).
+  ruleRef String?
+  /// Nur Daten, die der Empfänger nach 2.3 sehen darf (2.4, Regel 3).
+  message String
+
+  raisedAt DateTime
+  /// Stichtag des nächtlichen Laufs (5.5.1 c); leer bei einer
+  /// Benachrichtigung aus einem Übergang.
+  runDate  DateTime?
+
+  createdAt DateTime @default(now())
+
+  /// Je Anlass, Vorgang, Adressat, Stufe und Lauftag **eine**: der nächtliche
+  /// Lauf läuft täglich über denselben Bestand (3.14, Eindeutigkeit). Ein
+  /// partieller Index in der Migration deckt den Fall `runDate IS NULL`, den
+  /// SQL hier nicht als Gleichheit behandelt.
+  @@unique([trigger, objectRef, recipientRoleCode, recipientTenantId, escalationLevel, runDate])
+  @@index([recipientTenantId, recipientRoleCode])
+  @@index([tenantId])
+  @@index([runDate])
+}
+
+/// Protokoll eines nächtlichen Laufs (`nightlyRuleRun`, SPEC 5.5.1 c).
+///
+/// 5.5.1 nennt den Lauf beim Namen und gibt ihm einen Stichtag — „einmal
+/// täglich, Stichtag ist der Tag des Laufs". Diese Zeile hält fest, dass er
+/// stattgefunden hat und was er gefunden hat. Ohne sie wäre „der Lauf hat
+/// nichts gemeldet" nicht von „der Lauf ist ausgefallen" zu unterscheiden, und
+/// das ist bei einem Verfahren, das Fristen überwacht, der wichtigere der
+/// beiden Fälle.
+model NightlyRuleRun {
+  id        String   @id @default(cuid())
+  /// Stichtag des Laufs (5.5.1 c). Je Tag **ein** Lauf.
+  runDate   DateTime @unique
+  startedAt DateTime
+  /// Zahl der geprüften Vorgänge und der erzeugten Befunde je Ergebnisart.
+  checked      Int
+  informations Int
+  warnings     Int
+  escalations  Int
+  /// Erzeugte Benachrichtigungen; weniger als Befunde, weil ein Befund
+  /// mehrere Adressaten hat und ein wiederholter Lauf nichts verdoppelt.
+  notifications Int
+  startedById  String?
+  startedBy    User?   @relation("NightlyRunStartedBy", fields: [startedById], references: [id])
+
+  createdAt DateTime @default(now())
 }

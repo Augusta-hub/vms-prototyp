@@ -29,6 +29,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <Link href="/zeiten">Zeiten</Link>
             <Link href="/abrechnung">Abrechnung</Link>
             <Link href="/identitaeten">Personenidentität</Link>
+            <Link href="/benachrichtigungen">Benachrichtigungen</Link>
             <Link href="/protokoll">Protokoll</Link>
           </nav>
           <span className="identity">

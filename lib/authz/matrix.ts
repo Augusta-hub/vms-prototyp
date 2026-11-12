@@ -442,6 +442,26 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     procurementController: { read: [39] },
     supplierAdmin: { read: [39] },
   },
+
+  // | Benachrichtigung (3.14)
+  // | MA: L | MD: L[47] | KB: L[47] | KG: L[47] | KE: L[47] | LD: L[47] |
+  // | LA: L[47] | AN: L[4] |
+  //
+  // Wie die Zeile zum Protokoll trägt sie **nur** `L`: eine Benachrichtigung
+  // entsteht durch das System und wird gelesen, sonst nichts (3.14). Anders
+  // als dort steht sie **jeder** Rolle offen — aber nur für die Nachrichten,
+  // die an die eigene Rollenzuweisung gerichtet sind ([47]). `MA` trägt keine
+  // Fußnote: er sieht das Aufkommen des Betriebs, wie er das Protokoll sieht.
+  notification: {
+    operatorAdmin: { read: [] },
+    operatorCoordinator: { read: [47] },
+    demandOwner: { read: [47] },
+    approver: { read: [47] },
+    procurementController: { read: [47] },
+    supplierCoordinator: { read: [47] },
+    supplierAdmin: { read: [47] },
+    temporaryWorker: { read: [4] },
+  },
 }
 
 /**

@@ -25,6 +25,7 @@
  * die 4.1 dafür verlangt — vorgelegte Profilvorschläge und ein Einsatz.
  */
 import { PrismaClient, type RoleCode, type TenantType } from '@prisma/client'
+import { equalPaystand, hoechstdauerstand } from '../lib/aueg/anbindung'
 import {
   assertOrganizationRefPresent,
   assertSingleOperatorTenant,
@@ -222,7 +223,11 @@ async function main(): Promise<void> {
   await prisma.$executeRawUnsafe(
     'INSERT INTO "AuditSequence" ("id", "lastEntryNumber") VALUES (1, 0) ON CONFLICT ("id") DO NOTHING',
   )
-  // 3.8 und 3.9 zuerst: der Zuschlag hängt an der Zeitposition, diese am
+  // 3.14 ganz zuerst: eine Benachrichtigung verweist auf einen Mandanten und
+  // auf einen Vorgang, aber nichts verweist auf sie.
+  await prisma.notification.deleteMany()
+  await prisma.nightlyRuleRun.deleteMany()
+  // 3.8 und 3.9 danach: der Zuschlag hängt an der Zeitposition, diese am
   // Zettel, der Zettel an Einsatz und Periode — und der **Beleg** am Zettel,
   // deshalb geht er allen voraus.
   await prisma.billingDocumentItem.deleteMany()
@@ -649,7 +654,10 @@ async function main(): Promise<void> {
       issuer: 'Agentur für Arbeit Hamburg',
       issuedOn: day('2025-06-15'),
       validFrom: day('2025-07-01'),
-      validTo: day('2027-06-30'),
+      // Läuft **bald** ab: so zeigt der nächtliche Lauf die gestufte
+      // Ablaufbehandlung aus 5.4.4 an echten Daten (N1), statt sie nur zu
+      // behaupten. Die Urkunde endet mit der Erlaubnis.
+      validTo: day('2026-12-05'),
       fileRef: 'ablage://beispiel/erlaubnis/AZ-2025-0423',
       fileName: 'AZ-2025-0423_Erlaubnisurkunde.pdf',
       mimeType: 'application/pdf',
@@ -691,7 +699,7 @@ async function main(): Promise<void> {
       permitType: 'fixedTerm',
       issuedOn: day('2025-06-15'),
       validFrom: day('2025-07-01'),
-      validTo: day('2027-06-30'),
+      validTo: day('2026-12-05'),
       certificateDocumentRef: urkunde2.id,
       verificationStatus: 'accepted',
       verifiedAt: day('2025-07-02'),
@@ -2341,9 +2349,12 @@ async function main(): Promise<void> {
   await prisma.assignmentInterruption.create({
     data: {
       assignmentId: assignmentId('E-2026-0003'),
-      interruptionFrom: day('2026-12-01'),
+      // Offen und **über drei Monate**: N6 stellt fest, dass die Zählung mit
+      // der Wiederaufnahme zurückgesetzt wird (5.1.4). Der Lauf setzt sie
+      // nicht selbst zurück — das ist der Übergang `interrupted` → `active`.
+      interruptionFrom: day('2026-07-25'),
       reasonCategory: 'Betriebsruhe beim Entleiher',
-      reasonText: 'Jahreswechselstillstand Halle 2, Wiederaufnahme angekündigt',
+      reasonText: 'Umbau Halle 2; Wiederaufnahme noch offen',
       createdById: userId('operatorCoordinator'),
       createdAt: SEED_DATE,
     },
@@ -2369,12 +2380,18 @@ async function main(): Promise<void> {
   // (`workPermitRequired`, 3.6). Beide sperren den Einsatzstart (Q21). Die
   // Beispieldaten führen sie deshalb, wo sie Pflicht sind — eine Lage ohne sie
   // wäre kein Demonstrationsstand, sondern der Fall, den P10 verhindert.
-  const unterweisungen: ReadonlyArray<readonly [string, string]> = [
-    ['E-2026-0003', '2026-04-01'],
-    ['E-2026-0004', '2025-09-01'],
-    ['E-2026-0005', '2026-10-05'],
+  //
+  // Eine der drei trägt ein **Enddatum**, das bald erreicht ist: nur dann hat
+  // der nächtliche Lauf etwas zu melden (N5), und nur dann ist an echten Daten
+  // zu sehen, dass die Stufe aus der Restzeit kommt (5.4.4). Die beiden
+  // anderen bleiben unbefristet — auch das ist nach 3.10 zulässig und wird
+  // beim Anerkennen als Information vermerkt.
+  const unterweisungen: ReadonlyArray<readonly [string, string, string | null]> = [
+    ['E-2026-0003', '2026-04-01', '2026-11-25'],
+    ['E-2026-0004', '2025-09-01', null],
+    ['E-2026-0005', '2026-10-05', null],
   ]
-  for (const [nummer, ab] of unterweisungen) {
+  for (const [nummer, ab, bis] of unterweisungen) {
     await prisma.document.create({
       data: {
         // **Der Mandant folgt dem Bezugsobjekt** (3.10). Die Unterweisung
@@ -2389,6 +2406,7 @@ async function main(): Promise<void> {
         issuer: 'Nordwerk Metall GmbH, Fachkraft für Arbeitssicherheit',
         issuedOn: day(ab),
         validFrom: day(ab),
+        validTo: bis === null ? null : day(bis),
         fileRef: `ablage://beispiel/unterweisung/${nummer}`,
         fileName: `Unterweisung_${nummer}.pdf`,
         mimeType: 'application/pdf',
@@ -2738,6 +2756,90 @@ async function main(): Promise<void> {
     })
   }
 
+  // ── Abgeleitete Fristenfelder am Einsatz (3.7, 5.1.3, 5.2.3) ────────────
+  //
+  // 3.7 führt `maxDurationEndDate`, `countedDurationDays` und
+  // `equalPayDueDate` als **abgeleitet**: sie sind Ergebnisse des Regelwerks
+  // und werden an den Übergängen des Einsatzes fortgeschrieben. Der Seed legt
+  // die Einsätze direkt an und umgeht diese Übergänge — ohne diesen Schritt
+  // stünden die Felder leer, und ein aktiver Einsatz ohne Fristenstand ist
+  // nach 3.7 ein Datenfehler. Der nächtliche Lauf (5.5.1) läse ihn als
+  // „nichts zu prüfen", und die Demo zeigte eine Ruhe, die es nicht gibt.
+  //
+  // Gerechnet wird mit denselben Rechenwegen wie im Dienst, über die Kette
+  // aller Einsätze **derselben Person beim selben Kunden** (5.1.3).
+  const alleEinsaetze = await prisma.assignment.findMany({
+    include: { customer: { select: { legalName: true } }, interruptions: true },
+  })
+  const alleTarifzuordnungen = await prisma.collectiveAgreementAssignment.findMany()
+  const zuordnungszeilen = alleTarifzuordnungen.map((zuordnung) => ({
+    appliesToType: zuordnung.appliesToType,
+    customerId: zuordnung.customerId,
+    siteId: zuordnung.siteId,
+    supplierId: zuordnung.supplierId,
+    validFrom: zuordnung.validFrom,
+    validTo: zuordnung.validTo,
+    maxAssignmentDurationMonths: zuordnung.maxAssignmentDurationMonths,
+    equalPayDeadlineMonths: zuordnung.equalPayDeadlineMonths,
+    industryPremiumScheme: zuordnung.industryPremiumScheme,
+  }))
+  for (const einsatz of alleEinsaetze) {
+    const kette = alleEinsaetze
+      .filter(
+        (zeile) =>
+          zeile.customerId === einsatz.customerId &&
+          zeile.workerIdentityId !== null &&
+          zeile.workerIdentityId === einsatz.workerIdentityId,
+      )
+      .map((zeile) => ({
+        id: zeile.id,
+        customerId: zeile.customerId,
+        supplierId: zeile.supplierId,
+        plannedStartDate: zeile.plannedStartDate,
+        plannedEndDate: zeile.plannedEndDate,
+        actualStartDate: zeile.actualStartDate,
+        actualEndDate: zeile.actualEndDate,
+        status: zeile.status,
+        // Eine zählwirksame Unterbrechung setzt die Kette zurück (5.1.4) —
+        // sie gehört deshalb in die Eingangsdaten, nicht neben sie.
+        interruptions: zeile.interruptions.map((unterbrechung) => ({
+          interruptionFrom: unterbrechung.interruptionFrom,
+          interruptionTo: unterbrechung.interruptionTo,
+        })),
+      }))
+    if (kette.length === 0) continue
+
+    const ersterTag = einsatz.actualStartDate ?? einsatz.plannedStartDate
+    const dauer = hoechstdauerstand({
+      einsaetze: kette,
+      kunde: einsatz.customer.legalName,
+      tarifzuordnungen: zuordnungszeilen,
+      stichtag: ersterTag,
+      zeitraum: null,
+      identitaetBestaetigt: einsatz.workerIdentityId !== null,
+    })
+    const equalPay = equalPaystand({
+      einsaetze: kette,
+      kunde: einsatz.customer.legalName,
+      verleiherzuordnungen: zuordnungszeilen.filter(
+        (zuordnung) => zuordnung.supplierId === einsatz.supplierId,
+      ),
+      stichtag: ersterTag,
+      zeitraum: null,
+      ersterUeberlassungstag: ersterTag,
+      vergleichsentgeltGesetzt: einsatz.comparableWage !== null,
+      identitaetBestaetigt: einsatz.workerIdentityId !== null,
+    })
+    await prisma.assignment.update({
+      where: { id: einsatz.id },
+      data: {
+        maxDurationEndDate: dauer.maxDurationEndDate,
+        countedDurationDays: dauer.countedDurationDays,
+        equalPayDueDate: equalPay.equalPayDueDate,
+      },
+    })
+  }
+
   // ── Mandantenverweis nachtragen und prüfen (3.11) ────────────────────────
   //
   // `organizationRef` ist Pflicht außer beim Betreiber. Der Verweis ist
@@ -2805,6 +2907,7 @@ async function main(): Promise<void> {
     'Zuschlagsarten (3.8)': await prisma.premiumType.count(),
     'Abrechnungsperioden (3.9)': await prisma.billingPeriod.count(),
     'Abrechnungsbelege (3.9)': await prisma.billingDocument.count(),
+    'Benachrichtigungen (3.14)': await prisma.notification.count(),
     'Freigabestufen je Kunde (3.1)': await prisma.customerTimesheetApprovalStage.count(),
   }
   console.log('Synthetische Demo-Daten angelegt:', counts)

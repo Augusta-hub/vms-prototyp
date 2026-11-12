@@ -278,6 +278,45 @@ describe('nicht positiv erlaubter Zugriff wird verweigert (2.3)', () => {
     }
   })
 
+  it('eine Benachrichtigung an dieselbe Rolle in einer **anderen** Organisation bleibt verdeckt ([47])', () => {
+    // Die Mandantengrenze fängt diesen Fall heute schon ab, weil eine
+    // Benachrichtigung nur ihrem Adressatenmandanten zugänglich gemacht wird.
+    // Die Fußnote prüft ihn **erneut** — und das ist nicht Zierde: ohne die
+    // zweite Bedingung hinge die Trennung allein daran, dass eine Rolle nach
+    // 2.1 nur in einem Mandantentyp vorkommt. Die Zusicherung soll an der
+    // Fußnote hängen, nicht an einer Eigenschaft anderswo.
+    const decision = checkPermission(subject('operatorCoordinator'), 'read', {
+      type: 'notification',
+      tenantId: OPERATOR_TENANT,
+      tenantType: 'operator',
+      recipientRoleCode: 'operatorCoordinator',
+      recipientTenantId: CUSTOMER_TENANT,
+    })
+    expect(decision).toMatchObject({ allowed: false, denial: { kind: 'footnote', footnote: 47 } })
+  })
+
+  it('an die eigene Rollenzuweisung gerichtet, ist sie lesbar ([47])', () => {
+    const decision = checkPermission(subject('operatorCoordinator'), 'read', {
+      type: 'notification',
+      tenantId: OPERATOR_TENANT,
+      tenantType: 'operator',
+      recipientRoleCode: 'operatorCoordinator',
+      recipientTenantId: OPERATOR_TENANT,
+    })
+    expect(decision.allowed).toBe(true)
+  })
+
+  it('eine Benachrichtigung an eine **andere** Rolle desselben Mandanten bleibt verdeckt ([47])', () => {
+    const decision = checkPermission(subject('operatorCoordinator'), 'read', {
+      type: 'notification',
+      tenantId: OPERATOR_TENANT,
+      tenantType: 'operator',
+      recipientRoleCode: 'operatorAdmin',
+      recipientTenantId: OPERATOR_TENANT,
+    })
+    expect(decision.allowed).toBe(false)
+  })
+
   it('ein Benutzer ohne wirksame Rollenzuweisung hat keinen Zugriff', () => {
     const decision = checkPermission(
       subject('operatorAdmin', { grants: [] }),

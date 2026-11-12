@@ -6,7 +6,7 @@
  * Hauptobjekts (2.2, Lesart). Deshalb trägt `supplierOffer` auch die
  * Angebotsposition und `assignment` auch Verlängerung und Unterbrechung.
  *
- * Alle 24 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
+ * Alle 25 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
  * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind die Zeilen zu
  * 3.1 bis 3.9, die Zeile zu 3.10, die beiden Zeilen zu 3.11 und die Zeile zu
  * 3.12 — mit der Abrechnung (3.9) ist damit **jede** Zeile belegt. Eine
@@ -50,6 +50,8 @@ export type ResourceType =
   | 'delegation'
   // 3.12 Protokoll
   | 'auditEntry'
+  // 3.14 Benachrichtigung
+  | 'notification'
 
 /** Zeilenbeschriftung wie in SPEC 2.2, für Oberfläche und Protokoll. */
 export const RESOURCE_LABELS: { readonly [T in ResourceType]: string } = {
@@ -78,6 +80,7 @@ export const RESOURCE_LABELS: { readonly [T in ResourceType]: string } = {
     'Benutzer, Rollenzuweisung, Mandantenzuordnung, Zuständigkeit (3.11)',
   delegation: 'Vertretung (3.11)',
   auditEntry: 'Audit-Eintrag (3.12)',
+  notification: 'Benachrichtigung (3.14)',
 }
 
 /**
@@ -164,6 +167,8 @@ export const MATRIX_ROW_BY_OBJECT = {
   billingDocument: 'billingDocument',
   billingDocumentItem: 'billingDocument',
   billingPeriod: 'billingPeriod',
+  // 3.14: die Benachrichtigung hat ihre eigene Zeile.
+  notification: 'notification',
 } as const satisfies Record<string, ResourceType>
 
 export type ModelName = keyof typeof MATRIX_ROW_BY_OBJECT

@@ -65,14 +65,17 @@ export default async function Home() {
         Herkunft, je Kunde konfigurierten Freigabestufen und der Korrekturfassung — und die{' '}
         <strong>Abrechnung</strong> (3.9, 4.5): Abrechnungsperiode mit Schluss, Abrechnungsbeleg
         auf beiden Seiten, Belegpositionen aus genehmigten Zeiten, Beanstandung, Klärung und
-        Storno mit Gegenbuchung. Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen P1 bis
-        P11. An den Übergängen greifen P1, P3, P4, P5, P6, P8, P9, P10 und P11: sie schreiben
+        Storno mit Gegenbuchung — und der <strong>nächtliche Lauf</strong> (5.5.1) mit den
+        Benachrichtigungen aus 3.14. Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen P1
+        bis P11. An den Übergängen greifen P1, P3, P4, P5, P6, P8, P9, P10 und P11: sie schreiben
         Fristende, angerechnete Dauer und Equal-Pay-Fälligkeit fort und sperren Ausschreibung,
         Anlage, Einsatzstart, das Freischalten eines Lieferanten und die Genehmigung von Zeiten
         ohne Vergleichsentgelt. Am <strong>Beleg</strong> sperrt keine Prüfung: die Leistung ist
         erbracht, und der Befund wird dokumentiert statt die Abrechnung zu blockieren (5.5.5).
-        Nicht angebunden ist P7 — für die Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene
-        Frage 30).
+        Der nächtliche Lauf prüft die Zeilen <strong>N1, N2, N3, N5 und N6</strong> aus 5.5.1 und
+        die Fristanlässe aus 2.4; er erzeugt keinen Statuswechsel und keine Sperre. Nicht
+        angebunden ist P7 — für die Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene
+        Frage 30), und damit fehlt auch die Zeile <strong>N4</strong>.
       </p>
 
       <h2>Testidentität</h2>

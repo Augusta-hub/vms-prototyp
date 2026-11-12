@@ -58,6 +58,7 @@
 
 import { folgetag, istVorOderGleich, type Tag } from './kalender'
 import {
+  bewerteLuecke,
   pruefeHoechstdauer,
   type Einsatzsatz,
   type Grenzherkunft,
@@ -73,13 +74,14 @@ import { pruefeKonkretisierung, type Pruefstufe } from './regeln/p8Konkretisieru
 import { pruefeArbeitsverhaeltnis } from './regeln/p11Arbeitsverhaeltnis'
 import {
   pruefeErlaubnis,
+  pruefeVorlauf,
   type Anerkennung,
   type Erlaubnissatz,
   type Zeitraum,
 } from './regeln/p9Erlaubnis'
-import { pruefeNachweise } from './regeln/p10Nachweise'
+import { pruefeNachweise, pruefeNachweisVorlauf } from './regeln/p10Nachweise'
 import { REGELWERK, type Nachweisart } from './regelwerk'
-import type { Ergebnisart } from './typen'
+import type { Ergebnisart, Rollenkuerzel } from './typen'
 
 /**
  * Deckt die AÜG-Erlaubnis des Lieferanten den ganzen Zeitraum — anerkannt, mit
@@ -158,6 +160,16 @@ export interface Hoechstdauerstand {
   readonly grenzeHerkunft: Grenzherkunft
   /** Wurde mit der gesetzlichen Regelgrenze gerechnet (5.1.2)? */
   readonly mitRegelgrenze: boolean
+  /**
+   * Restbudget in Tagen bis `maxDurationEndDate`; negativ, wenn das Fristende
+   * verstrichen ist. Grundlage der Schwellen aus 5.1.6 und damit der Zeile N2
+   * des nächtlichen Laufs (5.5.1).
+   */
+  readonly restbudget: number | null
+  /** Die erreichte Schwelle aus 5.1.6 — `keine`, `hinweis`, `warnung`, `erreicht`. */
+  readonly schwelle: string
+  /** Adressaten des Befunds, gestuft nach 5.1.6. */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -217,6 +229,9 @@ export function hoechstdauerstand(eingabe: {
     maxAssignmentDurationMonths: grenze.monate,
     grenzeHerkunft: grenze.herkunft,
     mitRegelgrenze: grenze.herkunft === 'regelgrenze',
+    restbudget: ergebnis.restbudget,
+    schwelle: ergebnis.schwelle,
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
@@ -838,24 +853,10 @@ export function erlaubnisstand(eingabe: {
     readonly interruptionTo: Date | null
   }[]
 }): Erlaubnisstand {
-  const dateien = new Map(
-    eingabe.urkunden.map((zeile) => [zeile.id, zeile.fileRef.trim() !== '']),
-  )
-
-  const saetze: Erlaubnissatz[] = eingabe.erlaubnisse.map((zeile) => ({
-    id: zeile.permitNumber,
-    art: zeile.permitType === 'unlimited' ? 'unlimited' : 'fixedTerm',
-    gueltigVon: alsTag(zeile.validFrom),
-    gueltigBis: zeile.validTo === null ? null : alsTag(zeile.validTo),
-    anerkennung: alsAnerkennung(zeile.verificationStatus),
-    urkunde: zeile.certificateDocumentRef !== null,
-    // Der Verweis allein ist kein Nachweis: zeigt er auf nichts oder auf ein
-    // Dokument ohne Ablage, fehlt die Datei (5.4.5).
-    datei:
-      zeile.certificateDocumentRef !== null &&
-      dateien.get(zeile.certificateDocumentRef) === true,
-    vorgaenger: zeile.supersedesId,
-  }))
+  // Der Verweis allein ist kein Nachweis: zeigt er auf nichts oder auf ein
+  // Dokument ohne Ablage, fehlt die Datei (5.4.5). Gebaut wird der Satz von
+  // `alsErlaubnissaetze` — derselbe Weg, den der nächtliche Lauf nimmt (N1).
+  const saetze = alsErlaubnissaetze(eingabe.erlaubnisse, eingabe.urkunden)
 
   const zeitraum = alsPruefzeitraum(eingabe.stichtag, eingabe.zeitraum)
   const ergebnis = pruefeErlaubnis({
@@ -879,6 +880,142 @@ export function erlaubnisstand(eingabe: {
     mangel: ergebnis.mangel,
     meldung: ergebnis.meldung,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Der nächtliche Lauf: die gestuften Vorläufe (SPEC 5.5.1, N1 und N5)  */
+/* ------------------------------------------------------------------ */
+
+/** Stufe eines Vorlaufs (SPEC 5.4.4). */
+export type Vorlaufstand = {
+  readonly stufe: 'keine' | 'information' | 'warnung' | 'eskalation' | 'abgelaufen'
+  readonly restzeitTage: number | null
+  readonly endeBis: Date | null
+  readonly adressaten: readonly Rollenkuerzel[]
+  readonly meldung: string
+}
+
+/**
+ * **N1** (5.5.1): der gestufte Vorlauf vor dem Ablauf der AÜG-Erlaubnis.
+ *
+ * Dieselben Erlaubnissätze wie in `erlaubnisstand` — gerechnet wird aber nicht
+ * die Deckung eines Zeitraums, sondern die **Restzeit** bis zum spätesten
+ * Ende (5.4.4, „Fristen vor Ablauf"). Die Adressaten sind kumulativ: die
+ * Warnung geht zusätzlich an `LD`, nicht statt an `LA`.
+ */
+export function erlaubnisVorlauf(eingabe: {
+  readonly lieferant: string
+  readonly erlaubnisse: readonly Erlaubniszeile[]
+  readonly urkunden: readonly Nachweiszeile[]
+  readonly stichtag: Date
+}): Vorlaufstand {
+  const ergebnis = pruefeVorlauf(
+    { lieferant: eingabe.lieferant, saetze: alsErlaubnissaetze(eingabe.erlaubnisse, eingabe.urkunden), zeitraum: null, unterbrechungen: [] },
+    alsTag(eingabe.stichtag),
+  )
+  return {
+    stufe: ergebnis.stufe,
+    restzeitTage: ergebnis.restzeitTage,
+    endeBis: alsDatum(ergebnis.endeBis),
+    adressaten: ergebnis.adressaten,
+    meldung: ergebnis.meldung,
+  }
+}
+
+/**
+ * **N5** (5.5.1): der gestufte Vorlauf vor dem Ablauf eines Nachweises.
+ *
+ * Maßgeblich ist der Nachweis, dessen Ende am nächsten liegt — er bestimmt die
+ * Stufe (5.4.4). Nachweise **ohne** `validTo` laufen nicht ab und erzeugen
+ * hier nichts (3.10).
+ */
+export function nachweisVorlauf(eingabe: {
+  readonly nachweise: readonly Nachweiszeile[]
+  readonly bezugsobjekt: string | null
+  readonly stichtag: Date
+  readonly arbeitserlaubnisErforderlich: boolean | null
+  readonly unterweisungVerlangt: boolean | null
+}): Vorlaufstand {
+  const ergebnis = pruefeNachweisVorlauf(
+    {
+      zeitraum: null,
+      nachweise: eingabe.nachweise.flatMap((zeile) => {
+        const art = alsNachweisart(zeile.documentCategory)
+        return art === null
+          ? []
+          : [
+              {
+                art,
+                anerkennung: alsAnerkennung(zeile.verificationStatus),
+                gueltigVon: zeile.validFrom === null ? null : alsTag(zeile.validFrom),
+                gueltigBis: zeile.validTo === null ? null : alsTag(zeile.validTo),
+                datei: zeile.fileRef.trim() !== '',
+                gehoertZu: zeile.subjectRef,
+              },
+            ]
+      }),
+      arbeitserlaubnisErforderlich: eingabe.arbeitserlaubnisErforderlich,
+      unterweisungVerlangt: eingabe.unterweisungVerlangt,
+      ausdruecklichAbwesend: [],
+      bezugsobjekt: eingabe.bezugsobjekt,
+    },
+    alsTag(eingabe.stichtag),
+  )
+  return {
+    stufe: ergebnis.stufe,
+    restzeitTage: ergebnis.restzeitTage,
+    endeBis: alsDatum(ergebnis.endeBis),
+    adressaten: ergebnis.adressaten,
+    meldung: ergebnis.meldung,
+  }
+}
+
+/**
+ * **N6** (5.5.1): überschreitet eine **offene** Unterbrechung die
+ * Drei-Monats-Schwelle?
+ *
+ * Das Ergebnis ist eine **Information**: die Zählung wird nicht hier
+ * zurückgesetzt, sondern mit der Wiederaufnahme (5.1.4). Der Lauf stellt fest,
+ * er entscheidet nicht.
+ */
+export function unterbrechungsstand(eingabe: {
+  readonly von: Date
+  readonly bis: Date | null
+  readonly stichtag: Date
+}): { readonly ueberschreitet: boolean; readonly dauerTage: number; readonly meldung: string } {
+  const bewertung = bewerteLuecke(
+    {
+      von: alsTag(eingabe.von),
+      bis: eingabe.bis === null ? null : alsTag(eingabe.bis),
+    },
+    alsTag(eingabe.stichtag),
+    null,
+  )
+  return {
+    ueberschreitet: bewertung.zaehlwirksam,
+    dauerTage: bewertung.lueckentage ?? 0,
+    meldung: bewertung.meldung,
+  }
+}
+
+/** Die Erlaubnissätze aus den Zeilen — gemeinsam genutzt von P9 und N1. */
+function alsErlaubnissaetze(
+  erlaubnisse: readonly Erlaubniszeile[],
+  urkunden: readonly Nachweiszeile[],
+): readonly Erlaubnissatz[] {
+  const dateien = new Map(urkunden.map((zeile) => [zeile.id, zeile.fileRef.trim() !== '']))
+  return erlaubnisse.map((zeile) => ({
+    id: zeile.permitNumber,
+    art: zeile.permitType === 'unlimited' ? 'unlimited' : 'fixedTerm',
+    gueltigVon: alsTag(zeile.validFrom),
+    gueltigBis: zeile.validTo === null ? null : alsTag(zeile.validTo),
+    anerkennung: alsAnerkennung(zeile.verificationStatus),
+    urkunde: zeile.certificateDocumentRef !== null,
+    datei:
+      zeile.certificateDocumentRef !== null &&
+      dateien.get(zeile.certificateDocumentRef) === true,
+    vorgaenger: zeile.supersedesId,
+  }))
 }
 
 /** Das Ergebnis von P10 für die Tatsachen aus 4.2.3 und 4.3. */

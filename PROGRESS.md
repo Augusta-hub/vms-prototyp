@@ -5,6 +5,143 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-12 — Nächtlicher Lauf und Benachrichtigungen (5.5.1, 3.14, 2.4)
+
+### Gemacht
+
+Der **nächtliche Lauf** aus 5.5.1 c rechnet und meldet: **N1** (P9, Ablauf der
+AÜG-Erlaubnis), **N2** (P1, Höchstüberlassungsdauer), **N3** (P3/P4,
+Equal-Pay-Fälligkeit ohne Vergleichsentgelt), **N5** (P10, Ablauf eines
+Nachweises) und **N6** (P2, Unterbrechung über drei Monate). Dazu drei
+Eskalationsanlässe aus 2.4, die an einer Frist hängen: Stundenzettel nicht
+eingereicht, Stundenzettel nicht genehmigt vor Periodenschluss, Beleg
+beanstandet und nicht geklärt.
+
+Damit sie einen Gegenstand haben, führt die Spezifikation jetzt ein Objekt für
+die Nachricht: **3.14 Benachrichtigung und Eskalation**, mit Matrixzeile und
+Fußnote **[47]**. Kapitel 4 nennt „Benachrichtigung an `KB`" in fast jeder
+Zeile, und 2.4 verlangt zu jeder Eskalationsstufe einen Eintrag mit Anlass,
+Adressat und Zeitpunkt — ohne Objekt war das eine Zusage ohne Gegenstand.
+
+**Neue Dateien:** `lib/nightly/befunde.ts(.test.ts)`,
+`lib/services/nightly.ts`, `app/benachrichtigungen/page.tsx(actions.ts)`,
+`tests/services/nightly.test.ts`, Migration
+`20261112140000_benachrichtigung_3_14_und_naechtlicher_lauf`. In
+`lib/aueg/anbindung.ts` kamen die Brücken `erlaubnisVorlauf`,
+`nachweisVorlauf` und `unterbrechungsstand` hinzu; `hoechstdauerstand` gibt
+jetzt auch Restbudget, Schwelle und Adressaten heraus.
+
+### Entscheidungen
+
+1. **Die Stufe kommt aus der Restzeit, nicht aus einem Takt.** 5.4.4, 5.1.6 und
+   5.0 nennen Vorlaufwerte je Stufe, und die Adressaten sind **kumulativ**: die
+   Warnung geht *zusätzlich* an `LD`, nicht statt an `LA`. Die Eskalationsstufe
+   der Benachrichtigung ist deshalb die **Stellung in dieser Liste** — sie wird
+   abgelesen und nicht gezählt. Für die Prozessfristen aus 4.0 gibt es nur
+   einen Termin und danach eine Reihenfolge ohne Abstand; dort erzeugt der Lauf
+   nur die Stufe der zuständigen Rolle (*Frage 57*).
+2. **Adressiert wird eine Rolle in einer Organisation, nicht eine Person.** 2.4
+   sagt „Erinnerung an die zuständige Rolle"; wer sie gerade trägt, steht in
+   den Rollenzuweisungen (3.11). Daraus folgt [47]: lesen darf, wessen
+   Zuweisung Rolle **und** Mandant trifft. Eine Rolle, die der Vorgang nicht
+   verortet — `KE` an einem Vorgang ohne Kunden —, wird **nicht** adressiert;
+   die Nachricht entfällt, statt an irgendwen zu gehen.
+3. **Der Lauf ist wiederholbar.** Je Anlass, Vorgang, Adressat, Stufe und
+   Lauftag entsteht **eine** Benachrichtigung (3.14). Ein zweiter Lauf am
+   selben Tag findet dieselben Befunde und legt nichts doppelt an. Das ist
+   keine Bequemlichkeit: ein Verfahren, das Fristen überwacht, muss nach einem
+   Abbruch neu startbar sein.
+4. **Der Lauf wird festgehalten, auch wenn er nichts findet.** Ohne die Zeile
+   `nightlyRuleRun` wäre „nichts gemeldet" nicht von „nicht gelaufen" zu
+   unterscheiden — und das ist der wichtigere der beiden Fälle.
+5. **Anstoßen darf ihn nur, wer alle Nachrichten sieht.** Gefragt wird das über
+   einen Vorgang **ohne Adressaten**: [47] verlangt, dass die Nachricht an die
+   eigene Zuweisung gerichtet ist, und eine ohne Adressaten ist das für
+   niemanden. `MA` trägt die Fußnote nicht und kommt durch. Wer nur die eigenen
+   Nachrichten sieht, kann keinen Lauf verantworten, der fremde erzeugt.
+6. **Der Lauf ist eine Systemhandlung.** Seine Protokolleinträge werden **als
+   Systemlauf gebaut** und nicht über einen Benutzer ohne Entscheidung: so
+   steht die Systemhandlung im Aufbau des Eintrags und nicht in einem
+   Kennzeichen, das eine Benutzerkennung überschreiben könnte (4.0, Regel 10).
+7. **N4 fehlt, und zwar benannt.** Die Zeile verlangt P7, und für die
+   Arbeitskampfanzeige führt Kapitel 3 kein Feld (*Frage 30*); 5.3.2 sagt
+   selbst, die Regel sei „prüfbar, aber nicht auswertbar". Der Katalog der
+   Anlässe führt sie deshalb nicht — ein Katalogwert ohne Erzeuger wäre eine
+   Zusicherung, die nichts einlöst.
+
+### Nebenbefund: der Seed widersprach 3.7
+
+Die Einsätze des Seeds hatten **keine** abgeleiteten Fristenfelder:
+`maxDurationEndDate`, `countedDurationDays` und `equalPayDueDate` standen leer,
+weil der Seed die Einsätze direkt anlegt und die Übergänge umgeht, an denen
+5.1.3 und 5.2.3 sie fortschreiben. Ein aktiver Einsatz ohne Fristenstand ist
+nach 3.7 ein Datenfehler — und der nächtliche Lauf hätte ihn als „nichts zu
+prüfen" gelesen. Der Seed rechnet die drei Felder jetzt mit denselben
+Rechenwegen wie der Dienst.
+
+Damit der Lauf an den Beispieldaten etwas zu melden **hat**, tragen drei
+Zeilen jetzt Termine, die bald erreicht sind: die Erlaubnis des zweiten
+Lieferanten (N1), eine Unterweisung mit Enddatum (N5) und eine laufende
+Unterbrechung über drei Monate (N6). Das ist dieselbe Haltung wie bei den
+Zuschlagsarten in M5 — die Beispieldaten zeigen den Fall, nicht nur die
+Abwesenheit des Falls.
+
+### Geprüft
+
+- `npm test`: **1060** grün in 45 Dateien (38 neu).
+- `npm run test:services`: **245** grün in 8 Dateien (19 neu).
+- `npm run test:aueg`: **267 Szenarien, 120 grün, 0 rot** — unverändert;
+  `git status` auf `tests/aueg/` ist leer (CLAUDE.md, Regel 1).
+- Kontrolllauf **ohne Überspringen**: 120 vollständig geprüft, 147 ausstehend,
+  **0 verletzte** — unverändert.
+- `npx tsc --noEmit` und `npm run build` fehlerfrei, `npm run db:seed` zweimal
+  hintereinander.
+- **Mutationstests:** 15 Mutationen, alle gefangen — **drei erst nach einer
+  Korrektur**. Zwei davon waren kein Testmangel, sondern **toter Code**: die
+  Prüfung „sieht alle Nachrichten" trug eine zweite Bedingung, die nie etwas
+  entschied, und der Protokolleintrag des Laufs nahm eine Benutzerkennung
+  entgegen, die `handelnder()` bei `decision = null` ohnehin verwirft. Beides
+  ist entfernt; die Systemhandlung steht jetzt im Aufbau des Eintrags. Die
+  dritte — [47] ohne Mandantenprüfung — überlebte, weil die Mandantengrenze
+  denselben Fall schon abfängt; die Fußnote hat jetzt eigene Tests, die die
+  Schicht erreichen, statt sich auf die Grenze zu verlassen.
+- **Gegenprüfung durch die Oberfläche**: der Lauf meldet an den Beispieldaten
+  fünf Nachrichten aus drei Befunden — N1 **zweistufig** an `LA` und `LD`
+  (23 Tage Restzeit), N5 an `KB` und `LD` (13 Tage), N6 als **Information** an
+  `MD`. Ein zweiter Lauf am selben Tag erzeugt **0 neue**. Die
+  Lieferantenadministratorin des zweiten Lieferanten sieht **genau eine**
+  Nachricht — die an `LA` ihrer eigenen Organisation —, keinen Lauf und keinen
+  Knopf.
+
+### Neu offen
+
+- **Frage 56 — auf welchem Weg wird benachrichtigt, und gilt eine Nachricht
+  als gelesen?** Die Umsetzung erzeugt das Objekt und zeigt es im System an;
+  sie versendet nichts und führt keinen Lesezustand. Die **Eskalation** braucht
+  ihn nicht — sie läuft nach Zeit (2.4, Regel 2).
+- **Frage 57 — in welchem Abstand rückt eine Eskalation auf die nächste
+  Stufe?** Für Kapitel 5 steht die Stufe in der Restzeit; für die
+  Prozessfristen aus 4.0 fehlt der Takt. Bis zur Antwort erzeugt der Lauf dort
+  nur die Stufe der zuständigen Rolle.
+
+### Offen
+
+- **Die Benachrichtigungen aus den Übergängen** (Kapitel 4) fehlen weiterhin:
+  „Benachrichtigung an `MD`" beim Einreichen eines Angebots, an `KB` beim
+  Vorlegen eines Profils, an `LD` beim Zuschlag. Das Objekt trägt sie — der
+  Zuschnitt ist derselbe, nur mit leerem `runDate` —, aber kein Dienst erzeugt
+  sie. Das ist die nächste Arbeitseinheit und berührt jeden Fachdienst.
+- **Ein Zeitplan** fehlt: den Lauf stößt heute ein Knopf an. Am Verfahren
+  ändert das nichts (Stichtag, Systemkennzeichen, Wiederholbarkeit sind
+  dieselben), an der Betriebssicherheit schon.
+- **N4** bleibt ohne Rechenweg, solange *Frage 30* offen ist.
+- Die **Eskalationsanlässe** „Bedarfsanfrage nicht entschieden",
+  „Ausschreibung ohne Angebot" und „Profil ohne Rückmeldung" aus 2.4 sind nicht
+  umgesetzt: sie hängen an Prozessfristen, deren Stufenfolge *Frage 57*
+  braucht, und an Fristfeldern, die der Lauf heute nicht liest.
+
+---
+
 ## 2026-11-12 — M6 gebaut: Abrechnung (3.9, 4.5)
 
 ### Gemacht

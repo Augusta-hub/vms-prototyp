@@ -773,6 +773,33 @@ export function billingDocumentRef(document: {
   }
 }
 
+/**
+ * Benachrichtigung (3.14) als Vorgang.
+ *
+ * Der Mandant ist der des **betroffenen Objekts** — wie beim Audit-Eintrag
+ * (3.12). Die Mandantengrenze allein trägt hier aber nicht: eine
+ * Benachrichtigung an den Lieferanten über einen Einsatz gehört dem
+ * Betreibermandanten, und der Lieferant muss sie lesen können. Die Kante steht
+ * deshalb ausdrücklich in `disclosedToTenantIds` — und [47] prüft danach
+ * erneut, ob die Nachricht an **seine** Rollenzuweisung gerichtet ist.
+ */
+export function notificationRef(notification: {
+  readonly tenantId: string
+  readonly tenantType: TenantType
+  readonly recipientRoleCode: RoleCode
+  readonly recipientTenantId: string
+}): ResourceRef {
+  return {
+    type: 'notification',
+    tenantId: notification.tenantId,
+    tenantType: notification.tenantType,
+    ...(notification.tenantType === 'customer' ? { customerTenantId: notification.tenantId } : {}),
+    recipientRoleCode: notification.recipientRoleCode,
+    recipientTenantId: notification.recipientTenantId,
+    disclosedToTenantIds: [notification.recipientTenantId],
+  }
+}
+
 /** Zuschlagsart (3.8) als Vorgang — ein Katalog im Betreibermandanten. */
 export function premiumTypeRef(
   premiumType: { readonly tenantId: string },

@@ -101,6 +101,9 @@ export interface ResourceRef {
   readonly submittedById?: string
   /** Rolle der offenen Freigabestufe eines Stundenzettels (3.1, 4.4) — [29]. */
   readonly openApprovalRoleCode?: RoleCode
+  /** Adressat einer Benachrichtigung (3.14) — [47]. */
+  readonly recipientRoleCode?: RoleCode
+  readonly recipientTenantId?: string
   /** Seite einer Preisliste (3.3) — [41] und [42]. */
   readonly rateCardScope?: 'supplierRateCard' | 'customerRateCard'
   /** Zugriff aus der Entscheidung über einen konkreten Vorgang heraus — [8]. */
@@ -342,6 +345,12 @@ export function checkPermission(
           : {}),
         ...(resource.openApprovalRoleCode !== undefined
           ? { openApprovalRoleCode: resource.openApprovalRoleCode }
+          : {}),
+        ...(resource.recipientRoleCode !== undefined
+          ? { recipientRoleCode: resource.recipientRoleCode }
+          : {}),
+        ...(resource.recipientTenantId !== undefined
+          ? { recipientTenantId: resource.recipientTenantId }
           : {}),
         ...(resource.rateCardScope !== undefined ? { rateCardScope: resource.rateCardScope } : {}),
         ...(resource.inApprovalContext !== undefined

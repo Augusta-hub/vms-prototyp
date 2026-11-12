@@ -69,6 +69,8 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Vertreter | `delegate` | Person, die eine Rollenzuweisung vertritt |
 | Vertretungszeitraum | `delegationPeriod` | Beginn und Ende einer Vertretung |
 | Vertretungsvermerk | `delegationNote` | Kennzeichnung einer Handlung in Vertretung |
+| Benachrichtigung | `notification` | Nachricht an die zuständige Rolle aus einem Befund oder einem Fristablauf (Kapitel 3.14) |
+| Anlass (einer Benachrichtigung) | `trigger` | Eskalationsanlass aus 2.4 oder Zeile des nächtlichen Laufs aus 5.5.1 |
 | Eskalation | `escalation` | Weitergabe eines liegengebliebenen Vorgangs an eine weitere Stelle |
 | Eskalationsstufe | `escalationLevel` | Position in der Stufenfolge einer Eskalation |
 | Eskalationsfrist | `escalationDeadline` | Frist, nach deren Ablauf eskaliert wird |
@@ -512,6 +514,7 @@ Tabelle.
 | Benutzer, Rollenzuweisung, Mandantenzuordnung, Zuständigkeit (3.11) | A L Ä S X | L[38] | – | – | L[2] | – | A[7] L[7] Ä[7] S[7] X[7] | – |
 | Vertretung (3.11) | A L Ä X | L[38] | A[45] L[45] X[45] | A[45] L[45] X[45] | A[45] L[45] X[45] | A[45] L[45] X[45] | A[7] L[7] Ä[7] X[7] | – |
 | Audit-Eintrag (3.12) | L | L[39] | – | – | L[39] | – | L[39] | – |
+| Benachrichtigung (3.14) | L | L[47] | L[47] | L[47] | L[47] | L[47] | L[47] | L[4] |
 
 **Fußnoten**
 
@@ -563,6 +566,7 @@ Tabelle.
 | [44] | Die Zeitposition trägt keinen eigenen Status; genehmigt wird der Stundenzettel (Kapitel 4.4). `X` meint das Entfernen einer Position vor der Einreichung; Korrekturen genehmigter Zeiten laufen über eine Korrekturfassung ([28]). |
 | [45] | Nur die eigene Vertretung für eine eigene Rollenzuweisung bei geplanter Abwesenheit (Kapitel 2.4, Regel 7). Unvorhergesehene Abwesenheit richtet der Administrator der eigenen Organisation ein (LA bzw. kundenseitig derzeit der Betreiber — **offene Frage 12**). Keine Rechteerweiterung, keine Ketten; `Ä` fehlt, weil eine laufende Vertretung beendet (`X`) und neu angelegt wird. Für AN entfällt die Zeile: die Rolle ist nicht vertretbar (Kapitel 2.4, Regel 8). |
 | [46] | Nur die Absage der **eigenen** Einladung (`declined` mit `declineReason`, Kapitel 4.2.1), analog [20]. Keine weitere Statusführung: Annahme, Fristverlängerung und der Fortschritt der Ausschreibung bleiben beim Betreiber. Entscheidung zu *offener Frage 23*. |
+| [47] | Nur Benachrichtigungen, die an eine Rollenzuweisung des Zugreifenden gerichtet sind (Rolle **und** Mandant, Kapitel 3.14). Eine Benachrichtigung trägt keine eigene Entscheidung; sie wird gelesen und sonst nichts — deshalb trägt die Zeile kein `A`, kein `Ä`, kein `S` und kein `X`, auch nicht für MA. Für MA entfällt die Fußnote: er sieht das Benachrichtigungsaufkommen des Betriebs, wie er das Protokoll sieht ([39]). |
 
 ### 2.3 Sichtbarkeitsregeln
 
@@ -2376,6 +2380,68 @@ verschiedener Mandanten ist nur dort zulässig, wo Kapitel 2.3 sie ausdrücklich
 erlaubt. Das betrifft insbesondere `TENDER_INVITATION` (Betreiber →
 Lieferant), `ASSIGNMENT` (Betreiber ↔ Kunde ↔ Lieferant), `TIMESHEET`
 (Lieferant → Kunde) und `WORKER_IDENTITY` (nur Betreiber).
+
+### 3.14 Benachrichtigung und Eskalation
+
+#### Benachrichtigung (`notification`)
+
+**Zweck.** Die Nachricht, die ein Befund oder ein Fristablauf auslöst — und
+zugleich die Spur, dass sie ausgelöst wurde. 2.4 verlangt beides: eine
+Eskalation „adressiert einen Vorgang an eine weitere Stelle", und „jede Stufe
+wird als Audit-Eintrag erfasst, mit Anlass, Adressat und Zeitpunkt". Ohne ein
+Objekt dafür wäre die Nebenwirkung „Benachrichtigung an `KB`", die Kapitel 4 in
+fast jeder Zeile nennt, eine Zusage ohne Gegenstand.
+
+**Abgrenzung.** Die Benachrichtigung **ändert nichts**. Sie genehmigt nicht,
+verlängert nicht und besetzt nicht (2.4, Regel 1); sie ist weder ein Übergang
+noch eine Vorbedingung. Sie ist auch **kein** Zustellweg: ob die Nachricht als
+E-Mail, im System oder beides erscheint, ist *(offene Frage 56)*.
+
+| Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
+|---|---|---|---|---|
+| Anlass | `trigger` | Katalogwert | Pflicht | ein Eskalationsanlass aus 2.4 oder eine Zeile des nächtlichen Laufs aus 5.5.1 |
+| Objektart / Vorgang | `objectType` / `objectRef` | Text / Verweis | Pflicht | derselbe Zuschnitt wie im Audit-Eintrag (3.12) |
+| Mandant | `tenantId` | Verweis (3.11) | Pflicht | Mandant des **betroffenen Objekts**, wie in 3.12 |
+| Adressat: Rolle | `recipientRoleCode` | Rollenkürzel (2.1) | Pflicht | 2.4 adressiert die **zuständige Rolle**, nicht eine Person |
+| Adressat: Organisation | `recipientTenantId` | Verweis (3.11) | Pflicht | die Organisation, in der die Rolle wirkt |
+| Eskalationsstufe | `escalationLevel` | Ganzzahl ab 1 | Pflicht | 1 = die zuständige Rolle; höhere Stufen nach der Stufenfolge in 2.4 |
+| Art | `kind` | `information`, `warning`, `escalation` | Pflicht | folgt der Ergebnisart aus 5.5.2; `escalation` ist die Warnung mit Pflicht-Eskalation |
+| Prüfung | `ruleRef` | `P1` … `P11` | optional | gesetzt, wo der Anlass aus Kapitel 5 kommt |
+| Meldung | `message` | Text | Pflicht | **nur** Daten, die der Empfänger nach 2.3 sehen darf (2.4, Regel 3) |
+| Erzeugt am | `raisedAt` | Zeitpunkt | Pflicht | |
+| Lauf | `runDate` | Datum | optional | Stichtag des nächtlichen Laufs (5.5.1 c); leer bei einer Benachrichtigung aus einem Übergang |
+
+**Mandant und Eigentümer.** Die Benachrichtigung gehört technisch dem
+Betreiber und ist dem Mandanten des **betroffenen Objekts** zugeordnet — wie
+der Audit-Eintrag (3.12). Lesen darf sie nur, wer die adressierte
+Rollenzuweisung trägt ([47]).
+
+**Eindeutigkeit.** Je Anlass, Vorgang, Adressat, Stufe und Lauftag **eine**
+Benachrichtigung. Der nächtliche Lauf läuft täglich über denselben Bestand;
+ohne diese Bedingung entstünde an jedem Tag dieselbe Nachricht erneut, und die
+Stufenfolge aus 2.4 wäre nicht mehr erkennbar.
+
+**Beziehungen.** n Benachrichtigungen : 1 Vorgang (polymorph wie in 3.12) ·
+n Benachrichtigungen : 1 Rollenzuweisung, über Rolle und Mandant.
+
+**Statusmodell.** Keines. Eine Benachrichtigung wird erzeugt und bleibt; sie
+hat keinen Lebenslauf, den Kapitel 4 führen müsste. Ob sie einen Zustand
+„gelesen" trägt, hängt am Zustellweg und ist Teil von *(offener Frage 56)*.
+
+**Datenkategorie (→ 6.3).** Mittelbar personenbezogen: die Meldung kann einen
+Einsatz und damit eine Person benennen. Sie unterliegt deshalb denselben
+Sichtbarkeitsregeln wie der Vorgang selbst (2.3, 2.4 Regel 3).
+
+> *(offene Frage 57)* **In welchem Abstand rückt eine Eskalation auf die
+> nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die
+> **Restzeit** bestimmt: 5.4.4 und 5.1.6 nennen Vorlaufwerte je Stufe, und der
+> nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 — Freigabe
+> einer Bedarfsanfrage, Rückmeldung zu einem Profil, Einreichung eines
+> Stundenzettels — gibt es nur **einen** Termin und danach eine Stufenfolge
+> ohne Abstand. Zu entscheiden ist, nach wie vielen Tagen die nächste Stufe
+> folgt und ob der Wert je Anlass oder je Kunde gilt (2.4, Regel 5). Bis zur
+> Antwort erzeugt der nächtliche Lauf für diese Anlässe **keine** Stufe über
+> die zuständige Rolle hinaus.
 
 ## 4. Statusmodelle
 
@@ -5018,5 +5084,8 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 54 | **Worauf bezieht sich die Mindestabrechnung?** 3.3 führt an der Preisposition `minimumHours` („Mindestabrechnung"), und 3.9 sagt nicht, wie sie in den Beleg eingeht. „Mindestens vier Stunden" je **Überlassungstag**, je **Zettel** oder je **Abrechnungsperiode** ergeben sehr verschiedene Beträge — und bei einem Einsatz mit wenigen kurzen Tagen ist der Unterschied der größere Teil der Rechnung. Zu entscheiden sind die Bezugseinheit und die Frage, ob die Mindestmenge auch auf die **Zuschlagspositionen** wirkt oder nur auf die Grundleistung. Bis zur Antwort wird `minimumHours` bei der Belegableitung **nicht angewandt**: eine erfundene Bezugseinheit wäre eine stillschweigende Preisentscheidung. Hängt an *Frage 48* und *Frage 53*, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.3, 3.9 | offen |
 
 | 55 | **Wie sieht ein Lieferant die Abrechnungsperiode, deren Schlusstermin seine Frist ist?** 2.2 gibt `LD` und `LA` an der Zeile „Abrechnungsperiode (3.9)" ein `L[7]`, und [7] lautet „nur die eigene Lieferantenorganisation". Die Periode gehört aber dem **Betreiber** und nennt **keinen** Lieferanten — mehrere liefern in dieselbe Periode, und 3.9 führt für sie kein Feld, nur das optionale `customerRef`. Damit ist [7] an dieser Zeile nicht erfüllbar, obwohl 2.4 gerade den `closingDate` zum Eskalationsanlass gegenüber `LD` macht: er soll die Frist kennen, die ihn trifft. Denkbar: die Sicht über die **Beauftragung** führen (wie [3] es für Kunden und Standorte tut), oder die Periode je Lieferant führen (dann wird aus einer Periode je Kunde eine je Vertragsverhältnis). Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt die Periode damit dem Betreiber und — bei einer kundenbezogenen Periode — dem `KE` über [2]. Dieselbe Bauart wie *Frage 42* und *Frage 49*. | Kapitel 2.2, 2.4, 3.9 | offen |
+
+| 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg: E-Mail, Anzeige im System, beides, oder eine Übergabe an ein Fremdsystem (*Frage 7*). Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. Mit dem Weg hängt zusammen, ob die Nachricht einen Zustand „gelesen" trägt — die **Eskalation** braucht ihn nicht, sie läuft nach Zeit (2.4, Regel 2), eine Anzeige mit Postfach dagegen schon. Die Umsetzung erzeugt die Benachrichtigung als **Objekt** (3.14) und zeigt sie im System an; sie versendet nichts und führt keinen Lesezustand. | Kapitel 2.4, 3.14, 6 | offen |
+| 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0) — der nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. Zu entscheiden sind der Abstand und die Ebene, auf der er gilt (je Anlass oder je Kunde, 2.4 Regel 5). Bis zur Antwort erzeugt der nächtliche Lauf für diese Anlässe die Stufe der **zuständigen Rolle** und keine weitere — eine geratene Taktzahl wäre eine Entscheidung über die Belastung des Betreibers. | Kapitel 2.4, 3.14, 4.0 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

@@ -93,6 +93,12 @@ export interface ConstraintContext {
      * entscheidet sie.
      */
     readonly openApprovalRoleCode?: RoleCode
+    /**
+     * Adressat einer Benachrichtigung (3.14) — Grundlage von [47]. Adressiert
+     * wird eine **Rolle in einer Organisation**, nicht eine Person (2.4).
+     */
+    readonly recipientRoleCode?: RoleCode
+    readonly recipientTenantId?: string
     /** Seite einer Preisliste (3.3) — [41] und [42]. */
     readonly rateCardScope?: 'supplierRateCard' | 'customerRateCard'
     /**
@@ -811,6 +817,19 @@ export const FOOTNOTES = {
       // ist die Einschränkung nicht erfüllbar — positiv festgelegt (2.3).
       return ctx.resource.delegatedRoleAssignmentId === ctx.grant.roleAssignmentId
     },
+  },
+  47: {
+    number: 47,
+    text:
+      'Nur Benachrichtigungen, die an eine Rollenzuweisung des Zugreifenden gerichtet sind ' +
+      '(Rolle und Mandant, Kapitel 3.14).',
+    // Geprüft wird `grant.roleCode` — die Funktion, **in der** gehandelt wird,
+    // nicht die Menge der Rollen, die jemand sonst noch trägt. Dieselbe Lesart
+    // wie bei [29] am Freigabeschritt: eine Nachricht an `KE` liest nicht, wer
+    // daneben auch `KB` ist.
+    isSatisfied: (ctx) =>
+      ctx.resource.recipientRoleCode === ctx.grant.roleCode &&
+      ctx.resource.recipientTenantId === ctx.grant.tenantId,
   },
   46: {
     number: 46,
