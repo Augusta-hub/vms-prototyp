@@ -24,10 +24,10 @@
  * `ConstraintContext`, mit dem auch `isSatisfied` arbeitet — eine zweite
  * Mechanik für 6.4 gibt es nicht.
  *
- * Hinterlegt sind alle Fußnoten der belegten Zeilen: 3.11 ([2], [7], [38],
- * [45]), die Zeilen zu 3.1 bis 3.7, die Zeile zu 3.10 ([34] bis [37]) und die
- * Zeile zu 3.12 ([39]). Die Fußnoten der noch unbelegten Zeilen (3.8, 3.9)
- * kommen mit ihren Zeilen hinzu; die Struktur trägt sie unverändert.
+ * Hinterlegt sind die Fußnoten **aller** Zeilen der Matrix: 3.11 ([2], [7],
+ * [38], [45]), die Zeilen zu 3.1 bis 3.7, die Zeilen zu 3.8 ([27] bis [29],
+ * [44]), die Zeilen zu 3.9 ([30] bis [33]), die Zeile zu 3.10 ([34] bis [37])
+ * und die Zeile zu 3.12 ([39]).
  */
 import type { Operation } from './operations'
 import type { RoleCode, TenantType } from './roles'
@@ -565,6 +565,53 @@ export const FOOTNOTES = {
       ctx.resource.openApprovalRoleCode === ctx.grant.roleCode &&
       ctx.resource.createdById !== ctx.subject.userId &&
       ctx.resource.submittedById !== ctx.subject.userId,
+  },
+  30: {
+    number: 30,
+    text:
+      'Freigabe nicht durch dieselbe Person, die den Beleg erstellt hat ' +
+      '(Vier-Augen-Prinzip, Kapitel 2.4).',
+    // Die Fußnote spricht **nur** über die Freigabe. Sie steht in 2.2 am `S`
+    // der Zelle des `MD`, und dieses `S` trägt alle Übergänge, die 4.5.2 ihm
+    // zuweist: prüfen, freigeben, klären, stornieren. Für die anderen vier ist
+    // die Einschränkung nicht einschlägig — eine Fußnote verkleinert ein
+    // Recht, sie erfindet keine zweite Bedingung.
+    //
+    // Dieselbe Bedingung steht als Vorbedingung in lib/status/billingDocument.ts
+    // und trifft dort auch `MA`, dessen Zelle keine Fußnote trägt: zwei
+    // Schichten, damit keine allein hält.
+    isSatisfied: (ctx) =>
+      ctx.resource.targetStatus !== 'released' ||
+      ctx.resource.createdById !== ctx.subject.userId,
+  },
+  31: {
+    number: 31,
+    text: 'Beanstandung; die Statusführung des Belegs bleibt beim Betreiber.',
+    // Zwei Aussagen. „Beanstandung" begrenzt den Übergang auf `disputed` —
+    // `KE` bestätigt nicht, prüft nicht und storniert nicht. „Die
+    // Statusführung bleibt beim Betreiber" ist die Begründung dafür und
+    // zugleich der Grund, warum die Zeile für `KE` kein `A` und kein `Ä`
+    // trägt.
+    //
+    // Die Mandantengrenze steht zusätzlich: der Beleg gehört dem Betreiber und
+    // ist der Gegenseite nur über `disclosedToTenantIds` zugänglich (2.3). Hier
+    // wird sie **erneut** geprüft — ein Verkaufsbeleg nennt seinen Kunden, ein
+    // Einkaufsbeleg nicht, und damit fällt `KE` an einer Gutschrift schon hier
+    // heraus.
+    isSatisfied: (ctx) =>
+      ownOrganizationOrOwnCustomer(ctx) && targetStatusIn(ctx, ['disputed']),
+  },
+  32: {
+    number: 32,
+    text:
+      'Bestätigen oder beanstanden. Im Gutschriftverfahren (Entscheidung zu offener Frage 6) ' +
+      'legt der Lieferant keinen Beleg an — deshalb trägt die Zeile kein A.',
+    // `confirmed` und `disputed`, nicht mehr: das Erstellen bleibt beim
+    // Betreiber (Gutschriftverfahren), das Prüfen und Stornieren ebenfalls.
+    // Die Variante B aus 4.5.2 würde hier das Einreichen hinzufügen — und in
+    // 2.2 ein `A[7]`; beides ist nicht umgesetzt und in 4.5.2 so festgehalten.
+    isSatisfied: (ctx) =>
+      ownSupplierOrganization(ctx) && targetStatusIn(ctx, ['confirmed', 'disputed']),
   },
   33: {
     number: 33,

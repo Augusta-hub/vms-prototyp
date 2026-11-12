@@ -411,7 +411,7 @@ export function pruefePreisposition(felder: {
   readonly itemType: string
   readonly qualificationLevel: string | null
   readonly hourlyRate: unknown
-  readonly premiumTypeRef: string | null
+  readonly premiumTypeId: string | null
   readonly premiumValue: unknown
 }): readonly Verletzung[] {
   const verletzungen: Verletzung[] = []
@@ -432,9 +432,9 @@ export function pruefePreisposition(felder: {
     }
   }
   if (felder.itemType === 'premiumRate') {
-    if (felder.premiumTypeRef === null) {
+    if (felder.premiumTypeId === null) {
       verletzungen.push({
-        feld: 'premiumTypeRef',
+        feld: 'premiumTypeId',
         grund: 'Die Zuschlagsart ist bei `premiumRate` Pflicht (3.3, Verweis auf 3.8).',
         specReference: 'SPEC 3.3, Preisposition',
       })
@@ -446,6 +446,80 @@ export function pruefePreisposition(felder: {
         specReference: 'SPEC 3.3, Preisposition',
       })
     }
+  }
+  return verletzungen
+}
+
+/**
+ * Abrechnungsbeleg (SPEC 3.9): drei Bedingungen, die Prisma nicht erzwingen
+ * kann, weil jede **zwei** Spalten betrifft.
+ *
+ *  - Die **Seite folgt der Belegart**: `customerInvoice` ist Verkauf,
+ *    `supplierCreditNote` und `supplierInvoice` sind Einkauf. Ein
+ *    Verkaufsbeleg mit einer Lieferantenbelegart wäre ein Beleg, dessen
+ *    Gegenseite nicht feststeht — und daran hängen die Sichtbarkeit (2.3) und
+ *    die Fußnoten [31] und [32].
+ *  - **Kunde bei `sales`, Lieferant bei `purchase`** — und jeweils **nicht**
+ *    die andere Seite: ein Beleg hat genau eine Gegenpartei.
+ *  - Der **Steuersatz** ist Pflicht (*offene Frage 52*): er ist eine Angabe am
+ *    Beleg, weil kein Kapitel sagt, woher er kommt.
+ */
+export function pruefeAbrechnungsbeleg(felder: {
+  readonly documentType: string
+  readonly direction: string
+  readonly customerId: string | null
+  readonly supplierId: string | null
+  readonly taxRate: unknown
+}): readonly Verletzung[] {
+  const verletzungen: Verletzung[] = []
+  const erwartet = felder.documentType === 'customerInvoice' ? 'sales' : 'purchase'
+  if (felder.direction !== erwartet) {
+    verletzungen.push({
+      feld: 'direction',
+      grund: `Die Seite folgt der Belegart (3.9): \`${felder.documentType}\` ist \`${erwartet}\`.`,
+      specReference: 'SPEC 3.9, Beleg',
+    })
+  }
+  if (felder.direction === 'sales') {
+    if (felder.customerId === null) {
+      verletzungen.push({
+        feld: 'customerId',
+        grund: 'Der Kunde ist bei `sales` Pflicht (3.9).',
+        specReference: 'SPEC 3.9, Beleg',
+      })
+    }
+    if (felder.supplierId !== null) {
+      verletzungen.push({
+        feld: 'supplierId',
+        grund: 'Ein Verkaufsbeleg nennt keinen Lieferanten — ein Beleg hat eine Gegenpartei (3.9).',
+        specReference: 'SPEC 3.9, Beleg',
+      })
+    }
+  }
+  if (felder.direction === 'purchase') {
+    if (felder.supplierId === null) {
+      verletzungen.push({
+        feld: 'supplierId',
+        grund: 'Der Lieferant ist bei `purchase` Pflicht (3.9).',
+        specReference: 'SPEC 3.9, Beleg',
+      })
+    }
+    if (felder.customerId !== null) {
+      verletzungen.push({
+        feld: 'customerId',
+        grund: 'Ein Einkaufsbeleg nennt keinen Kunden — ein Beleg hat eine Gegenpartei (3.9).',
+        specReference: 'SPEC 3.9, Beleg',
+      })
+    }
+  }
+  if (felder.taxRate === null || felder.taxRate === undefined) {
+    verletzungen.push({
+      feld: 'taxRate',
+      grund:
+        'Der Steuersatz ist Pflicht (3.9); woher er kommt, ist offene Frage 52 — ein Festwert ' +
+        'im Programm wäre eine Zahl ohne Fundstelle.',
+      specReference: 'SPEC 3.9, Beleg',
+    })
   }
   return verletzungen
 }

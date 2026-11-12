@@ -103,10 +103,11 @@ model Tenant {
   accountAssignments   AccountAssignment[]   @relation("AccountAssignmentCustomerTenant")
   auditEntries         AuditEntry[]          @relation("AuditTenant")
 
-  // Fachmodul 3.8 und die Abrechnungsperiode aus 3.9.
-  billingPeriods BillingPeriod[]
-  timesheets     Timesheet[]
-  premiumTypes   PremiumType[]
+  // Fachmodule 3.8 und 3.9.
+  billingPeriods   BillingPeriod[]
+  billingDocuments BillingDocument[]
+  timesheets       Timesheet[]
+  premiumTypes     PremiumType[]
 
   // Fachmodule 3.1 bis 3.5. Der Mandant trägt die Mandantengrenze aus 2.3;
   // jedes mandantengebundene Objekt hängt deshalb an genau einem Mandanten.
@@ -316,6 +317,17 @@ model User {
   createdPremiumTypes       PremiumType[]                    @relation("PremiumTypeCreatedBy")
   updatedPremiumTypes       PremiumType[]                    @relation("PremiumTypeUpdatedBy")
   deactivatedPremiumTypes   PremiumType[]                    @relation("PremiumTypeDeactivatedBy")
+
+  // Fachmodul 3.9 (Abrechnungsbeleg). `createdBy` ist hier Pflicht, weil das
+  // Vier-Augen-Prinzip in [30] daran hängt.
+  createdBillingDocuments     BillingDocument[]     @relation("BillingDocumentCreatedBy")
+  releasedBillingDocuments    BillingDocument[]     @relation("BillingDocumentReleasedBy")
+  disputedBillingDocuments    BillingDocument[]     @relation("BillingDocumentDisputedBy")
+  confirmedBillingDocuments   BillingDocument[]     @relation("BillingDocumentConfirmedBy")
+  cancelledBillingDocuments   BillingDocument[]     @relation("BillingDocumentCancelledBy")
+  updatedBillingDocuments     BillingDocument[]     @relation("BillingDocumentUpdatedBy")
+  deactivatedBillingDocuments BillingDocument[]     @relation("BillingDocumentDeactivatedBy")
+  createdBillingItems         BillingDocumentItem[] @relation("BillingItemCreatedBy")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -758,6 +770,7 @@ model Customer {
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("CustomerCollectiveAgreementTarget")
   assignments                    Assignment[]
   billingPeriods                 BillingPeriod[]
+  billingDocuments               BillingDocument[]
 }
 
 /// Ansprechpartner (3.1, 3.2) — personenbezogene Kontaktangabe zu einem
@@ -887,9 +900,10 @@ model CostCenter {
   deactivatedById String?
   deactivatedBy   User?     @relation("CostCenterDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  demandRequests DemandRequest[]
-  assignments    Assignment[]
-  timeEntries    TimeEntry[]
+  demandRequests       DemandRequest[]
+  assignments          Assignment[]
+  timeEntries          TimeEntry[]
+  billingDocumentItems BillingDocumentItem[]
 
   @@unique([customerId, costCenterNumber])
   @@index([tenantId])
@@ -960,6 +974,7 @@ model Supplier {
   collectiveAgreementAssignments CollectiveAgreementAssignment[] @relation("SupplierCollectiveAgreementTarget")
   candidates                     Candidate[]
   assignments                    Assignment[]
+  billingDocuments               BillingDocument[]
 }
 
 /// AÜG-Erlaubnis (`supplierPermit`, SPEC 3.2) — der Nachweis, dass ein
@@ -1114,9 +1129,12 @@ model RateCardItem {
   activityDescription String?
   siteId              String?
   site                Site?            @relation(fields: [siteId], references: [id])
-  /// Zuschlagsart (3.8) — Katalog noch nicht modelliert, bis dahin ein
-  /// benannter Skalar. Pflicht bei `premiumRate`.
-  premiumTypeRef      String?
+  /// Zuschlagsart (3.8) — Pflicht bei `premiumRate` (3.3). Seit dem Katalog
+  /// aus 3.8 ein **Verweis** und kein benannter Skalar mehr: 3.3 führt die
+  /// Beziehung „1 Zuschlagsart : n Preispositionen", und der Beleg braucht sie,
+  /// um einen Zuschlag zu bepreisen (3.9).
+  premiumTypeId       String?
+  premiumType         PremiumType?     @relation(fields: [premiumTypeId], references: [id])
   hourlyRate          Decimal?         @db.Decimal(12, 4)
   /// Prozentsatz oder Betrag; die Berechnungsart kommt aus der Zuschlagsart
   /// (3.3, 3.8).
@@ -1139,8 +1157,9 @@ model RateCardItem {
   offerItems          SupplierOfferItem[]
   // Einkaufs- und Verkaufsseite eines Einsatzes (3.7): beide Verweise zeigen
   // auf eine Preisposition, deshalb zwei benannte Beziehungen.
-  agreedAssignments   Assignment[]        @relation("AssignmentAgreedRate")
-  customerAssignments Assignment[]        @relation("AssignmentCustomerRate")
+  agreedAssignments   Assignment[]          @relation("AssignmentAgreedRate")
+  customerAssignments Assignment[]          @relation("AssignmentCustomerRate")
+  billingItems        BillingDocumentItem[]
 
   @@index([rateCardId])
 }
@@ -1975,9 +1994,10 @@ model Assignment {
   deactivatedById String?
   deactivatedBy   User?     @relation("AssignmentDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  extensions    AssignmentExtension[]
-  interruptions AssignmentInterruption[]
-  timesheets    Timesheet[]
+  extensions           AssignmentExtension[]
+  interruptions        AssignmentInterruption[]
+  timesheets           Timesheet[]
+  billingDocumentItems BillingDocumentItem[]
 
   @@index([tenantId])
   @@index([customerId])
@@ -2403,7 +2423,8 @@ model BillingPeriod {
   deactivatedById String?
   deactivatedBy   User?     @relation("PeriodDeactivatedBy", fields: [deactivatedById], references: [id])
 
-  timesheets Timesheet[]
+  timesheets       Timesheet[]
+  billingDocuments BillingDocument[]
 
   @@index([tenantId])
   @@index([customerId])
@@ -2480,6 +2501,11 @@ model Timesheet {
 
   entries   TimeEntry[]
   approvals TimesheetApproval[]
+
+  /// 1 Stundenzettel : n Belegpositionen (3.9) — die Kundenseite und die
+  /// Lieferantenseite rechnen denselben Zettel ab.
+  billingDocuments     BillingDocument[]     @relation("BillingDocumentTimesheets")
+  billingDocumentItems BillingDocumentItem[]
 
   /// Je Einsatz und Periode genau **ein** Zettel (3.13) — Korrekturfassungen
   /// bilden eine Kette und sind deshalb über `correctionOfId` abgegrenzt, nicht
@@ -2691,7 +2717,210 @@ model PremiumType {
   deactivatedBy   User?     @relation("PremiumTypeDeactivatedBy", fields: [deactivatedById], references: [id])
 
   entryPremiums TimeEntryPremium[]
+  /// 1 Zuschlagsart : n Preispositionen (3.3) · 1 Zuschlagsart :
+  /// n Belegpositionen (3.9).
+  rateCardItems        RateCardItem[]
+  billingDocumentItems BillingDocumentItem[]
 
   @@index([tenantId])
   @@index([appliesTo])
+}
+
+/// Belegart (`documentType`, SPEC 3.9). Die beiden Lieferantenarten schließen
+/// sich aus; im Prototyp entsteht nur `supplierCreditNote` — das
+/// Gutschriftverfahren (Entscheidung zu Frage 6). `supplierInvoice` bleibt im
+/// Katalog, weil 4.5 die Variante B (Rechnungseingang) dokumentiert führt.
+enum BillingDocumentType {
+  customerInvoice
+  supplierCreditNote
+  supplierInvoice
+}
+
+/// Belegseite (`direction`, 3.9) — folgt der Belegart.
+enum BillingDirection {
+  sales
+  purchase
+}
+
+/// Zustände des Abrechnungsbelegs (3.9, Statusmodell 4.5.2).
+enum BillingDocumentStatus {
+  created
+  inReview
+  released
+  disputed
+  confirmed
+  cancelled
+}
+
+/// Einheit einer Belegposition (3.9) — im Prototyp nur Stunden.
+enum BillingItemUnit {
+  hour
+}
+
+/// Nummernkreis der Belegnummern (3.9: „lückenlos je Nummernkreis",
+/// „Nummernkreise je Belegart").
+///
+/// Eine eigene Tabelle und **keine** Datenbanksequenz — dieselbe Begründung
+/// wie bei der Protokollnummer (3.12): eine Sequenz zählt bei einem
+/// zurückgerollten Vorgang weiter und reißt damit eine Lücke, die sich
+/// nachträglich nicht schließen lässt. Die Nummer wird aus einer **gesperrten
+/// Zeile** vergeben (`SELECT … FOR UPDATE`) und bleibt damit lückenlos, auch
+/// wenn ein Beleg storniert wird (4.5.2: „Belegnummern bleiben lückenlos").
+model BillingNumberRange {
+  documentType BillingDocumentType @id
+  lastNumber   Int                 @default(0)
+  updatedAt    DateTime?           @updatedAt
+}
+
+/// Abrechnungsbeleg (`billingDocument`, SPEC 3.9, Statusmodell 4.5.2).
+///
+/// **Betreibermandant, beide Seiten.** Der Betreiber erstellt die Kundenseite
+/// (`sales`) und im Gutschriftverfahren auch die Lieferantenseite
+/// (`purchase`); die Statusführung bleibt in jedem Fall bei ihm. `KE`
+/// beanstandet die Kundenseite ([31]), `LD` bestätigt oder beanstandet die
+/// Lieferantenseite ([32]) — mehr gibt die Matrix den Gegenseiten nicht.
+///
+/// **Der Beleg ist kein Zahlungsvorgang** (1.4): keine Bankverbindung, kein
+/// Mahnwesen, kein Zahlungsstatus.
+model BillingDocument {
+  id              String                @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                @relation(fields: [tenantId], references: [id])
+  /// Lückenlos je Nummernkreis (3.9) — vergeben aus `BillingNumberRange`.
+  documentNumber  String                @unique
+  documentType    BillingDocumentType
+  /// Folgt der Belegart (3.9); die Invariante prüft lib/masterdata/invariants.ts.
+  direction       BillingDirection
+  /// Pflicht bei `sales` (3.9).
+  customerId      String?
+  customer        Customer?             @relation(fields: [customerId], references: [id])
+  /// Pflicht bei `purchase` (3.9).
+  supplierId      String?
+  supplier        Supplier?             @relation(fields: [supplierId], references: [id])
+  billingPeriodId String
+  billingPeriod   BillingPeriod         @relation(fields: [billingPeriodId], references: [id])
+  issueDate       DateTime
+
+  /// *Abgeleitet* aus den Positionen (3.9). Vier Nachkommastellen, weil die
+  /// Rundungsregel **offene Frage 53** ist — gerechnet wird ungerundet.
+  netAmount   Decimal @db.Decimal(14, 4)
+  taxAmount   Decimal @db.Decimal(14, 4)
+  grossAmount Decimal @db.Decimal(14, 4)
+  /// Grundlage von `taxAmount`. Eine **Angabe am Beleg**, weil kein Kapitel
+  /// sagt, woher der Satz kommt (*offene Frage 52*); ein Satz im Code wäre ein
+  /// Festwert ohne Fundstelle.
+  taxRate     Decimal @db.Decimal(6, 4)
+  currency    String
+
+  /// Pflicht (3.9) und Grundlage des Vier-Augen-Prinzips in [30]: deshalb
+  /// **nicht** optional wie `createdById` der übrigen Objekte (3.0).
+  createdById String
+  createdBy   User   @relation("BillingDocumentCreatedBy", fields: [createdById], references: [id])
+
+  releasedAt   DateTime?
+  releasedById String?
+  releasedBy   User?     @relation("BillingDocumentReleasedBy", fields: [releasedById], references: [id])
+
+  /// Pflicht bei Beanstandung (3.9, 4.5.2).
+  disputeReason String?
+  disputedAt    DateTime?
+  disputedById  String?
+  disputedBy    User?     @relation("BillingDocumentDisputedBy", fields: [disputedById], references: [id])
+  /// Pflicht bei der Rückführung aus `disputed` (4.5.2: „Klärung dokumentiert").
+  disputeResolutionNote String?
+
+  /// Nur Einkaufsseite ([32], 4.5.2).
+  confirmedAt   DateTime?
+  confirmedById String?
+  confirmedBy   User?     @relation("BillingDocumentConfirmedBy", fields: [confirmedById], references: [id])
+
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelledBy        User?     @relation("BillingDocumentCancelledBy", fields: [cancelledById], references: [id])
+  /// Pflicht bei Storno (4.5.2).
+  cancellationReason String?
+
+  /// Der Storno erzeugt einen **neuen** Beleg; der alte bleibt erhalten (3.9).
+  cancellationOfId String?          @unique
+  cancellationOf   BillingDocument? @relation("BillingDocumentCancellation", fields: [cancellationOfId], references: [id])
+  cancellation     BillingDocument? @relation("BillingDocumentCancellation")
+
+  status BillingDocumentStatus
+
+  externalReference String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime? @updatedAt
+  updatedById     String?
+  updatedBy       User?     @relation("BillingDocumentUpdatedBy", fields: [updatedById], references: [id])
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  deactivatedBy   User?     @relation("BillingDocumentDeactivatedBy", fields: [deactivatedById], references: [id])
+
+  /// `basedOnTimesheets` (3.9) — mindestens einer, und nur **genehmigte**
+  /// (4.4). Die Positionen verweisen zusätzlich einzeln auf ihren Zettel; diese
+  /// Kante trägt die Liste, die 3.9 am Beleg führt.
+  basedOnTimesheets Timesheet[]           @relation("BillingDocumentTimesheets")
+  items             BillingDocumentItem[]
+
+  @@index([tenantId])
+  @@index([billingPeriodId])
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+/// Belegposition (`billingDocumentItem`, SPEC 3.9).
+///
+/// Unterobjekt des Belegs: es teilt dessen Matrixzeile (2.2, Lesart) und
+/// dessen Mandanten und trägt deshalb keine eigene `tenantId`. Der Verweis auf
+/// den **Stundenzettel** ist Pflicht — er ist die Nachvollziehbarkeit bis zur
+/// Zeiterfassung (3.9).
+model BillingDocumentItem {
+  id                String          @id @default(cuid())
+  billingDocumentId String
+  billingDocument   BillingDocument @relation(fields: [billingDocumentId], references: [id], onDelete: Cascade)
+  assignmentId      String
+  assignment        Assignment      @relation(fields: [assignmentId], references: [id])
+  timesheetId       String
+  timesheet         Timesheet       @relation(fields: [timesheetId], references: [id])
+  /// Leer = Grundleistung (3.9).
+  premiumTypeId     String?
+  premiumType       PremiumType?    @relation(fields: [premiumTypeId], references: [id])
+
+  quantity  Decimal         @db.Decimal(10, 4)
+  unit      BillingItemUnit
+  unitPrice Decimal         @db.Decimal(12, 4)
+  /// *Abgeleitet*: Menge mal Einzelpreis, ungerundet (*offene Frage 53*).
+  amount    Decimal         @db.Decimal(14, 4)
+
+  /// Herkunft des Einzelpreises (3.3). Leer, wenn am Einsatz ein abweichender
+  /// Satz vereinbart ist (`agreedHourlyRate`, *offene Frage 17*).
+  rateCardItemId String?
+  rateCardItem   RateCardItem? @relation(fields: [rateCardItemId], references: [id])
+
+  /// Pflicht bei `sales` (3.9) — aus dem Einsatz.
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  externalReference String?
+
+  createdAt   DateTime  @default(now())
+  createdById String?
+  createdBy   User?     @relation("BillingItemCreatedBy", fields: [createdById], references: [id])
+  updatedAt   DateTime? @updatedAt
+
+  /// Je Beleg, Zettel und Zuschlagsart **eine** Position: die Grundleistung
+  /// (ohne Zuschlagsart) und je Zuschlagsart eine. Zwei Positionen über
+  /// dieselbe Leistung wären eine doppelte Abrechnung.
+  ///
+  /// Dieser Index deckt nur die **Zuschlagspositionen**: in SQL sind zwei
+  /// `NULL` verschieden, zwei Grundleistungspositionen zum selben Zettel also
+  /// erlaubt — gerade sie soll der Index verhindern. Die Lücke schließt ein
+  /// **partieller** Index in der Migration
+  /// (`… WHERE "premiumTypeId" IS NULL`), den Prisma nicht ausdrücken kann.
+  @@unique([billingDocumentId, timesheetId, premiumTypeId])
+  @@index([billingDocumentId])
+  @@index([timesheetId])
+  @@index([assignmentId])
 }

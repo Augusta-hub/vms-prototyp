@@ -1859,9 +1859,8 @@ schließt ([33]).
 **Beziehungen.** 1 Abrechnungsperiode : n Stundenzettel (3.8) ·
 1 Abrechnungsperiode : n Abrechnungsbelege.
 
-**Statusmodell.** Die beiden Werte sind der fachliche Mindestumfang; ein
-vollständiges Modell gehört in **4.5** neben den Beleg und ist dort
-nachzutragen.
+**Statusmodell.** → **4.5.1** (offen → geschlossen). Die beiden Werte sind der
+fachliche Mindestumfang; das Modell neben dem Beleg ist dort nachgetragen.
 
 **Datenkategorie (→ 6.3).** Nur Bearbeitungsvermerke.
 
@@ -1890,12 +1889,17 @@ erstellt die Gutschrift, der Lieferant bestätigt oder beanstandet sie.
 | Abrechnungsperiode | `billingPeriodRef` | Verweis | Pflicht | |
 | Belegdatum | `issueDate` | Datum | Pflicht | |
 | Netto / Steuer / Brutto | `netAmount` / `taxAmount` / `grossAmount` | Betrag | Pflicht | *abgeleitet* aus den Positionen |
+| Steuersatz | `taxRate` | Prozentsatz | Pflicht | Grundlage von `taxAmount`; **woher er kommt, ist *offene Frage 52*** — bis zur Antwort eine Angabe am Beleg, kein Festwert im Code |
 | Währung | `currency` | ISO 4217 | Pflicht | |
 | Zugrunde liegende Stundenzettel | `basedOnTimesheets` | Liste von Verweisen (3.8) | mindestens einer | nur **genehmigte** Zettel (4.4) |
 | Erstellt von | `createdBy` | Verweis auf `user` | Pflicht | |
 | Freigegeben am / von | `releasedAt` / `releasedBy` | Zeitpunkt / Verweis | Pflicht ab Freigabe | **nicht** dieselbe Person wie `createdBy` ([30], 2.4 Regel 5) |
 | Beanstandung | `disputeReason` | Text | Pflicht bei Beanstandung | `KE` ([31]) bzw. `LD` ([32]) |
 | Beanstandet am / von | `disputedAt` / `disputedBy` | Zeitpunkt / Verweis | Pflicht bei Beanstandung | |
+| Klärung der Beanstandung | `disputeResolutionNote` | Text | Pflicht bei Rückführung aus `disputed` | 4.5.2 verlangt „Klärung dokumentiert" |
+| Bestätigt am / von | `confirmedAt` / `confirmedBy` | Zeitpunkt / Verweis | Pflicht bei Bestätigung | nur Einkaufsseite ([32]) |
+| Storniert am / von | `cancelledAt` / `cancelledBy` | Zeitpunkt / Verweis | Pflicht bei Storno | |
+| Stornogrund | `cancellationReason` | Text | Pflicht bei Storno | 4.5.2 verlangt „Begründung Pflicht" |
 | Storno zu | `cancellationOf` | Verweis auf `billingDocument` | optional | Storno erzeugt einen neuen Beleg, der alte bleibt |
 | Status | `status` | siehe 4.5 | Pflicht | |
 | Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* — hier besonders relevant für die ERP-Übergabe |
@@ -1911,6 +1915,7 @@ erstellt die Gutschrift, der Lieferant bestätigt oder beanstandet sie.
 | Menge | `quantity` | Dezimalzahl | Pflicht | |
 | Einheit | `unit` | `hour` | Pflicht | im Prototyp nur Stunden |
 | Einzelpreis | `unitPrice` | Betrag | Pflicht | aus der jeweiligen Preisseite (3.3) |
+| Preisposition | `rateCardItemRef` | Verweis (3.3) | optional | Herkunft des Einzelpreises; leer, wenn ein abweichender Satz am Einsatz gilt (`agreedHourlyRate`, *offene Frage 17*) |
 | Betrag | `amount` | Betrag | Pflicht | *abgeleitet* |
 | Kostenstelle | `costCenterRef` | Verweis (3.1) | Pflicht bei `sales` | aus Einsatz oder Zeitposition |
 
@@ -5006,5 +5011,12 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 
 | 50 | **Wie wird eine Pause auf die Zuschlagsfenster verteilt?** Mit der Entscheidung zu *Frage 16* kann ein Abschnitt eine Pause tragen, und bei `derivationBasis = timeOfDay` entscheidet die Lage der Pause über die Zuschlagsstunden: eine halbe Stunde Pause um 01:00 verringert die Nachtstunden, eine um 19:00 nicht. **Wo im Abschnitt die Pause lag, führt 3.8 nicht** — und ein zweites Zeitfeld je Pause wäre eine neue Erfassungsform. Denkbar: pro rata über den Abschnitt verteilen, der Pause einen eigenen Abschnitt geben (dann zwei Positionen statt einer, Invariante 4 trägt das), oder die Pause bei der Ableitung außer Betracht lassen. Die Umsetzung rechnet die Überdeckung **brutto** und begrenzt sie auf die bezahlten Stunden der Position — mehr Zuschlagsstunden als Arbeitsstunden wären in jedem Fall falsch, der Rest ist offen. | Kapitel 3.8 | offen |
 | 51 | **Woher kommt der Feiertagskalender?** 3.8 führt `Feiertag` als Anlass einer Zuschlagsart, und mit `derivationBasis = calendarDay` wäre er rechenbar — **Kapitel 3 führt aber keinen Kalender**. Feiertage sind bundeslandabhängig, und maßgeblich ist das Land des **Einsatzorts** (3.1, Standort), nicht das des Entleihers oder des Verleihers. Denkbar: ein Katalog je Bundesland als Konfiguration am Standort, ein Zukauf, oder die Erfassung als `declared` je Position. Bis zur Antwort bleibt ein Feiertagszuschlag **nicht ableitbar** und damit `declared` — er ist eine Angabe, die die freigebende Stufe mitentscheidet (4.4). | Kapitel 3.1, 3.8 | offen |
+
+| 52 | **Woher kommt der Steuersatz eines Abrechnungsbelegs?** 3.9 macht `taxAmount` zur Pflicht und zu einem *abgeleiteten* Wert — abgeleitet wird er aber aus einem Satz, den **kein Kapitel führt**. Denkbar: am Rahmenvertrag (3.3, wie die Währung an der Preisliste), am Kunden bzw. Lieferanten (3.1, 3.2), oder je Beleg mit Vorbelegung aus dem Land der Gegenpartei — Letzteres, sobald grenzüberschreitend abgerechnet wird, weil dann Steuerbefreiung und Umkehr der Steuerschuld hinzukommen. Bis zur Antwort führt der Beleg den Satz als **eigene Angabe** (`taxRate`): ein Steuersatz im Code wäre ein Festwert ohne Fundstelle, und 0 % wäre eine stillschweigende Behauptung über die Steuerpflicht. Berührt 1.4 (Zahlungsabwicklung ist nicht im Umfang, die Besteuerung des Belegs aber schon). | Kapitel 3.3, 3.9 | offen |
+| 53 | **Wie werden Geldbeträge gerundet — und auf welcher Ebene?** 3.0, Festlegung 1 verweist die Rundungs- und Nachkommaregeln ausdrücklich „zu Kapitel 3.9 … und sind dort je Belegart zu entscheiden"; 3.9 entscheidet sie nicht. Zu entscheiden sind Nachkommastellen und Rundungsrichtung sowie die Ebene: je Belegposition, je Beleg oder erst auf der Steuer — die drei ergeben Differenzen von Cent-Beträgen, die in der Summe über eine Periode nicht mehr klein sind, und sie entscheiden, ob `netAmount` die Summe der gerundeten Positionen oder die gerundete Summe ist. Bis zur Antwort rechnet die Umsetzung **ungerundet** mit vier Nachkommastellen (wie die Konditionen in 3.3) und hält die Differenz damit sichtbar. Dieselbe Bauart wie *Frage 48*, die dasselbe für die **Stunden** offen lässt; beide Antworten gehören zusammen, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.0, 3.9 | offen |
+
+| 54 | **Worauf bezieht sich die Mindestabrechnung?** 3.3 führt an der Preisposition `minimumHours` („Mindestabrechnung"), und 3.9 sagt nicht, wie sie in den Beleg eingeht. „Mindestens vier Stunden" je **Überlassungstag**, je **Zettel** oder je **Abrechnungsperiode** ergeben sehr verschiedene Beträge — und bei einem Einsatz mit wenigen kurzen Tagen ist der Unterschied der größere Teil der Rechnung. Zu entscheiden sind die Bezugseinheit und die Frage, ob die Mindestmenge auch auf die **Zuschlagspositionen** wirkt oder nur auf die Grundleistung. Bis zur Antwort wird `minimumHours` bei der Belegableitung **nicht angewandt**: eine erfundene Bezugseinheit wäre eine stillschweigende Preisentscheidung. Hängt an *Frage 48* und *Frage 53*, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.3, 3.9 | offen |
+
+| 55 | **Wie sieht ein Lieferant die Abrechnungsperiode, deren Schlusstermin seine Frist ist?** 2.2 gibt `LD` und `LA` an der Zeile „Abrechnungsperiode (3.9)" ein `L[7]`, und [7] lautet „nur die eigene Lieferantenorganisation". Die Periode gehört aber dem **Betreiber** und nennt **keinen** Lieferanten — mehrere liefern in dieselbe Periode, und 3.9 führt für sie kein Feld, nur das optionale `customerRef`. Damit ist [7] an dieser Zeile nicht erfüllbar, obwohl 2.4 gerade den `closingDate` zum Eskalationsanlass gegenüber `LD` macht: er soll die Frist kennen, die ihn trifft. Denkbar: die Sicht über die **Beauftragung** führen (wie [3] es für Kunden und Standorte tut), oder die Periode je Lieferant führen (dann wird aus einer Periode je Kunde eine je Vertragsverhältnis). Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt die Periode damit dem Betreiber und — bei einer kundenbezogenen Periode — dem `KE` über [2]. Dieselbe Bauart wie *Frage 42* und *Frage 49*. | Kapitel 2.2, 2.4, 3.9 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

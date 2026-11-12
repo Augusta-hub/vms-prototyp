@@ -239,19 +239,43 @@ describe('Berechtigungsmatrix 2.2 — je Rolle ein erlaubter und ein verweigerte
 })
 
 describe('nicht positiv erlaubter Zugriff wird verweigert (2.3)', () => {
-  // Die Zeile zum **Abrechnungsbeleg** (3.9) ist noch nicht belegt; sie steht
-  // hier für jede Zeile, die auf ihr Fachmodul wartet. Als dieser Test
-  // entstand, war es die Zeile zur Bedarfsanfrage (mit 3.4 belegt), danach die
-  // zum Kandidaten (mit 3.6 belegt) und bis zu M5 der Stundenzettel (mit 3.8
-  // belegt). Die **Zusicherung** ist unverändert: eine Zeile ohne Eintrag
-  // verweigert jeden Zugriff, auch dem Betreiberadministrator.
-  it('eine Zeile ohne Eintrag in der Matrix verweigert jeden Zugriff', () => {
-    const decision = checkPermission(subject('operatorAdmin'), 'read', {
-      type: 'billingDocument',
-      tenantId: OPERATOR_TENANT,
-      tenantType: 'operator',
-    })
-    expect(decision).toMatchObject({ allowed: false, denial: { kind: 'noRolePermission' } })
+  // Dieser Test lief bisher gegen eine **Zeile** ohne Eintrag: zuerst die
+  // Bedarfsanfrage (mit 3.4 belegt), dann der Kandidat (3.6), dann der
+  // Stundenzettel (3.8), zuletzt der Abrechnungsbeleg (3.9). Mit der
+  // Abrechnung ist **jede** Zeile der Matrix belegt — es gibt keine leere mehr,
+  // gegen die zu prüfen wäre.
+  //
+  // Die Zusicherung bleibt dieselbe und sitzt jetzt dort, wo sie immer saß: an
+  // der **Zelle**. Eine Operation, die die Matrix nicht nennt, ist verweigert —
+  // auch dem Betreiberadministrator, und auch dann, wenn dieselbe Zeile ihm
+  // andere Operationen gibt.
+  it('eine Operation ohne Eintrag in der Zelle verweigert den Zugriff — auch dem MA', () => {
+    // Die Zeile „Audit-Eintrag (3.12)" gibt `MA` **nur** `L`: Einträge
+    // entstehen ausschließlich durch das System und sind unveränderlich ([39]).
+    for (const operation of ['create', 'update', 'delete', 'transition'] as const) {
+      const decision = checkPermission(subject('operatorAdmin'), operation, {
+        type: 'auditEntry',
+        tenantId: OPERATOR_TENANT,
+        tenantType: 'operator',
+      })
+      expect(decision).toMatchObject({ allowed: false, denial: { kind: 'noRolePermission' } })
+    }
+  })
+
+  it('eine Rolle ohne Zelle in einer belegten Zeile hat keinen Zugriff', () => {
+    // `KB` und `KG` fehlen in der Zeile „Abrechnungsbeleg, Belegposition
+    // (3.9)" vollständig: der Beleg ist kaufmännisch, und 2.2 gibt der
+    // Kundenseite dort nur `KE`.
+    for (const roleCode of ['demandOwner', 'approver'] as const) {
+      const decision = checkPermission(subject(roleCode, { tenantId: CUSTOMER_TENANT }), 'read', {
+        type: 'billingDocument',
+        tenantId: OPERATOR_TENANT,
+        tenantType: 'operator',
+        customerTenantId: CUSTOMER_TENANT,
+        disclosedToTenantIds: [CUSTOMER_TENANT],
+      })
+      expect(decision.allowed).toBe(false)
+    }
   })
 
   it('ein Benutzer ohne wirksame Rollenzuweisung hat keinen Zugriff', () => {

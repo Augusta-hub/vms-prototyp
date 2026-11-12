@@ -5,6 +5,172 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-12 — M6 gebaut: Abrechnung (3.9, 4.5)
+
+### Gemacht
+
+Die Abrechnung ist umgesetzt — **Abrechnungsbeleg** und **Belegposition** samt
+Statusmodell 4.5.2, der **Periodenschluss** aus 4.5.1 und die drei
+Querschnittszeilen, die 4.7 dem Beleg zuordnet: **Q38** (P9, Erlaubnis im
+Leistungszeitraum), **Q39** (P4, Vergleichsentgelt) und **Q40** (P5,
+Branchenzuschlagsstufe). Alle drei sind **Warnung oder Information** — am Beleg
+sperrt keine Prüfung.
+
+Dazu die **Korrekturfassung** aus 4.4: sie stand bisher nur im Statusmodell,
+der Dienst legte keine an. Sie gehört hierher, weil 4.5.2 sie zur Vorbedingung
+der Klärung macht („wenn sich die Zeiten ändern: Korrekturfassung genehmigt").
+
+**Neue Dateien:** `lib/status/billingDocument.ts(.test.ts)`,
+`lib/status/billingPeriod.ts(.test.ts)`, `lib/billing/items.ts(.test.ts)`,
+`lib/services/billing.ts`, `app/abrechnung/page.tsx(actions.ts)`,
+`tests/services/billing.test.ts`, Migration
+`20261112093000_abrechnung_3_9_beleg_und_periodenschluss`. Mit der Zeile
+„Abrechnungsbeleg, Belegposition (3.9)" ist **jede** Zeile der Matrix 2.2
+belegt; die Fußnoten [30], [31] und [32] sind hinterlegt.
+
+### Entscheidungen
+
+1. **Am Beleg sperrt keine Prüfung — und das steht im Typsystem.** 4.7 gibt
+   Q38 bis Q40 nur Warnung und Information, weil die Leistung **erbracht** ist
+   (5.5.5): eine Sperre der Abrechnung verhindert keine Überlassung mehr, sie
+   hält dem Leiharbeitnehmer und dem Lieferanten das Entgelt für einen Fehler
+   vor, der vorher entstanden ist. Keine Vorbedingung dieses Modells trägt
+   deshalb eine `ruleRef` — und ein Test hält genau das fest. Der Gegensatz zu
+   4.4, wo Q36 die einzige Sperre ist, ist beabsichtigt.
+2. **Zwei Beanstandungsübergänge statt eines.** 4.5.2 führt `released` →
+   `disputed` zweimal, je Seite, mit verschiedenen Rollen: `KE` ([31]) auf der
+   Verkaufsseite, `LD` ([32]) auf der Einkaufsseite. Ein Übergang mit beiden
+   Rollen ließe `KE` eine Gutschrift beanstanden, die sie nie sieht. Dieselbe
+   Bauart wie die zwei Genehmigungsübergänge in 4.4.
+3. **Das Öffnen einer Periode ist ein Übergang, keine Anlage.** 4.5.1 nennt
+   „`MA` (anlegen), `MD` öffnet ([33])", und die Matrix gibt `MD` auf dieser
+   Zeile **kein** `A`, sondern `L S[33]` — [33] lautet „Öffnen und Schließen".
+   Der Übergang trägt deshalb `operation: 'transition'`; ohne diese Angabe
+   könnte `MD` keine Periode öffnen, obwohl 4.5.1 und [33] es beide sagen.
+4. **Die Mengen kommen aus den Zetteln, die Preise aus den Preislisten.** Der
+   Grundsatz wird am Einsatz **gelesen** (3.7 führt beide Seiten als Verweis),
+   nicht aus Qualifikation und Standort neu gesucht — dieselbe Linie wie bei P1
+   und P3. Gesucht wird nur der Zuschlagssatz, und zwar in der Preisliste
+   **derselben** Seite: die Differenz der beiden Seiten ist die Marge des
+   Betreibers ([41], [42]), und eine Suche über beide würde sie vermischen.
+5. **Ein fehlender Zuschlagssatz ist ein Mangel, keine Lücke.** Der
+   `defaultValue` der Zuschlagsart (3.8) tritt **nicht** an die Stelle der
+   Preisposition: er ist die Vorbelegung für deren Anlage, keine Vereinbarung
+   zwischen den Parteien. Ein Betrag aus dem Katalog statt aus der Preisliste
+   wäre eine erfundene kaufmännische Abrede; 4.5.2 macht die Preisposition
+   ausdrücklich zur Vorbedingung.
+6. **Ein Zettel wird nicht zweimal abgerechnet — auf derselben Seite.** Das
+   sagt 3.9 nicht ausdrücklich, folgt aber zwingend aus ihm. Die **andere**
+   Seite rechnet denselben Zettel sehr wohl ab: Kundenrechnung und
+   Lieferantengutschrift beruhen auf denselben Stunden zu verschiedenen
+   Preisen. Ein **Storno** gibt die Zettel wieder frei — dafür ist er da.
+7. **Der Storno bucht gegen, er löscht nicht.** Der stornierte Beleg bleibt
+   und bekommt einen neuen Beleg mit `cancellationOf` und **negativen** Mengen
+   (3.9): so bleibt jede Zeile bis zur Zeitposition nachvollziehbar, und die
+   Summe beider Belege ist null. Die Belegnummern bleiben lückenlos, weil sie
+   wie die Protokollnummer aus einer **gesperrten Zeile** kommen und nicht aus
+   einer Datenbanksequenz (3.12, dieselbe Begründung).
+8. **Die Prüffrist begrenzt eine Handlung, sie löst keine aus.** 4.5.2 macht
+   „innerhalb der Prüffrist" zur Vorbedingung der Beanstandung; nach ihrem
+   Ablauf bleibt der Beleg `released` und gilt als akzeptiert, **ohne** dass
+   ein Übergang das feststellt. Keine Bestätigungsfiktion (2.4, Regel 1). Die
+   Frist kommt aus `processDeadlineConfig` des Kunden (3.1), sonst aus der
+   Vorbelegung von 14 Kalendertagen (4.0).
+
+### Ein Fehler in M5, den die Abrechnung aufgedeckt hat
+
+**Q36 las zu milde.** Der Zettel-Dienst prüfte für P4 den Wert **am Einsatz**
+(`comparableWage !== null`), während 4.7 und 5.2.4 vom **Eintrag des
+Standorts** sprechen: „kein verwendbarer Vergleichsentgelt-Eintrag" (5.5.5).
+Beides ist P4, und zwei Lesarten derselben Prüfung in einem Programm sind eine
+zu viel — aufgefallen ist es, weil Q39 am Beleg dieselbe Prüfung braucht.
+
+Korrigiert wurde der **Code**, nicht die Spezifikation (CLAUDE.md,
+„Spezifikation vor Code"): `entgeltstand()` in `lib/aueg/anbindung.ts` ruft
+jetzt die echte Regel `pruefeVergleichsentgelt` (5.2.4) auf, und beide Dienste
+lesen sie durch **eine** Funktion. Die Sperre greift damit auch, wenn der
+Eintrag am Standort fehlt oder mehrdeutig ist — und sie greift weiterhin
+**nicht** vor der Fälligkeit und **nicht** bei einer Schätzung (`estimate` ist
+nach 3.3 verwendbar). Vier neue Dienst-Tests halten die Unterscheidung fest;
+eine Mutation, die die alte Lesart wiederherstellt, wird gefangen.
+
+### Geprüft
+
+- `npm test`: **1022** grün in 44 Dateien (91 neu).
+- `npm run test:services`: **226** grün in 7 Dateien (61 neu).
+- `npm run test:aueg`: **267 Szenarien, 120 grün, 0 rot** — unverändert;
+  `git status` auf `tests/aueg/` ist leer (CLAUDE.md, Regel 1).
+- Kontrolllauf **ohne Überspringen** (außerhalb des Repos): 120 vollständig
+  geprüft, 147 mit ausstehenden Zusicherungen, **0 verletzte** — unverändert.
+- `npx tsc --noEmit` und `npm run build` fehlerfrei, `npm run db:seed` zweimal
+  hintereinander.
+- **Mutationstests:** 14 Mutationen, alle gefangen — **zwei erst nach einer
+  Testkorrektur**. Beide Male war der Grund derselbe: der Test traf die
+  **erste** Schicht (Mandantengrenze, Fußnote) und nie die zweite
+  (Vorbedingung des Modells). Die Seitenprüfungen von `confirm` und
+  `disputeBySales` werden jetzt mit einem Vorgang geprüft, der die Grenze
+  passiert, und Tatsachen, die die andere Seite nennen. Die dritte Mutation —
+  die Suche des Zuschlagssatzes über **beide** Preislisten — überlebte, weil
+  der Satz der eigenen Seite zufällig zuerst in der Liste stand; jetzt steht
+  der fremde zuerst **und** beginnt später, gewänne also über beide Wege.
+- **Gegenprüfung durch die Oberfläche**: ein Zettel über eine Nachtschicht
+  22:00–06:00 ergibt 7,50 Arbeitsstunden und 7,00 Stunden Nachtzuschlag; der
+  Verkaufsbeleg daraus trägt 183,75 EUR Grundleistung (7,50 h zu 24,50) und
+  42,875 EUR Zuschlag (25 % von 24,50), netto 226,625 EUR **ungerundet**. Dem
+  **Ersteller** bietet die Seite „prüfen" und „stornieren" an, aber **nicht**
+  „freigeben" ([30]); der Kunde sieht den Beleg mit Prüffrist und **nur** die
+  Beanstandung ([31]). Alle vier Schreibwege stehen im Protokoll, die
+  Beanstandung mit dem Vermerk „über die Mandantengrenze". Nebenbei bestätigt:
+  ein zweiter Disponent **ohne** Betreuungszuordnung für diesen Kunden sieht
+  den Beleg gar nicht (2.3).
+
+### Entschieden, was offen war
+
+Nichts — M6 hat keine offene Frage beantwortet. Die Umsetzung folgt den
+Entscheidungen zu *Frage 6* (Gutschriftverfahren) und *Frage 5*
+(Freigabestufen), die schon standen.
+
+### Neu offen
+
+- **Frage 52 — woher kommt der Steuersatz?** 3.9 macht `taxAmount` zur Pflicht
+  und zum *abgeleiteten* Wert; abgeleitet wird er aus einem Satz, den kein
+  Kapitel führt. Bis zur Antwort trägt der Beleg ihn als **eigene Angabe**
+  (`taxRate`): ein Satz im Code wäre ein Festwert ohne Fundstelle, und 0 % wäre
+  eine stillschweigende Behauptung über die Steuerpflicht.
+- **Frage 53 — wie werden Geldbeträge gerundet, und auf welcher Ebene?** 3.0
+  verweist die Regel ausdrücklich an 3.9, und 3.9 entscheidet sie nicht.
+  Gerechnet wird **ungerundet** mit vier Nachkommastellen; die Differenz bleibt
+  sichtbar. Gehört zu *Frage 48*, die dasselbe für die Stunden offen lässt.
+- **Frage 54 — worauf bezieht sich die Mindestabrechnung?** `minimumHours`
+  (3.3) geht nicht in den Beleg ein, weil „mindestens vier Stunden" je Tag, je
+  Zettel und je Periode verschiedene Beträge ergeben.
+- **Frage 55 — wie sieht ein Lieferant die Periode, deren Schlusstermin seine
+  Frist ist?** 2.2 gibt ihm `L[7]`, und [7] verlangt „die eigene
+  Lieferantenorganisation" — die Periode gehört aber dem Betreiber und nennt
+  **keinen** Lieferanten. Die Umsetzung folgt dem Wortlaut und verweigert;
+  dieselbe Bauart wie *Frage 42* und *Frage 49*.
+
+### Offen
+
+- **Variante B (Rechnungseingang)** ist nicht umgesetzt und auch nicht als
+  Übergang vorhanden: 4.5.2 führt sie als dokumentierte Variante, und mit der
+  Entscheidung zu *Frage 6* bleibt die Matrix wie sie ist. Ein Übergang, den
+  die Prüffunktion in jedem Fall verweigert, wäre eine Zeile ohne Weg.
+- **Benachrichtigungen und der nächtliche Lauf** fehlen weiterhin. 4.5 nennt
+  sie in jeder Zeile („Benachrichtigung an `KE` bzw. `LD`"), und die Prüffrist
+  des Belegs wird heute nur **geprüft**, nicht erinnert.
+- **`externalReference` und die ERP-Übergabe** (*Frage 7*) sind am Beleg
+  besonders naheliegend und bleiben leer.
+- **P5 bleibt halb angebunden:** die Stufenfolge des Branchenzuschlagsschemas
+  ist Konfiguration (3.3), die Kapitel 3 nicht führt. Ohne sie bleibt die Stufe
+  offen, und die Frage, ob die abgerechneten Zuschlagsarten zu ihr passen
+  (5.2.5, Schritt 4), ist nicht beantwortbar — sichtbar, nicht stillschweigend.
+- **Die Zuständigkeit am Beleg** (3.11): er fasst mehrere Kostenstellen
+  zusammen und trägt deshalb keine. Ob eine kostenstellenbezogene Zuständigkeit
+  ihn teilweise sichtbar machen soll, gehört zu *Frage 14*.
+
+---
+
 ## 2026-11-11 — M5 gebaut: Zeiterfassung und Freigabe (3.8, 4.4)
 
 ### Gemacht

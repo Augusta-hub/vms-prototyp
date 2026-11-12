@@ -28,9 +28,9 @@ import { currentIdentity } from '../identity'
 import { Meldung, Status, Wert } from '../ui'
 import {
   addTimeEntryAction,
+  createCorrectionAction,
   createTimesheetAction,
   decideStageAction,
-  openPeriodAction,
   removeTimeEntryAction,
   reworkTimesheetAction,
   submitTimesheetAction,
@@ -161,29 +161,6 @@ export default async function ZeitenPage({
         </table>
       )}
 
-      {options.mayOpenPeriod ? (
-        <>
-          <h2>Abrechnungsperiode öffnen (3.9, Fußnote [33])</h2>
-          <form action={openPeriodAction}>
-            <p>
-              <label htmlFor="periodNumber">Nummer: </label>
-              <input id="periodNumber" name="periodNumber" required placeholder="2026-12" />{' '}
-              <label htmlFor="periodFrom">von: </label>
-              <input id="periodFrom" name="periodFrom" type="date" required />{' '}
-              <label htmlFor="periodTo">bis: </label>
-              <input id="periodTo" name="periodTo" type="date" required />{' '}
-              <label htmlFor="closingDate">Schlusstermin: </label>
-              <input id="closingDate" name="closingDate" type="date" required />{' '}
-              <button type="submit">Periode öffnen</button>
-            </p>
-            <p className="hint">
-              Das <strong>Schließen</strong> gehört zum vollständigen Statusmodell aus 4.5 und zu
-              offener Frage 24 — es ist nicht umgesetzt. Die Prüfung auf „offen" in 4.4 greift
-              trotzdem.
-            </p>
-          </form>
-        </>
-      ) : null}
     </>
   )
 }
@@ -202,6 +179,10 @@ function Zettel({ zettel }: { readonly zettel: TimesheetView }) {
   const kannNacharbeiten = zettel.availableTransitions.some(
     (uebergang) => uebergang.name === 'rework',
   )
+  // Eine Korrekturfassung entsteht nur zu einem **genehmigten** Zettel und nur
+  // einmal (4.4, 3.13). Sie ist ein eigener Vorgang und deshalb kein Übergang
+  // in `availableTransitions`: für sie gilt `A`, nicht `Ä` ([28]).
+  const kannKorrigieren = zettel.status === 'approved' && !zettel.hasCorrection
 
   return (
     <section>
@@ -425,6 +406,22 @@ function Zettel({ zettel }: { readonly zettel: TimesheetView }) {
           <p>
             <button type="submit">nacharbeiten (4.4)</button>{' '}
             <span className="hint">Die Freigabeschritte werden dabei verworfen.</span>
+          </p>
+        </form>
+      ) : null}
+
+      {kannKorrigieren ? (
+        <form action={createCorrectionAction}>
+          <input type="hidden" name="timesheetId" value={zettel.id} />
+          <p>
+            <label htmlFor={`reason-${zettel.id}`}>Begründung der Korrektur: </label>
+            <input id={`reason-${zettel.id}`} name="reason" size={32} required />{' '}
+            <button type="submit">Korrekturfassung anlegen (4.4)</button>
+          </p>
+          <p className="hint">
+            Der einzige Weg, genehmigte Zeiten zu ändern ([28]). Die Positionen werden übernommen;
+            der ersetzte Zettel bleibt genehmigt, bis die Fassung genehmigt ist — dann steht er auf
+            „korrigiert", und ein Beleg über die alten Zeiten ist zu stornieren (4.5.2).
           </p>
         </form>
       ) : null}

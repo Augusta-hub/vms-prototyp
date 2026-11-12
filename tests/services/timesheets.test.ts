@@ -25,10 +25,10 @@ import { loadIdentity, type LoadedIdentity } from '../../lib/identity/loadSubjec
 import { prisma } from '../../lib/prisma'
 import {
   addTimeEntry,
+  createCorrectionTimesheet,
   createTimesheet,
   decideStage,
   loadTimesheets,
-  openBillingPeriod,
   removeTimeEntry,
   reworkTimesheet,
   submitTimesheet,
@@ -38,6 +38,7 @@ import {
   legeAbrechnungsperiodeAn,
   legeEinsatzAn,
   legeStufenfolgeAn,
+  legeVergleichsentgeltAn,
   legeZuschlagsartAn,
   leereDatenbank,
   tag,
@@ -772,6 +773,81 @@ describe('Q36 sperrt, Q35 nicht (4.7, 5.5.5)', () => {
     expect(meldung).toContain('Pflicht-Eskalation')
   })
 
+  it('sperrt, wenn der **Eintrag am Standort** fehlt — auch mit Wert am Einsatz (5.2.4)', async () => {
+    // Q36 sperrt bei „kein **verwendbarer** Vergleichsentgelt-Eintrag"
+    // (5.5.5), und verwendbar heißt nach 5.2.4 Schritt 2: ein eindeutiger
+    // Eintrag **am Standort** zur Tätigkeit. Der Wert am Einsatz allein genügt
+    // nicht — die frühere, mildere Lesart des Dienstes hätte hier genehmigt.
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-10'), comparableWage: '18.5000' },
+    })
+    await bisZurLetztenStufe()
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    const ergebnis = await decideStage(
+      zweiter,
+      { timesheetId: zettel, decision: 'approved', rejectionReason: null, comment: null },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+    expect(await status(zettel)).toBe('inApproval')
+  })
+
+  it('genehmigt mit gültigem Eintrag am Standort (5.2.4, Schritt 2)', async () => {
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-10'), comparableWage: '19.4200' },
+    })
+    await legeVergleichsentgeltAn(welt, { betrag: '19.4200' })
+    await bisZurLetztenStufe()
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    ok(
+      await decideStage(
+        zweiter,
+        { timesheetId: zettel, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    expect(await status(zettel)).toBe('approved')
+  })
+
+  it('genehmigt bei einer **Schätzung** — verwendbar, aber kein Nachweis (3.3)', async () => {
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-10'), comparableWage: '19.4200' },
+    })
+    await legeVergleichsentgeltAn(welt, { betrag: '19.4200', quelle: 'estimate' })
+    await bisZurLetztenStufe()
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    ok(
+      await decideStage(
+        zweiter,
+        { timesheetId: zettel, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    expect(await status(zettel)).toBe('approved')
+  })
+
+  it('sperrt bei **zwei** gültigen Einträgen — Eindeutigkeit aus 3.3 verletzt (5.2.4)', async () => {
+    // „Mehr als ein gültiger Eintrag ist kein Eintrag": wer einen von zwei
+    // widersprechenden Entgeltwerten wählt, trifft eine Entgeltentscheidung.
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-10'), comparableWage: '19.4200' },
+    })
+    await legeVergleichsentgeltAn(welt, { betrag: '19.4200' })
+    await legeVergleichsentgeltAn(welt, { betrag: '20.1000' })
+    await bisZurLetztenStufe()
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    const ergebnis = await decideStage(
+      zweiter,
+      { timesheetId: zettel, decision: 'approved', rejectionReason: null, comment: null },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+  })
+
   it('genehmigt vor der Fälligkeit auch ohne Vergleichsentgelt — nichts geschuldet (5.2.2)', async () => {
     await prisma.assignment.update({
       where: { id: einsatz },
@@ -831,62 +907,6 @@ describe('Sichtbarkeit des Zettels (2.2, 2.3)', () => {
   })
 })
 
-describe('Abrechnungsperiode öffnen (3.9, [33])', () => {
-  it('öffnet eine Periode und protokolliert sie', async () => {
-    ok(
-      await openBillingPeriod(
-        administrator,
-        {
-          periodNumber: '2026-12',
-          customerId: null,
-          periodFrom: tag('2026-12-01'),
-          periodTo: tag('2026-12-31'),
-          closingDate: tag('2027-01-10'),
-        },
-        HEUTE,
-      ),
-    )
-    const periode = await prisma.billingPeriod.findFirstOrThrow({
-      where: { periodNumber: '2026-12' },
-    })
-    expect(periode.status).toBe('open')
-    expect(periode.openedById).toBe(welt.administrator)
-    expect(
-      await prisma.auditEntry.count({ where: { objectType: 'billingPeriod' } }),
-    ).toBeGreaterThan(0)
-  })
-
-  it('verweigert sie dem Lieferanten — die Zeile gibt ihm nur `L[7]`', async () => {
-    const ergebnis = await openBillingPeriod(
-      lieferantDisponent,
-      {
-        periodNumber: '2026-12',
-        customerId: null,
-        periodFrom: tag('2026-12-01'),
-        periodTo: tag('2026-12-31'),
-        closingDate: tag('2027-01-10'),
-      },
-      HEUTE,
-    )
-    expect(ergebnis.ok).toBe(false)
-    expect(await prisma.billingPeriod.count({ where: { periodNumber: '2026-12' } })).toBe(0)
-  })
-
-  it('verweigert ein Ende vor dem Beginn', async () => {
-    const ergebnis = await openBillingPeriod(
-      administrator,
-      {
-        periodNumber: '2026-13',
-        customerId: null,
-        periodFrom: tag('2026-12-31'),
-        periodTo: tag('2026-12-01'),
-        closingDate: tag('2027-01-10'),
-      },
-      HEUTE,
-    )
-    expect(ergebnis.ok).toBe(false)
-  })
-})
 
 describe('Protokoll der Zeiterfassung (3.12)', () => {
   it('trägt für jeden Schreibweg einen Eintrag', async () => {
@@ -928,5 +948,193 @@ describe('Protokoll der Zeiterfassung (3.12)', () => {
     // Regel 10), die Benutzerhandlungen einen Benutzer.
     expect(eintraege[3]?.systemActor).not.toBeNull()
     expect(eintraege[3]?.actorUserId).toBeNull()
+  })
+})
+
+describe('Korrekturfassung (4.4, Fußnote [28])', () => {
+  /** Ein genehmigter Zettel — der Ausgangspunkt jeder Korrektur. */
+  async function genehmigterZettel(): Promise<string> {
+    const id = await zettelAnlegen()
+    ok(
+      await addTimeEntry(
+        disponent,
+        {
+          timesheetId: id,
+          workDate: tag('2026-10-05'),
+          startMinute: null,
+          endMinute: null,
+          breakMinutes: null,
+          hours: 8,
+          note: 'ursprünglich',
+          declaredPremiums: [],
+        },
+        HEUTE,
+      ),
+    )
+    ok(await submitTimesheet(disponent, { timesheetId: id }, HEUTE))
+    ok(
+      await decideStage(
+        bedarfstraeger,
+        { timesheetId: id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    ok(
+      await decideStage(
+        zweiter,
+        { timesheetId: id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    expect(await status(id)).toBe('approved')
+    return id
+  }
+
+  it('legt sie zum genehmigten Zettel an und übernimmt die Positionen', async () => {
+    const original = await genehmigterZettel()
+    const meldung = ok(
+      await createCorrectionTimesheet(
+        disponent,
+        { timesheetId: original, reason: 'Der 5.10. war ein Feiertag.' },
+        HEUTE,
+      ),
+    )
+    expect(meldung).toContain('Korrekturfassung')
+    const fassung = await prisma.timesheet.findFirstOrThrow({
+      where: { correctionOfId: original },
+      include: { entries: true },
+    })
+    expect(fassung.status).toBe('recorded')
+    expect(fassung.entries).toHaveLength(1)
+    expect(fassung.entries[0]?.correctionReason).toContain('Feiertag')
+    expect(fassung.entries[0]?.correctedFromId).not.toBeNull()
+    // Der ersetzte Zettel bleibt genehmigt, bis die Fassung genehmigt ist.
+    expect(await status(original)).toBe('approved')
+  })
+
+  it('verweigert sie ohne Begründung ([28])', async () => {
+    const original = await genehmigterZettel()
+    const ergebnis = await createCorrectionTimesheet(
+      disponent,
+      { timesheetId: original, reason: '  ' },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+    expect(await prisma.timesheet.count({ where: { correctionOfId: original } })).toBe(0)
+  })
+
+  it('verweigert sie zu einem nicht genehmigten Zettel', async () => {
+    const id = await zettelAnlegen()
+    const ergebnis = await createCorrectionTimesheet(
+      disponent,
+      { timesheetId: id, reason: 'Grund' },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+  })
+
+  it('verweigert eine **zweite** Fassung zum selben Zettel (3.13)', async () => {
+    const original = await genehmigterZettel()
+    ok(
+      await createCorrectionTimesheet(
+        disponent,
+        { timesheetId: original, reason: 'erste Korrektur' },
+        HEUTE,
+      ),
+    )
+    const ergebnis = await createCorrectionTimesheet(
+      disponent,
+      { timesheetId: original, reason: 'zweite Korrektur' },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+  })
+
+  it('verweigert sie in einer geschlossenen Periode (4.5.1)', async () => {
+    const original = await genehmigterZettel()
+    await prisma.billingPeriod.update({ where: { id: periode }, data: { status: 'closed' } })
+    const ergebnis = await createCorrectionTimesheet(
+      disponent,
+      { timesheetId: original, reason: 'Grund' },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+  })
+
+  it('setzt den ersetzten Zettel mit der Genehmigung der Fassung auf `corrected` (4.4)', async () => {
+    const original = await genehmigterZettel()
+    ok(
+      await createCorrectionTimesheet(
+        disponent,
+        { timesheetId: original, reason: 'Stunden falsch erfasst.' },
+        HEUTE,
+      ),
+    )
+    const fassung = await prisma.timesheet.findFirstOrThrow({ where: { correctionOfId: original } })
+    ok(await submitTimesheet(disponent, { timesheetId: fassung.id }, HEUTE))
+    ok(
+      await decideStage(
+        bedarfstraeger,
+        { timesheetId: fassung.id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    const meldung = ok(
+      await decideStage(
+        zweiter,
+        { timesheetId: fassung.id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    expect(await status(fassung.id)).toBe('approved')
+    expect(await status(original)).toBe('corrected')
+    expect(meldung).toContain('korrigiert')
+
+    // Der Systemübergang trägt ein **Systemkennzeichen** und keinen Benutzer
+    // (4.0, Regel 10; 3.12).
+    const eintrag = await prisma.auditEntry.findFirstOrThrow({
+      where: { objectType: 'timesheet', statusTo: 'corrected' },
+    })
+    expect(eintrag.systemActor).not.toBeNull()
+    expect(eintrag.actorUserId).toBeNull()
+  })
+
+  it('erlaubt nach der Ersetzung eine neue Fassung — die Kette geht weiter (3.13)', async () => {
+    const original = await genehmigterZettel()
+    ok(
+      await createCorrectionTimesheet(
+        disponent,
+        { timesheetId: original, reason: 'erste Korrektur' },
+        HEUTE,
+      ),
+    )
+    const fassung = await prisma.timesheet.findFirstOrThrow({ where: { correctionOfId: original } })
+    ok(await submitTimesheet(disponent, { timesheetId: fassung.id }, HEUTE))
+    ok(
+      await decideStage(
+        bedarfstraeger,
+        { timesheetId: fassung.id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    const zweiter = await identitaet(welt.zweiterDisponent)
+    ok(
+      await decideStage(
+        zweiter,
+        { timesheetId: fassung.id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    // Jetzt ist die Fassung der gültige Zettel; zu ihr darf eine zweite
+    // Korrektur entstehen, ohne 3.13 zu verletzen.
+    ok(
+      await createCorrectionTimesheet(
+        disponent,
+        { timesheetId: fassung.id, reason: 'zweite Korrektur' },
+        HEUTE,
+      ),
+    )
   })
 })

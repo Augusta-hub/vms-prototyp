@@ -27,7 +27,7 @@
  * Einreichen in den Freigabeschritt **kopiert** — eine spätere Änderung der
  * Konfiguration darf einen laufenden Zettel nicht umhängen (3.8).
  */
-import { alsNachweiszeile, nachweisstand } from '../aueg/anbindung'
+import { alsNachweiszeile, entgeltstand, nachweisstand } from '../aueg/anbindung'
 import { schreibEintrag } from '../audit/entry'
 import { protokolliere, protokolliereGetrennt } from '../audit/record'
 import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
@@ -53,7 +53,6 @@ import {
 import { zuschlaegeDerPosition, type Zuschlagsart } from '../timetracking/premiums'
 import {
   asFailure,
-  billingPeriodRef,
   failure,
   protokollbezug,
   success,
@@ -103,6 +102,8 @@ const TIMESHEET_INCLUDE = {
   entries: { include: { premiums: true }, orderBy: { workDate: 'asc' } },
   approvals: { orderBy: { level: 'asc' } },
   recordedBy: { select: { givenName: true, familyName: true } },
+  /** Die Korrekturfassung zu diesem Zettel, falls eine läuft (3.13, 4.4). */
+  correction: { select: { id: true, timesheetNumber: true, status: true } },
 } as const
 
 type LoadedTimesheet = Awaited<
@@ -167,6 +168,8 @@ export interface TimesheetView {
   readonly availableTransitions: readonly { readonly name: TimesheetTransitionName; readonly label: string }[]
   readonly crossTenant: boolean
   readonly isCorrectionOf: string | null
+  /** Zu diesem Zettel läuft schon eine Korrekturfassung (3.13, 4.4). */
+  readonly hasCorrection: boolean
 }
 
 /** Die Zuschlagsarten des Katalogs, in der Fassung, die die Ableitung braucht. */
@@ -288,6 +291,7 @@ function asView(
     availableTransitions: offeneUebergaenge(row, identity),
     crossTenant,
     isCorrectionOf: row.correctionOfId,
+    hasCorrection: row.correction !== null,
   }
 }
 
@@ -499,70 +503,49 @@ async function befunde(
 }
 
 /**
- * P4 für den Zettelzeitraum (5.2.1, 5.2.4).
+ * P4 für den Zettelzeitraum (5.2.1, 5.2.4) — die **Sperre** aus Q36.
  *
- * **Verwendbar** heißt: am Einsatz steht ein Vergleichsentgelt. Dieselbe
- * Quelle wie in `lib/services/staffing.ts` (`comparableWage !== null`) — zwei
- * Lesarten derselben Prüfung in einem Programm wären eine zu viel. 5.2.4
- * Schritt 2 spricht vom **Eintrag** am Standort; der wird zusätzlich gelesen,
- * aber nur für die Herkunft: `wageSource = estimate` ist nach 5.2.4
- * verwendbar und erzeugt eine **Warnung**, keine Sperre.
+ * Gerechnet wird mit `entgeltstand()` aus `lib/aueg/anbindung.ts`, also mit
+ * demselben Rechenweg, den die Gherkin-Suite prüft und den die Abrechnung
+ * (4.5) für Q39 verwendet. Vorher stand hier eine eigene, mildere Lesart: ihr
+ * genügte der Wert **am Einsatz**, während 4.7 und 5.2.4 vom **Eintrag des
+ * Standorts** sprechen („kein verwendbarer Vergleichsentgelt-Eintrag", 5.5.5).
+ * Zwei Lesarten derselben Prüfung in einem Programm wären eine zu viel — und
+ * die mildere war die falsche.
  *
- * Gesperrt wird nur, wenn die Fälligkeit im Zeitraum erreicht ist **und** kein
- * Wert vorliegt. Vor der Fälligkeit ist Equal Pay nicht geschuldet — dann gibt
- * es nichts zu sperren (5.2.2).
+ * Gesperrt wird nur, wenn die Fälligkeit im Zeitraum **erreicht** ist und kein
+ * verwendbarer Eintrag vorliegt. Vor der Fälligkeit ist Equal Pay nicht
+ * geschuldet (5.2.2), und eine **Schätzung** ist verwendbar (3.3) — sie
+ * erzeugt eine Warnung, keine Sperre.
  */
 async function vergleichsentgeltstand(
   row: LoadedTimesheet,
 ): Promise<{ readonly usable: boolean; readonly message: string }> {
-  const faelligkeit = row.assignment.equalPayDueDate
-  const erreicht = faelligkeit !== null && faelligkeit <= row.periodTo
-  if (!erreicht) {
-    return {
-      usable: true,
-      message:
-        faelligkeit === null
-          ? 'P4: die Equal-Pay-Fälligkeit steht noch nicht fest (5.2.3) — kein Vergleichsentgelt ' +
-            'geschuldet, keine Sperre.'
-          : `P4: die Equal-Pay-Fälligkeit ${tag(faelligkeit)} liegt nach diesem Zeitraum (5.2.2) ` +
-            '— noch nichts geschuldet.',
-    }
-  }
-  if (row.assignment.comparableWage === null) {
-    return {
-      usable: false,
-      message:
-        `P4: die Equal-Pay-Fälligkeit ${tag(faelligkeit)} ist erreicht, am Einsatz steht aber ` +
-        'kein Vergleichsentgelt (5.2.1). Q36 trägt dafür eine **Sperre**; der Entleiher pflegt ' +
-        'den Eintrag am Standort (3.3), Meldung an KE.',
-    }
-  }
-
-  const eintrag = await prisma.comparableWageEntry.findFirst({
-    where: {
-      siteId: row.assignment.siteId,
-      activityKey: row.assignment.activityDescription,
-      validFrom: { lte: row.periodTo },
-      deactivatedAt: null,
-    },
-    orderBy: { validFrom: 'desc' },
+  const eintraege = await prisma.comparableWageEntry.findMany({
+    where: { siteId: row.assignment.siteId },
   })
-  if (eintrag !== null && eintrag.wageSource === 'estimate') {
-    return {
-      usable: true,
-      message:
-        'P4: das Vergleichsentgelt beruht auf einer Schätzung (`estimate`). Verwendbar, aber ' +
-        'kein Nachweis — Warnung statt Sperre (3.3, 5.2.4).',
-    }
-  }
+  const stand = entgeltstand({
+    standort: row.assignment.site.name,
+    taetigkeit: row.assignment.activityDescription,
+    eintraege: eintraege.map((eintrag) => ({
+      activityKey: eintrag.activityKey,
+      comparableWage: Number(eintrag.comparableWage),
+      wageSource: eintrag.wageSource,
+      validFrom: eintrag.validFrom,
+      validTo: eintrag.validTo,
+      deactivatedAt: eintrag.deactivatedAt,
+    })),
+    einsatzwert:
+      row.assignment.comparableWage === null ? null : Number(row.assignment.comparableWage),
+    abweichungBegruendet: row.assignment.comparableWageDeviationReason !== null,
+    faelligkeit: row.assignment.equalPayDueDate,
+    stichtag: null,
+    zeitraum: { von: row.periodFrom, bis: row.periodTo },
+  })
   return {
-    usable: true,
-    message:
-      `P4: für den Zeitraum liegt ein verwendbares Vergleichsentgelt vor (5.2.1)` +
-      (eintrag === null
-        ? ' — der Wert ist am Einsatz geerbt; ein eigener Eintrag zur Tätigkeit am Standort ' +
-          'wurde nicht gefunden (3.3).'
-        : ` (${eintrag.wageSource}).`),
+    usable: stand.comparableWageUsable,
+    // Die Meldung der Regel trägt ihr Kürzel schon (5.5.2).
+    message: stand.meldung,
   }
 }
 
@@ -631,99 +614,6 @@ async function factsFor(
     correctionApproved: false,
     evaluationDate,
   }
-}
-
-/* ------------------------------------------------------------------ */
-/* Abrechnungsperiode (3.9, Fußnote [33])                              */
-/* ------------------------------------------------------------------ */
-
-export interface NewBillingPeriodInput {
-  readonly periodNumber: string
-  readonly customerId: string | null
-  readonly periodFrom: Date
-  readonly periodTo: Date
-  readonly closingDate: Date
-}
-
-/**
- * Öffnet eine Abrechnungsperiode (3.9, [33]).
- *
- * Sie entsteht **offen**: 3.9 macht `openedAt` / `openedBy` zur Pflicht „beim
- * jeweiligen Vorgang", und eine Periode, die noch nicht offen ist, trägt
- * keinen Stundenzettel. Das **Schließen** gehört in das vollständige
- * Statusmodell aus 4.5 und zu *offener Frage 24* — der Prototyp bietet es
- * nicht an; die Prüfung auf `open` in 4.4 greift trotzdem.
- */
-export async function openBillingPeriod(
-  identity: LoadedIdentity,
-  input: NewBillingPeriodInput,
-  evaluationDate: Date = new Date(),
-): Promise<ActionResult> {
-  if (input.periodNumber.trim() === '') return failure('Die Periodennummer ist Pflicht (3.9).')
-  if (input.periodTo < input.periodFrom) {
-    return failure('Das Ende der Periode liegt vor ihrem Beginn (3.9).')
-  }
-  const operatorTenant = await prisma.tenant.findFirst({ where: { tenantType: 'operator' } })
-  if (operatorTenant === null) return failure('Kein Betreibermandant vorhanden (3.11).')
-  const kunde =
-    input.customerId === null
-      ? null
-      : await prisma.customer.findUnique({ where: { id: input.customerId } })
-  if (input.customerId !== null && kunde === null) return failure('Unbekannter Kunde.')
-
-  const decision = checkPermission(identity.subject, 'create', {
-    ...billingPeriodRef({
-      tenantId: operatorTenant.id,
-      customerTenantId: kunde?.tenantId ?? null,
-      status: 'open',
-    }),
-    targetStatus: 'open',
-  })
-  if (!decision.allowed) {
-    return verweigere(
-      identity,
-      decision,
-      'create',
-      'billingPeriod',
-      input.periodNumber,
-      operatorTenant.id,
-    )
-  }
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      const periode = await tx.billingPeriod.create({
-        data: {
-          tenantId: operatorTenant.id,
-          periodNumber: input.periodNumber.trim(),
-          customerId: input.customerId,
-          periodFrom: input.periodFrom,
-          periodTo: input.periodTo,
-          closingDate: input.closingDate,
-          status: 'open',
-          openedAt: evaluationDate,
-          openedById: identity.user.id,
-          createdById: identity.user.id,
-        },
-      })
-      await protokolliere(
-        tx,
-        schreibEintrag({
-          decision,
-          operation: 'create',
-          bezug: protokollbezug('billingPeriod', periode.id, periode.tenantId),
-          userId: identity.user.id,
-          occurredAt: evaluationDate,
-        }),
-      )
-    })
-  } catch (error) {
-    return asFailure(error, 'Abrechnungsperiode konnte nicht geöffnet werden')
-  }
-  return success(
-    `Abrechnungsperiode ${input.periodNumber} geöffnet (3.9). Das Schließen gehört zu 4.5 und ` +
-      'ist nicht umgesetzt (offene Frage 24).',
-  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -1286,6 +1176,31 @@ export async function decideStage(
 
   const q35 = name === 'approve' ? await befunde(row, 'Q35') : []
 
+  // Ist dieser Zettel eine **Korrekturfassung** und wird er jetzt genehmigt,
+  // dann ist der ersetzte Zettel damit ersetzt: `approved` → `corrected`
+  // (4.4). Das ist ein **Systemübergang** — die Folge der Genehmigung, nicht
+  // eine eigene Handlung (4.0, Regel 10) —, und er läuft in **derselben**
+  // Transaktion: ein genehmigter Zettel neben seinem nicht ersetzten Vorgänger
+  // wäre ein Verstoß gegen 3.13, der mit jedem Augenblick schwerer zu
+  // reparieren ist.
+  const ersetzt =
+    name === 'approve' && row.correctionOfId !== null
+      ? await ersetzungsUebergang(row.correctionOfId, evaluationDate)
+      : null
+  if (ersetzt !== null && !ersetzt.applied) {
+    await protokolliereGetrennt(
+      ablehnungsEintrag({
+        rejection: ersetzt.rejection,
+        bezug: protokollbezug('timesheet', row.correctionOfId ?? row.id, row.tenantId),
+        userId: SYSTEMKENNZEICHEN,
+        occurredAt: evaluationDate,
+        statusFrom: 'approved',
+        statusTo: 'corrected',
+      }),
+    )
+    return failure(ersetzt.rejection.reason, ersetzt.rejection.specReference)
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.timesheetApproval.update({
@@ -1325,6 +1240,22 @@ export async function decideStage(
           reason: name === 'reject' ? input.rejectionReason : input.comment,
         }),
       )
+      if (ersetzt !== null && ersetzt.applied && row.correctionOfId !== null) {
+        await tx.timesheet.update({
+          where: { id: row.correctionOfId },
+          data: { status: 'corrected' },
+        })
+        await protokolliere(
+          tx,
+          uebergangsEintrag({
+            outcome: ersetzt,
+            bezug: protokollbezug('timesheet', row.correctionOfId, row.tenantId),
+            userId: SYSTEMKENNZEICHEN,
+            occurredAt: evaluationDate,
+            reason: `Ersetzt durch die Korrekturfassung ${row.timesheetNumber} (4.4).`,
+          }),
+        )
+      }
     })
   } catch (error) {
     return asFailure(error, 'Die Entscheidung über den Stundenzettel konnte nicht gespeichert werden')
@@ -1337,7 +1268,210 @@ export async function decideStage(
   return success(
     `${outcome.label} (Stufe ${stufe.level}, ${stufe.roleCode}): ${row.timesheetNumber} steht ` +
       `jetzt auf „${TIMESHEET_STATE_LABELS[outcome.to]}" (${outcome.specReference}).` +
+      (ersetzt !== null && ersetzt.applied
+        ? ' Der ersetzte Zettel steht jetzt auf „korrigiert" (4.4); ein Beleg über die alten ' +
+          'Zeiten ist zu stornieren (4.5.2).'
+        : '') +
       (warnungen === '' ? '' : ` ${warnungen}`),
+  )
+}
+
+/**
+ * Der Systemübergang `approved` → `corrected` am **ersetzten** Zettel (4.4).
+ *
+ * Er wird ohne Subjekt angefordert: 4.4 nennt für ihn keine auslösende Rolle,
+ * und `attemptTransition` weist einen Systemübergang mit Benutzer
+ * ausdrücklich zurück (4.0, Regel 10).
+ */
+async function ersetzungsUebergang(
+  timesheetId: string,
+  evaluationDate: Date,
+): Promise<TransitionOutcome<TimesheetState>> {
+  const row = await prisma.timesheet.findUnique({
+    where: { id: timesheetId },
+    include: TIMESHEET_INCLUDE,
+  })
+  if (row === null) {
+    return {
+      applied: false,
+      rejection: {
+        kind: 'precondition',
+        reason: 'Der ersetzte Stundenzettel ist nicht auffindbar (4.4).',
+        specReference: 'SPEC 4.4, approved → corrected',
+      },
+    }
+  }
+  return attemptTransition(TIMESHEET_MODEL, 'markCorrected', {
+    currentStatus: row.status as TimesheetState,
+    resource: refFor(row),
+    facts: { ...LEERE_ZETTELTATSACHEN, correctionApproved: true, evaluationDate },
+  })
+}
+
+/**
+ * Legt eine **Korrekturfassung** zu einem genehmigten Zettel an (4.4, [28]).
+ *
+ * Der einzige Weg, genehmigte Zeiten zu ändern: „Nachträgliche Änderungen
+ * laufen ausschließlich über eine Korrekturfassung" (4.4, Ausgeschlossen). Die
+ * Fassung entsteht als **neuer** Vorgang in `recorded` — für den gilt `A` und
+ * nicht `Ä` ([28]) — und durchläuft denselben Lebenslauf: erfassen,
+ * einreichen, freigeben. Erst mit **ihrer** Genehmigung wird der ersetzte
+ * Zettel `corrected`.
+ *
+ * **Die Eindeutigkeit aus 3.13 bleibt gewahrt.** „Genau ein Zettel je Einsatz
+ * und Abrechnungsperiode; Korrekturen laufen über eine Korrekturfassung, nicht
+ * über einen zweiten Zettel." Gezählt werden deshalb die gültigen Zettel
+ * **ohne** den, der ersetzt werden soll: solange die Fassung läuft, steht sie
+ * an seiner Stelle, nicht neben ihm.
+ *
+ * **Die Periode muss offen sein.** In einer geschlossenen Periode entsteht
+ * keine Korrektur (4.5.1, Ausgeschlossen); nachträgliche Zeiten gehören dann
+ * in die nächste offene Periode.
+ */
+export async function createCorrectionTimesheet(
+  identity: LoadedIdentity,
+  input: { readonly timesheetId: string; readonly reason: string | null },
+  evaluationDate: Date = new Date(),
+): Promise<ActionResult> {
+  const original = await prisma.timesheet.findUnique({
+    where: { id: input.timesheetId },
+    include: TIMESHEET_INCLUDE,
+  })
+  if (original === null) return failure('Unbekannter Stundenzettel.')
+  if (original.status !== 'approved') {
+    return failure(
+      'Eine Korrekturfassung entsteht nur zu einem **genehmigten** Zettel; vorher wird der ' +
+        'Zettel selbst geändert (4.4, Fußnote [28]).',
+      'SPEC 4.4, approved → corrected',
+    )
+  }
+  if (input.reason === null || input.reason.trim() === '') {
+    return failure(
+      'Die Korrektur trägt eine Begründung (Fußnote [28], 3.12).',
+      'SPEC 2.2, Fußnote [28]',
+    )
+  }
+  const vorhandeneFassung = await prisma.timesheet.count({
+    where: { correctionOfId: original.id },
+  })
+  if (vorhandeneFassung > 0) {
+    return failure(
+      'Zu diesem Zettel läuft schon eine Korrekturfassung (3.13) — sie ist zu Ende zu führen, ' +
+        'statt eine zweite anzulegen.',
+      'SPEC 3.13',
+    )
+  }
+
+  const andereGueltige = await prisma.timesheet.count({
+    where: {
+      assignmentId: original.assignmentId,
+      billingPeriodId: original.billingPeriodId,
+      status: { not: 'corrected' },
+      id: { not: original.id },
+    },
+  })
+
+  const nummer = await naechsteZettelnummer(original.billingPeriod.periodNumber)
+  const ref = timesheetRef({
+    tenantId: original.tenantId,
+    customerTenantId: original.assignment.customer.tenantId,
+    supplierTenantId: original.assignment.supplier.tenantId,
+    status: 'recorded',
+    recordedById: identity.user.id,
+    submittedById: null,
+    siteId: original.assignment.siteId,
+    costCenterId: original.assignment.costCenterId,
+  })
+  const outcome = attemptTransition(TIMESHEET_MODEL, 'create', {
+    currentStatus: null,
+    subject: identity.subject,
+    resource: ref,
+    facts: {
+      ...LEERE_ZETTELTATSACHEN,
+      assignmentStatus: original.assignment.status as TimesheetFacts['assignmentStatus'],
+      billingPeriodStatus: original.billingPeriod.status,
+      timesheetExistsForPeriod: andereGueltige > 0,
+      actingUserId: identity.user.id,
+      recordedById: identity.user.id,
+      evaluationDate,
+    },
+  })
+  if (!outcome.applied) {
+    await protokolliereGetrennt(
+      ablehnungsEintrag({
+        rejection: outcome.rejection,
+        bezug: protokollbezug('timesheet', nummer, original.tenantId),
+        userId: identity.user.id,
+        occurredAt: evaluationDate,
+        statusTo: 'recorded',
+        operation: 'create',
+      }),
+    )
+    return failure(outcome.rejection.reason, outcome.rejection.specReference)
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const fassung = await tx.timesheet.create({
+        data: {
+          tenantId: original.tenantId,
+          timesheetNumber: nummer,
+          assignmentId: original.assignmentId,
+          billingPeriodId: original.billingPeriodId,
+          periodFrom: original.periodFrom,
+          periodTo: original.periodTo,
+          recordedById: identity.user.id,
+          status: 'recorded',
+          correctionOfId: original.id,
+          createdById: identity.user.id,
+        },
+      })
+      // Die Positionen des ersetzten Zettels werden **übernommen**: eine
+      // Korrektur ändert einzelne Zeiten, sie beginnt nicht bei null. Was zu
+      // ändern ist, ändert die erfassende Seite danach (3.8).
+      for (const eintrag of original.entries) {
+        await tx.timeEntry.create({
+          data: {
+            timesheetId: fassung.id,
+            workDate: eintrag.workDate,
+            startMinute: eintrag.startMinute,
+            endMinute: eintrag.endMinute,
+            breakMinutes: eintrag.breakMinutes,
+            hours: eintrag.hours,
+            note: eintrag.note,
+            costCenterId: eintrag.costCenterId,
+            correctedFromId: eintrag.id,
+            correctionReason: input.reason,
+            createdById: identity.user.id,
+            premiums: {
+              create: eintrag.premiums.map((zuschlag) => ({
+                premiumTypeId: zuschlag.premiumTypeId,
+                hours: zuschlag.hours,
+                origin: zuschlag.origin,
+                createdById: identity.user.id,
+              })),
+            },
+          },
+        })
+      }
+      await protokolliere(
+        tx,
+        uebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('timesheet', fassung.id, fassung.tenantId),
+          userId: identity.user.id,
+          occurredAt: evaluationDate,
+          reason: input.reason,
+        }),
+      )
+    })
+  } catch (error) {
+    return asFailure(error, 'Die Korrekturfassung konnte nicht angelegt werden')
+  }
+  return success(
+    `Korrekturfassung ${nummer} zu ${original.timesheetNumber} angelegt (4.4, Fußnote [28]). ` +
+      'Die Positionen sind übernommen; der ersetzte Zettel bleibt genehmigt, bis die Fassung ' +
+      'genehmigt ist.',
   )
 }
 
@@ -1418,14 +1552,12 @@ export interface TimesheetOptions {
     readonly derivationBasis: string
   }[]
   readonly mayCreate: boolean
-  readonly mayOpenPeriod: boolean
 }
 
 export async function loadTimesheetOptions(
   identity: LoadedIdentity,
   evaluationDate: Date = new Date(),
 ): Promise<TimesheetOptions> {
-  const operatorTenant = await prisma.tenant.findFirst({ where: { tenantType: 'operator' } })
   const einsaetze = await prisma.assignment.findMany({
     where: { status: { in: ['active', 'interrupted', 'completed', 'terminatedEarly'] } },
     include: {
@@ -1472,18 +1604,6 @@ export async function loadTimesheetOptions(
     orderBy: { code: 'asc' },
   })
 
-  const periodenRecht =
-    operatorTenant === null
-      ? false
-      : checkPermission(identity.subject, 'create', {
-          ...billingPeriodRef({
-            tenantId: operatorTenant.id,
-            customerTenantId: null,
-            status: 'open',
-          }),
-          targetStatus: 'open',
-        }).allowed
-
   return {
     assignments: erlaubt,
     periods: perioden.map((periode) => ({
@@ -1497,6 +1617,5 @@ export async function loadTimesheetOptions(
       derivationBasis: art.derivationBasis,
     })),
     mayCreate: erlaubt.length > 0,
-    mayOpenPeriod: periodenRecht,
   }
 }

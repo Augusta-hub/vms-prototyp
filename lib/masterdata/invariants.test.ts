@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DokumentInvarianteError,
+  pruefeAbrechnungsbeleg,
   pruefeAnsprechpartner,
   pruefeDokument,
   pruefeDokumentOderWirf,
@@ -330,7 +331,7 @@ describe('Preisposition (SPEC 3.3)', () => {
         itemType: 'baseRate',
         qualificationLevel: null,
         hourlyRate: null,
-        premiumTypeRef: null,
+        premiumTypeId: null,
         premiumValue: null,
       }).map((v) => v.feld),
     ).toEqual(['qualificationLevel', 'hourlyRate'])
@@ -342,10 +343,10 @@ describe('Preisposition (SPEC 3.3)', () => {
         itemType: 'premiumRate',
         qualificationLevel: null,
         hourlyRate: null,
-        premiumTypeRef: null,
+        premiumTypeId: null,
         premiumValue: null,
       }).map((v) => v.feld),
-    ).toEqual(['premiumTypeRef', 'premiumValue'])
+    ).toEqual(['premiumTypeId', 'premiumValue'])
   })
 
   it('nimmt die vollständigen Positionen an', () => {
@@ -354,7 +355,7 @@ describe('Preisposition (SPEC 3.3)', () => {
         itemType: 'baseRate',
         qualificationLevel: 'Fachkraft',
         hourlyRate: '24.50',
-        premiumTypeRef: null,
+        premiumTypeId: null,
         premiumValue: null,
       }),
     ).toEqual([])
@@ -363,7 +364,7 @@ describe('Preisposition (SPEC 3.3)', () => {
         itemType: 'premiumRate',
         qualificationLevel: null,
         hourlyRate: null,
-        premiumTypeRef: 'ZA-1',
+        premiumTypeId: 'ZA-1',
         premiumValue: '25.00',
       }),
     ).toEqual([])
@@ -534,5 +535,73 @@ describe('Zeitposition: die vier Invarianten (SPEC 3.8)', () => {
   it('wirft mit Fundstelle', () => {
     expect(() => pruefeZeitpositionOderWirf(tagessumme({ hours: 0 }), 'ZP-1')).toThrow(/SPEC 3\.8/)
     expect(() => pruefeZeitpositionOderWirf(tagessumme(), 'ZP-1')).not.toThrow()
+  })
+})
+
+describe('Abrechnungsbeleg (SPEC 3.9)', () => {
+  const beleg = {
+    documentType: 'customerInvoice',
+    direction: 'sales',
+    customerId: 'kunde-1',
+    supplierId: null,
+    taxRate: 19,
+  }
+
+  it('nimmt einen Verkaufsbeleg mit Kunde und Steuersatz an', () => {
+    expect(pruefeAbrechnungsbeleg(beleg)).toEqual([])
+  })
+
+  it('nimmt eine Gutschrift mit Lieferant an', () => {
+    expect(
+      pruefeAbrechnungsbeleg({
+        documentType: 'supplierCreditNote',
+        direction: 'purchase',
+        customerId: null,
+        supplierId: 'lieferant-1',
+        taxRate: 19,
+      }),
+    ).toEqual([])
+  })
+
+  it('beanstandet eine Seite, die nicht zur Belegart passt', () => {
+    // Daran hängt mehr als eine Anzeige: die Sichtbarkeit (2.3) und die
+    // Fußnoten [31] und [32] richten sich nach der Seite.
+    expect(
+      pruefeAbrechnungsbeleg({ ...beleg, documentType: 'supplierCreditNote' }).map((v) => v.feld),
+    ).toEqual(['direction'])
+  })
+
+  it('beanstandet einen Verkaufsbeleg ohne Kunden', () => {
+    expect(pruefeAbrechnungsbeleg({ ...beleg, customerId: null }).map((v) => v.feld)).toEqual([
+      'customerId',
+    ])
+  })
+
+  it('beanstandet einen Verkaufsbeleg **mit** Lieferanten — ein Beleg hat eine Gegenpartei', () => {
+    expect(
+      pruefeAbrechnungsbeleg({ ...beleg, supplierId: 'lieferant-1' }).map((v) => v.feld),
+    ).toEqual(['supplierId'])
+  })
+
+  it('beanstandet eine Gutschrift ohne Lieferanten und mit Kunden', () => {
+    expect(
+      pruefeAbrechnungsbeleg({
+        documentType: 'supplierCreditNote',
+        direction: 'purchase',
+        customerId: 'kunde-1',
+        supplierId: null,
+        taxRate: 19,
+      }).map((v) => v.feld),
+    ).toEqual(['supplierId', 'customerId'])
+  })
+
+  it('beanstandet einen fehlenden Steuersatz und nennt offene Frage 52', () => {
+    const verletzungen = pruefeAbrechnungsbeleg({ ...beleg, taxRate: null })
+    expect(verletzungen.map((v) => v.feld)).toEqual(['taxRate'])
+    expect(verletzungen[0]?.grund).toContain('offene Frage 52')
+  })
+
+  it('nimmt 0 % an — ein Satz von null ist eine Angabe, kein fehlender Wert', () => {
+    expect(pruefeAbrechnungsbeleg({ ...beleg, taxRate: 0 })).toEqual([])
   })
 })

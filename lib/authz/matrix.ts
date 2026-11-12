@@ -387,13 +387,40 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     supplierCoordinator: { read: [9] },
   },
 
+  // | Abrechnungsbeleg, Belegposition (3.9)
+  // | MA: A L Ä S X | MD: A L S[30] | KB: – | KG: – | KE: L[2] S[31] |
+  // | LD: L[7] S[32] | LA: L[7] | AN: – |
+  //
+  // Die Belegposition teilt diese Zeile (4.5, Satz 2). Drei Dinge sind an ihr
+  // bemerkenswert, und alle drei sind Absicht:
+  //
+  //  - **`MD` trägt kein `Ä`.** Eine inhaltliche Änderung kann nur `MA`
+  //    vornehmen; der Regelfall ist Storno und Neuerstellung (4.5.2,
+  //    Zustand `created`). Deshalb steht hier `create`, `read` und
+  //    `transition` — und kein `update`.
+  //  - **`KB` und `KG` fehlen vollständig.** Der Beleg ist kaufmännisch;
+  //    Bedarfsträger und Genehmiger sehen ihn nicht. Das ist die einzige Zeile
+  //    der Kundenseite, in der nur `KE` steht.
+  //  - **Die Gegenseiten tragen kein `A`.** Im Gutschriftverfahren
+  //    (Entscheidung zu *Frage 6*) legt der Lieferant keinen Beleg an ([32]);
+  //    Variante B würde hier ein `A[7]` verlangen und ist nicht umgesetzt
+  //    (4.5.2).
+  billingDocument: {
+    operatorAdmin: MA_FULL,
+    operatorCoordinator: { create: [], read: [], transition: [30] },
+    procurementController: { read: [2], transition: [31] },
+    supplierCoordinator: { read: [7], transition: [32] },
+    supplierAdmin: { read: [7] },
+  },
+
   // | Abrechnungsperiode (3.9)
   // | MA: A L Ä S X | MD: L S[33] | KB: – | KG: – | KE: L[2] | LD: L[7] |
   // | LA: L[7] | AN: – |
   //
-  // Belegt, weil 4.4 sie braucht: ein Stundenzettel gehört zu genau einer
-  // Periode, und erfasst wird nur in einer offenen (3.9). Der Beleg selbst
-  // (`billingDocument`) bleibt unbelegt, bis 4.5 ausgearbeitet ist.
+  // `MD` trägt **kein** `A`, aber `S[33]` — und [33] lautet „Öffnen und
+  // Schließen einer Abrechnungsperiode". Das Öffnen ist damit ein Übergang und
+  // keine Anlage; lib/status/billingPeriod.ts sagt es am Übergang selbst
+  // (`operation: 'transition'`).
   billingPeriod: {
     operatorAdmin: MA_FULL,
     operatorCoordinator: { read: [], transition: [33] },

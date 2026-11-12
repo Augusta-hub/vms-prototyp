@@ -64,6 +64,10 @@ export interface Welt {
   /** Die Urkunde zur AÜG-Erlaubnis des ersten Lieferanten (3.2, 3.10). */
   readonly erlaubnisurkunde: string
   readonly verkaufsposition: string
+  /** Die Einkaufspreisliste des ersten Lieferanten (3.3) — Zuschlagssätze. */
+  readonly einkaufsliste: string
+  /** Die Kundenpreisliste (3.3) — die andere Seite derselben Zuschlagsart. */
+  readonly verkaufsliste: string
 }
 
 /**
@@ -569,6 +573,8 @@ export async function baueWelt(): Promise<Welt> {
     zweiteEinkaufsposition: zweiteEinkaufsposition.id,
     erlaubnisurkunde: erlaubnisurkunden.get(lieferant.id) ?? '',
     verkaufsposition: verkaufsposition.id,
+    einkaufsliste: einkaufsliste.id,
+    verkaufsliste: verkaufsliste.id,
   }
 }
 
@@ -936,4 +942,151 @@ export async function legeStufenfolgeAn(
       data: { customerId: welt.kunde, level: index + 1, roleCode },
     })
   }
+}
+
+/**
+ * Ein **Zuschlagssatz** in der Preisliste einer Seite (3.3).
+ *
+ * Ohne ihn entsteht kein Beleg über einen Zuschlag: 4.5.2 macht die
+ * Preisposition der jeweiligen Seite zur Vorbedingung, und der
+ * Vorbelegungswert der Zuschlagsart tritt **nicht** an ihre Stelle. Die beiden
+ * Seiten tragen bewusst verschiedene Werte — ihre Differenz ist die Marge des
+ * Betreibers ([41], [42]).
+ */
+export async function legeZuschlagssatzAn(
+  welt: Welt,
+  eigenes: {
+    readonly artId: string
+    readonly seite: 'sales' | 'purchase'
+    readonly wert: string
+    readonly gueltigVon?: Date | null
+    readonly gueltigBis?: Date | null
+  },
+): Promise<string> {
+  const position = await prisma.rateCardItem.create({
+    data: {
+      rateCardId: eigenes.seite === 'sales' ? welt.verkaufsliste : welt.einkaufsliste,
+      itemType: 'premiumRate',
+      premiumTypeId: eigenes.artId,
+      premiumValue: eigenes.wert,
+      validFrom: eigenes.gueltigVon ?? null,
+      validTo: eigenes.gueltigBis ?? null,
+    },
+  })
+  return position.id
+}
+
+/**
+ * Ein **genehmigter** Stundenzettel mit Positionen und Zuschlägen (3.8).
+ *
+ * Geschrieben wird direkt, nicht über den Weg durch 4.4: dieser Weg ist in
+ * tests/services/timesheets.test.ts geprüft, und die Abrechnung braucht sein
+ * **Ergebnis**. Die Freigabeschritte entstehen mit, damit der Zettel nicht
+ * genehmigt ohne entschiedene Stufen dasteht — das wäre eine Lage, die 4.4
+ * nicht erzeugen kann.
+ */
+export async function legeGenehmigtenZettelAn(
+  welt: Welt,
+  eigenes: {
+    readonly nummer: string
+    readonly einsatz: string
+    readonly periode: string
+    readonly von: Date
+    readonly bis: Date
+    readonly positionen: readonly {
+      readonly tag: Date
+      readonly stunden: string
+      readonly zuschlaege?: readonly { readonly artId: string; readonly stunden: string }[]
+    }[]
+    readonly status?: 'approved' | 'inApproval' | 'recorded'
+  },
+): Promise<string> {
+  const status = eigenes.status ?? 'approved'
+  const zettel = await prisma.timesheet.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      timesheetNumber: eigenes.nummer,
+      assignmentId: eigenes.einsatz,
+      billingPeriodId: eigenes.periode,
+      periodFrom: eigenes.von,
+      periodTo: eigenes.bis,
+      recordedById: welt.lieferantDisponent,
+      submittedAt: status === 'recorded' ? null : eigenes.bis,
+      submittedById: status === 'recorded' ? null : welt.lieferantDisponent,
+      approvedAt: status === 'approved' ? eigenes.bis : null,
+      approvedById: status === 'approved' ? welt.zweiterDisponent : null,
+      status,
+    },
+  })
+  if (status !== 'recorded') {
+    for (const [index, roleCode] of (['demandOwner', 'operatorCoordinator'] as const).entries()) {
+      await prisma.timesheetApproval.create({
+        data: {
+          timesheetId: zettel.id,
+          level: index + 1,
+          assignedRoleCode: roleCode,
+          decision: status === 'approved' ? 'approved' : null,
+          decidedAt: status === 'approved' ? eigenes.bis : null,
+          decidedById:
+            status === 'approved'
+              ? roleCode === 'demandOwner'
+                ? welt.bedarfstraeger
+                : welt.zweiterDisponent
+              : null,
+        },
+      })
+    }
+  }
+  for (const position of eigenes.positionen) {
+    await prisma.timeEntry.create({
+      data: {
+        timesheetId: zettel.id,
+        workDate: position.tag,
+        hours: position.stunden,
+        premiums: {
+          create: (position.zuschlaege ?? []).map((zuschlag) => ({
+            premiumTypeId: zuschlag.artId,
+            hours: zuschlag.stunden,
+            origin: 'declared',
+          })),
+        },
+      },
+    })
+  }
+  return zettel.id
+}
+
+/**
+ * Ein **Vergleichsentgelt-Eintrag** am Standort der Welt (3.3).
+ *
+ * Er ist die Grundlage von P4: 5.2.4 Schritt 2 prüft den Eintrag des
+ * **Standorts** zur Tätigkeit des Einsatzes, nicht den Wert am Einsatz. Ohne
+ * ihn ist P4 nicht erfüllt, auch wenn am Einsatz ein Betrag steht — genau
+ * diese Unterscheidung trägt die Sperre aus Q36.
+ */
+export async function legeVergleichsentgeltAn(
+  welt: Welt,
+  eigenes: {
+    readonly taetigkeit?: string
+    readonly betrag?: string
+    readonly quelle?: 'collectiveAgreement' | 'companyAgreement' | 'individualContract' | 'estimate'
+    readonly gueltigVon?: Date
+    readonly gueltigBis?: Date | null
+  } = {},
+): Promise<string> {
+  const eintrag = await prisma.comparableWageEntry.create({
+    data: {
+      tenantId: welt.kundenMandant,
+      siteId: welt.standort,
+      activityKey: eigenes.taetigkeit ?? 'Montage von Baugruppen an der Linie 2',
+      comparableWage: eigenes.betrag ?? '19.4200',
+      currency: 'EUR',
+      wageSource: eigenes.quelle ?? 'collectiveAgreement',
+      validFrom: eigenes.gueltigVon ?? tag('2025-01-01'),
+      validTo: eigenes.gueltigBis ?? null,
+      reportedAt: eigenes.gueltigVon ?? tag('2025-01-01'),
+      reportedById: welt.einkauf,
+    },
+  })
+  return eintrag.id
 }

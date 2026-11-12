@@ -223,7 +223,13 @@ async function main(): Promise<void> {
     'INSERT INTO "AuditSequence" ("id", "lastEntryNumber") VALUES (1, 0) ON CONFLICT ("id") DO NOTHING',
   )
   // 3.8 und 3.9 zuerst: der Zuschlag hängt an der Zeitposition, diese am
-  // Zettel, der Zettel an Einsatz und Periode.
+  // Zettel, der Zettel an Einsatz und Periode — und der **Beleg** am Zettel,
+  // deshalb geht er allen voraus.
+  await prisma.billingDocumentItem.deleteMany()
+  // Der Storno verweist auf den stornierten Beleg (3.9); die Kante wird vor dem
+  // Löschen gelöst, wie bei Kandidat und Personenidentität.
+  await prisma.billingDocument.updateMany({ data: { cancellationOfId: null } })
+  await prisma.billingDocument.deleteMany()
   await prisma.timeEntryPremium.deleteMany()
   await prisma.timeEntry.deleteMany()
   await prisma.timesheetApproval.deleteMany()
@@ -858,12 +864,6 @@ async function main(): Promise<void> {
             itemType: 'baseRate',
             qualificationLevel: 'Fachkraft Metall',
             hourlyRate: 31.9,
-            createdById: operatorAdminId,
-          },
-          {
-            itemType: 'premiumRate',
-            premiumTypeRef: 'Nachtzuschlag',
-            premiumValue: 25,
             createdById: operatorAdminId,
           },
         ],
@@ -2638,8 +2638,60 @@ async function main(): Promise<void> {
     })
   }
 
+  // ── Zuschlagssätze in den Preislisten (3.3) ──────────────────────────────
+  //
+  // Erst hier, weil die Preisposition die **Zuschlagsart** verweist (3.3: „1
+  // Zuschlagsart : n Preispositionen") und der Katalog gerade entstanden ist.
+  // Ohne diese Sätze entsteht kein Beleg über einen Zuschlag: 4.5.2 macht die
+  // Preisposition der jeweiligen Seite zur Vorbedingung, und der
+  // Vorbelegungswert der Zuschlagsart tritt **nicht** an ihre Stelle — er ist
+  // keine Vereinbarung zwischen den Parteien.
+  //
+  // Kunden- und Einkaufsseite tragen **verschiedene** Werte; die Differenz ist
+  // die Marge des Betreibers und für beide Gegenseiten unsichtbar ([41], [42]).
+  const zuschlagssaetze: readonly {
+    readonly code: string
+    readonly kunde: string
+    readonly lieferant: string
+  }[] = [
+    { code: 'NACHT', kunde: '25.0000', lieferant: '20.0000' },
+    { code: 'SONNTAG', kunde: '55.0000', lieferant: '50.0000' },
+    { code: 'FEIERTAG', kunde: '110.0000', lieferant: '100.0000' },
+    { code: 'UEBER', kunde: '30.0000', lieferant: '25.0000' },
+    // Erschwernis rechnet absolut (3.8): ein Betrag je Stunde, kein Prozentsatz.
+    { code: 'ERSCH', kunde: '2.0000', lieferant: '1.5000' },
+  ]
+  for (const satz of zuschlagssaetze) {
+    const art = await prisma.premiumType.findUniqueOrThrow({ where: { code: satz.code } })
+    for (const preisliste of await prisma.rateCard.findMany()) {
+      await prisma.rateCardItem.create({
+        data: {
+          rateCardId: preisliste.id,
+          itemType: 'premiumRate',
+          premiumTypeId: art.id,
+          premiumValue:
+            preisliste.rateCardScope === 'customerRateCard' ? satz.kunde : satz.lieferant,
+          createdById: operatorAdminId,
+          createdAt: SEED_DATE,
+        },
+      })
+    }
+  }
+
+  // Die Nummernkreise der Belege (3.9) auf null stellen: der Seed setzt den
+  // Bestand zurück, und eine weiterzählende Nummer wäre eine Lücke in einem
+  // Kreis, dessen Belege es nicht mehr gibt.
+  for (const documentType of ['customerInvoice', 'supplierCreditNote', 'supplierInvoice'] as const) {
+    await prisma.billingNumberRange.upsert({
+      where: { documentType },
+      update: { lastNumber: 0 },
+      create: { documentType, lastNumber: 0 },
+    })
+  }
+
   // Zwei offene Perioden, damit ein Zettel anzulegen ist (3.9). Das Schließen
-  // gehört zu 4.5 und ist nicht umgesetzt (offene Frage 24).
+  // steht seit der Abrechnung (4.5.1); es verlangt, dass **jeder** Zettel der
+  // Periode entschieden und **jeder** Beleg abgegeben ist (offene Frage 24).
   for (const periode of [
     {
       periodNumber: '2026-10',
@@ -2752,6 +2804,7 @@ async function main(): Promise<void> {
     'Nachweise (3.10)': await prisma.document.count(),
     'Zuschlagsarten (3.8)': await prisma.premiumType.count(),
     'Abrechnungsperioden (3.9)': await prisma.billingPeriod.count(),
+    'Abrechnungsbelege (3.9)': await prisma.billingDocument.count(),
     'Freigabestufen je Kunde (3.1)': await prisma.customerTimesheetApprovalStage.count(),
   }
   console.log('Synthetische Demo-Daten angelegt:', counts)

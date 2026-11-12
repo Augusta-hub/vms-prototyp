@@ -21,6 +21,10 @@
  *  - **P1** an die Zeilen am Profilvorschlag, am Einsatz und an der
  *    Verlängerung (Q07, Q11, Q14, Q23, Q26, Q28, Q30) samt den abgeleiteten
  *    Feldern `maxDurationEndDate` und `countedDurationDays` (3.7),
+ *  - **P4** an Q36 (Stundenzettel, **Sperre**) und Q39 (Beleg, Warnung) — mit
+ *    **einer** Lesart für beide Stellen,
+ *  - **P5** an Q40 (Beleg) — die Zuordnung des Branchenzuschlagsschemas und
+ *    die Plausibilität der abgerechneten Zuschlagsarten,
  *  - **P3** an die Zeilen am Einsatz und an der Verlängerung samt dem
  *    abgeleiteten Feld `equalPayDueDate` (3.7) und der Tatsache
  *    `equalPayDueFromFirstDay`, die zusammen mit `comparableWagePresent` die
@@ -32,10 +36,9 @@
  *  - **P10** an Q10 und Q21 — die Pflichtnachweise aus dem Katalog in 5.4.4,
  *  - **P11** an Q09, Q13, Q17 und Q47.
  *
- * **Nicht angebunden** sind die Zeilen am Beleg und am Lieferantenstatus
- * (Q37, Q38, Q41 bis Q44): sie hängen an den Statusmodellen 4.4, 4.5 und 4.6,
- * die es noch nicht gibt. Das Prüfwerk rechnet sie bereits, nur gibt es dort
- * keinen Übergang, an dem sie hängen könnten.
+ * **Nicht angebunden** ist allein P2: die Unterbrechung wirkt über
+ * `maxDurationEndDate` am Einsatz, und das Feld wird dort fortgeschrieben
+ * (5.1.4).
  *
  * **P7 ist nicht angebunden, und zwar nicht aus Zeitmangel.** 5.3.2 hält fest,
  * dass Kapitel 3 für die Arbeitskampfanzeige **kein Feld** am Standort und für
@@ -60,6 +63,11 @@ import {
   type Grenzherkunft,
 } from './regeln/p1Hoechstdauer'
 import { pruefeEqualPayFrist, type Fristfall } from './regeln/p3EqualPayFrist'
+import {
+  pruefeVergleichsentgelt,
+  type Entgeltquelle,
+} from './regeln/p4Vergleichsentgelt'
+import { pruefeBranchenzuschlag } from './regeln/p5Branchenzuschlag'
 import { pruefeDrehtuer } from './regeln/p6Drehtuer'
 import { pruefeKonkretisierung, type Pruefstufe } from './regeln/p8Konkretisierung'
 import { pruefeArbeitsverhaeltnis } from './regeln/p11Arbeitsverhaeltnis'
@@ -377,6 +385,189 @@ function verleiherzuordnungAmStichtag(
   return (
     [...einschlaegig].sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0] ?? null
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* P4 und P5 — Vergleichsentgelt und Branchenzuschlag (SPEC 5.2)       */
+/* ------------------------------------------------------------------ */
+
+/** Ein Vergleichsentgelt-Eintrag, wie 3.3 ihn führt. */
+export interface Vergleichsentgeltzeile {
+  readonly activityKey: string
+  readonly comparableWage: number
+  readonly wageSource: string
+  readonly validFrom: Date
+  readonly validTo: Date | null
+  readonly deactivatedAt: Date | null
+}
+
+/** Das Ergebnis von P4 für die Tatsachen aus 4.4 und 4.5 (SPEC 5.2.4). */
+export interface Entgeltstand {
+  /**
+   * `comparableWageUsable` — die Tatsache, die 4.4 als Vorbedingung führt und
+   * die die **Sperre aus Q36** trägt.
+   *
+   * Sie ist genau die Bedingung, die 4.7 schreibt: „Fälligkeit erreicht,
+   * **kein verwendbarer** Vergleichsentgelt-Eintrag" (5.5.5, Tabelle
+   * „Bestätigt mit Präzisierung"). Zwei Teile, beide notwendig — vor der
+   * Fälligkeit ist Equal Pay nicht geschuldet (5.2.2), und eine **Schätzung**
+   * ist verwendbar (3.3).
+   */
+  readonly comparableWageUsable: boolean
+  /** Die Fälligkeit ist am Stichtag oder im Prüfzeitraum erreicht (5.2.6). */
+  readonly faelligkeitErreicht: boolean
+  /** Ein Eintrag liegt vor und ist eindeutig (5.2.4, Schritt 2). */
+  readonly verwendbar: boolean
+  /** Der Eintrag ist ein **Nachweis** — keine Schätzung (3.3). */
+  readonly nachweis: boolean
+  readonly schaetzung: boolean
+  /** Ein Treffer im Sinne von 5.2.4 — unabhängig von der Ergebnisart. */
+  readonly treffer: boolean
+  /** Der Treffer ist auf eine Warnung begrenzt (Schätzung, 5.2.4). */
+  readonly nurWarnung: boolean
+  readonly mangel: string | null
+  readonly meldung: string
+}
+
+/**
+ * P4 für einen Vorgang (SPEC 5.2.4).
+ *
+ * **Eine** Lesart für beide Stellen, an denen P4 hängt: die Genehmigung des
+ * Stundenzettels (Q36, **Sperre**) und die Belegerstellung (Q39, Warnung).
+ * Zwei Lesarten derselben Prüfung in einem Programm wären eine zu viel — und
+ * genau sie waren der Fehler, den die Abrechnung aufgedeckt hat: der
+ * Zettelgenehmigung genügte bisher der Wert **am Einsatz**, während 4.7 und
+ * 5.2.4 vom **Eintrag des Standorts** sprechen.
+ *
+ * **Der Prüfzeitraum ist nicht der Tag des Aufrufs** (5.0): am Zettel sein
+ * Zeitraum, am Beleg „frühester `periodFrom` bis spätester `periodTo` der
+ * zugrunde liegenden Zettel".
+ */
+export function entgeltstand(eingabe: {
+  readonly standort: string
+  /** `assignment.activityDescription` (3.7) — wählt den Eintrag (Schritt 1). */
+  readonly taetigkeit: string | null
+  readonly eintraege: readonly Vergleichsentgeltzeile[]
+  /** `assignment.comparableWage` (3.7). */
+  readonly einsatzwert: number | null
+  readonly abweichungBegruendet: boolean
+  /** `assignment.equalPayDueDate` (3.7, Ergebnis aus 5.2.3). */
+  readonly faelligkeit: Date | null
+  readonly stichtag: Date | null
+  readonly zeitraum: { readonly von: Date; readonly bis: Date | null } | null
+}): Entgeltstand {
+  const zeitraum = alsPruefzeitraum(eingabe.stichtag, eingabe.zeitraum)
+  // Der letzte Tag des Prüfzeitraums entscheidet über die Gültigkeit des
+  // Eintrags: ein Eintrag, der im Zeitraum beginnt, gilt für ihn (5.5.3).
+  const bezugstag =
+    zeitraum === null ? null : new Date(`${zeitraum.bis}T00:00:00.000Z`)
+  const gueltige =
+    eingabe.taetigkeit === null
+      ? []
+      : eingabe.eintraege.filter(
+          (eintrag) =>
+            eintrag.deactivatedAt === null &&
+            eintrag.activityKey === eingabe.taetigkeit &&
+            (bezugstag === null || eintrag.validFrom <= bezugstag) &&
+            (eintrag.validTo === null || bezugstag === null || eintrag.validTo >= bezugstag),
+        )
+  // Mehrere gültige Einträge sind nach 5.2.4 **kein** Eintrag; ausgewählt wird
+  // keiner. Der Betrag des einzigen dient dem Vergleich mit dem Einsatzwert.
+  const einziger = gueltige.length === 1 ? gueltige[0] : undefined
+
+  const ergebnis = pruefeVergleichsentgelt({
+    standort: eingabe.standort,
+    taetigkeit: eingabe.taetigkeit,
+    taetigkeitFehlt: eingabe.taetigkeit === null || eingabe.taetigkeit.trim() === '',
+    anzahlEintraege: gueltige.length,
+    eintragsbetrag: einziger?.comparableWage ?? null,
+    quelle: alsEntgeltquelle(einziger?.wageSource ?? null),
+    einsatzwert: eingabe.einsatzwert,
+    einsatzwertGesetzt: eingabe.einsatzwert !== null,
+    abweichungBegruendet: eingabe.abweichungBegruendet,
+    stichtag: eingabe.stichtag === null ? null : alsTag(eingabe.stichtag),
+    zeitraum,
+    faelligkeit: eingabe.faelligkeit === null ? null : alsTag(eingabe.faelligkeit),
+  })
+
+  return {
+    // Die Bedingung aus Q36, Wort für Wort: erreicht **und** nicht verwendbar.
+    comparableWageUsable: !ergebnis.faelligkeitErreicht || ergebnis.verwendbar,
+    faelligkeitErreicht: ergebnis.faelligkeitErreicht,
+    verwendbar: ergebnis.verwendbar,
+    nachweis: ergebnis.nachweis,
+    schaetzung: ergebnis.schaetzung,
+    treffer: ergebnis.treffer,
+    nurWarnung: ergebnis.nurWarnung,
+    mangel: ergebnis.mangel,
+    meldung: ergebnis.meldung,
+  }
+}
+
+function alsEntgeltquelle(wert: string | null): Entgeltquelle | null {
+  if (wert === null) return null
+  return wert === 'collectiveAgreement' ||
+    wert === 'companyAgreement' ||
+    wert === 'individualContract' ||
+    wert === 'estimate'
+    ? wert
+    : null
+}
+
+/** Das Ergebnis von P5 für die Zeilen Q19 und Q40 (SPEC 5.2.5). */
+export interface Zuschlagsstand {
+  readonly schema: string | null
+  readonly anwendbar: boolean
+  readonly brancheBestimmbar: boolean
+  /** Die ermittelte Stufe — **nicht** der Betrag (5.2.5, Schritt 3). */
+  readonly stufe: string | null
+  readonly positionenAbweichend: boolean
+  readonly treffer: boolean
+  readonly mangel: string | null
+  readonly meldung: string
+}
+
+/**
+ * P5 für einen Vorgang (SPEC 5.2.5) — am Beleg die Zeile **Q40**.
+ *
+ * Geprüft wird die **Zuordnung**, nicht die Höhe: „das Schema wirkt auf
+ * Zuschlagsstufen, nicht auf die Zulässigkeit der Überlassung" (5.5.5). Die
+ * Stufenfolge erreicht die Regel als Konfiguration am Schema (3.3); ist keine
+ * hinterlegt, bleibt die Stufe offen — und zwar sichtbar. Eine erfundene
+ * Stufenfolge wäre ein Tarifwert im Code (CLAUDE.md).
+ *
+ * `positionenAbweichend` ist die Frage, die **nur am Beleg** gestellt werden
+ * kann: passen die abgerechneten Zuschlagsarten zur ermittelten Stufe
+ * (5.2.5, Schritt 4)? Ohne bestimmbare Stufe lässt sie sich nicht beantworten;
+ * der Aufrufer gibt dann `false` und die Meldung sagt, warum.
+ */
+export function zuschlagsstand(eingabe: {
+  readonly verleiherzuordnungen: readonly Verleiherzeile[]
+  readonly stichtag: Date | null
+  readonly brancheBestimmbar: boolean | null
+  readonly ueberlassungstage: number | null
+  readonly positionenAbweichend: boolean
+  readonly stufenfolge?: readonly { readonly abTagen: number; readonly bezeichnung: string }[]
+}): Zuschlagsstand {
+  const zuordnung = verleiherzuordnungAmStichtag(eingabe.verleiherzuordnungen, eingabe.stichtag)
+  const ergebnis = pruefeBranchenzuschlag({
+    schema: zuordnung?.industryPremiumScheme ?? null,
+    schemaAusdruecklichOhne: zuordnung !== null && zuordnung.industryPremiumScheme === null,
+    brancheBestimmbar: eingabe.brancheBestimmbar,
+    ueberlassungstage: eingabe.ueberlassungstage,
+    positionenAbweichend: eingabe.positionenAbweichend,
+    ...(eingabe.stufenfolge !== undefined ? { stufenfolge: eingabe.stufenfolge } : {}),
+  })
+  return {
+    schema: ergebnis.schema,
+    anwendbar: ergebnis.anwendbar,
+    brancheBestimmbar: ergebnis.brancheBestimmbar,
+    stufe: ergebnis.stufe,
+    positionenAbweichend: ergebnis.positionenAbweichend,
+    treffer: ergebnis.treffer,
+    mangel: ergebnis.mangel,
+    meldung: ergebnis.meldung,
+  }
 }
 
 /** Das Ergebnis der Drehtürklausel für die Tatsachen aus 4.2.3 und 4.3 (SPEC 5.3.1). */

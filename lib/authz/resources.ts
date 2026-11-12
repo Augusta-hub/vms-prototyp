@@ -8,9 +8,10 @@
  *
  * Alle 24 Zeilen sind hier benannt, damit die Matrix in lib/authz/matrix.ts
  * die einzige Stelle bleibt, an der Rechte stehen. Belegt sind die Zeilen zu
- * 3.1 bis 3.7, die Zeile zu 3.10, die beiden Zeilen zu 3.11 und die Zeile zu
- * 3.12; jede unbelegte Zeile verweigert jeden Zugriff, weil Sichtbarkeit
- * positiv festgelegt ist (2.3).
+ * 3.1 bis 3.9, die Zeile zu 3.10, die beiden Zeilen zu 3.11 und die Zeile zu
+ * 3.12 — mit der Abrechnung (3.9) ist damit **jede** Zeile belegt. Eine
+ * unbelegte Zeile hätte jeden Zugriff verweigert, weil Sichtbarkeit positiv
+ * festgelegt ist (2.3).
  */
 export type ResourceType =
   // 3.1 Kunde, Standort, Kostenstelle
@@ -158,7 +159,10 @@ export const MATRIX_ROW_BY_OBJECT = {
   // Stammsatzes — wie der Ansprechpartner und `processDeadlineConfig`. 2.2
   // führt dafür keine Zeile; sie folgt der des Kunden.
   customerTimesheetApprovalStage: 'customer',
-  // 3.9: die Abrechnungsperiode. Der Beleg kommt mit 4.5.
+  // 3.9: die **Belegposition** teilt die Zeile des Belegs — 4.5 sagt es
+  // ausdrücklich („Die Belegposition teilt die Matrixzeile des Belegs").
+  billingDocument: 'billingDocument',
+  billingDocumentItem: 'billingDocument',
   billingPeriod: 'billingPeriod',
 } as const satisfies Record<string, ResourceType>
 

@@ -730,6 +730,49 @@ export function billingPeriodRef(period: {
   }
 }
 
+/**
+ * Abrechnungsbeleg (3.9) als Vorgang.
+ *
+ * **Betreibermandant, beide Seiten** — und genau **eine** Gegenseite je Beleg:
+ * ein Verkaufsbeleg nennt seinen Kunden, ein Einkaufsbeleg seinen Lieferanten
+ * (3.9). Daran hängt mehr als eine Anzeige: `disclosedToTenantIds` öffnet die
+ * Mandantengrenze nur für diese eine Gegenseite (2.3), und die Fußnoten [31]
+ * und [32] prüfen sie erneut. Ein `KE` an einer Gutschrift fällt damit schon
+ * an der Grenze heraus, weil die Gutschrift keinen Kunden nennt.
+ *
+ * **Kein Standort und keine Kostenstelle.** Der Beleg fasst die Leistung
+ * mehrerer Einsätze zusammen; eine einzelne Kostenstelle am Beleg wäre falsch,
+ * und die Zuständigkeit (3.11) greift deshalb nur über seine **Positionen**.
+ * Ob eine kostenstellenbezogene Zuständigkeit einen Beleg teilweise sichtbar
+ * machen soll, ist Teil von *offener Frage 14* und hier nicht entschieden.
+ */
+export function billingDocumentRef(document: {
+  readonly tenantId: string
+  readonly direction: 'sales' | 'purchase'
+  readonly customerTenantId: string | null
+  readonly supplierTenantId: string | null
+  readonly status: string
+  readonly createdById: string
+}): ResourceRef {
+  const gegenseite =
+    document.direction === 'sales' ? document.customerTenantId : document.supplierTenantId
+  return {
+    type: 'billingDocument',
+    tenantId: document.tenantId,
+    tenantType: 'operator',
+    ...(document.direction === 'sales' && document.customerTenantId !== null
+      ? { customerTenantId: document.customerTenantId }
+      : {}),
+    ...(document.direction === 'purchase' && document.supplierTenantId !== null
+      ? { supplierTenantId: document.supplierTenantId }
+      : {}),
+    status: document.status,
+    // Grundlage des Vier-Augen-Prinzips in [30] (2.4, Regel 5).
+    createdById: document.createdById,
+    disclosedToTenantIds: gegenseite === null ? [] : [gegenseite],
+  }
+}
+
 /** Zuschlagsart (3.8) als Vorgang — ein Katalog im Betreibermandanten. */
 export function premiumTypeRef(
   premiumType: { readonly tenantId: string },

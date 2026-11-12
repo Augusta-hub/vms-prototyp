@@ -13,9 +13,10 @@ import { currentIdentity } from '../identity'
 import type { ActionResult } from '../../lib/services/common'
 import {
   addTimeEntry,
+  createCorrectionTimesheet,
   createTimesheet,
   decideStage,
-  openBillingPeriod,
+
   removeTimeEntry,
   reworkTimesheet,
   submitTimesheet,
@@ -73,20 +74,6 @@ function integer(formData: FormData, field: string): number | null {
   return value === null ? null : Math.round(value)
 }
 
-export async function openPeriodAction(formData: FormData): Promise<void> {
-  const { identity, hint } = await currentIdentity()
-  if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
-  back(
-    await openBillingPeriod(identity, {
-      periodNumber: text(formData, 'periodNumber'),
-      customerId: optionalText(formData, 'customerId'),
-      periodFrom: date(formData, 'periodFrom') ?? new Date(),
-      periodTo: date(formData, 'periodTo') ?? new Date(),
-      closingDate: date(formData, 'closingDate') ?? new Date(),
-    }),
-  )
-}
-
 export async function createTimesheetAction(formData: FormData): Promise<void> {
   const { identity, hint } = await currentIdentity()
   if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
@@ -136,6 +123,21 @@ export async function submitTimesheetAction(formData: FormData): Promise<void> {
   const { identity, hint } = await currentIdentity()
   if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
   back(await submitTimesheet(identity, { timesheetId: text(formData, 'timesheetId') }))
+}
+
+/**
+ * Legt eine Korrekturfassung an (4.4, Fußnote [28]) — der einzige Weg,
+ * genehmigte Zeiten zu ändern.
+ */
+export async function createCorrectionAction(formData: FormData): Promise<void> {
+  const { identity, hint } = await currentIdentity()
+  if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
+  back(
+    await createCorrectionTimesheet(identity, {
+      timesheetId: text(formData, 'timesheetId'),
+      reason: optionalText(formData, 'reason'),
+    }),
+  )
 }
 
 export async function reworkTimesheetAction(formData: FormData): Promise<void> {

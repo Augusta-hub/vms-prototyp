@@ -56,20 +56,23 @@ export default async function Home() {
     <>
       <h1>Identität und Rechte</h1>
       <p>
-        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.8, 3.10 bis 3.12. Umgesetzt
-        sind Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat
-        und Profilvorschlag, der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3 sowie Dokumente
-        und Nachweise (3.10) samt ihrem Nachweisfluss aus 5.4.3 — einstellen, anerkennen,
-        zurückweisen —, der Lieferantenstatus (4.6), das fachliche Protokoll (3.12) und die{' '}
-        <strong>Zeiterfassung</strong> (3.8, 4.4): Stundenzettel, Zeitpositionen in zwei
-        Erfassungsformen, Zuschläge mit ihrer Herkunft und die Freigabestufen, die je Kunde
-        konfiguriert sind. Noch nicht umgesetzt: die Abrechnung (3.9, 4.5). Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen
-        P1 bis P11. An den Übergängen greifen P1, P3, P6, P8, P9, P10 und P11: sie schreiben
+        Anwendungscode zu <code>SPEC.md</code> Kapitel 2, 3.1 bis 3.12. Umgesetzt sind
+        Stammdaten, Bedarfsanfrage, Ausschreibung, Einladung, Lieferantenangebot, Kandidat und
+        Profilvorschlag, der Einsatz mit den Statusmodellen 4.1, 4.2 und 4.3 sowie Dokumente und
+        Nachweise (3.10) samt ihrem Nachweisfluss aus 5.4.3 — einstellen, anerkennen,
+        zurückweisen —, der Lieferantenstatus (4.6), das fachliche Protokoll (3.12), die
+        Zeiterfassung (3.8, 4.4) mit Stundenzetteln, zwei Erfassungsformen, Zuschlägen samt
+        Herkunft, je Kunde konfigurierten Freigabestufen und der Korrekturfassung — und die{' '}
+        <strong>Abrechnung</strong> (3.9, 4.5): Abrechnungsperiode mit Schluss, Abrechnungsbeleg
+        auf beiden Seiten, Belegpositionen aus genehmigten Zeiten, Beanstandung, Klärung und
+        Storno mit Gegenbuchung. Aus Kapitel 5 rechnen <strong>alle elf</strong> Prüfungen P1 bis
+        P11. An den Übergängen greifen P1, P3, P4, P5, P6, P8, P9, P10 und P11: sie schreiben
         Fristende, angerechnete Dauer und Equal-Pay-Fälligkeit fort und sperren Ausschreibung,
-        Anlage, Einsatzstart und das Freischalten eines Lieferanten, wo Erlaubnis oder
-        Pflichtnachweis fehlen. Nicht angebunden sind
-        P7 — für die Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene Frage 30) —, der Teil
-        von P4 am Eintrag des Standorts und die Zuschlagsstufe aus P5.
+        Anlage, Einsatzstart, das Freischalten eines Lieferanten und die Genehmigung von Zeiten
+        ohne Vergleichsentgelt. Am <strong>Beleg</strong> sperrt keine Prüfung: die Leistung ist
+        erbracht, und der Befund wird dokumentiert statt die Abrechnung zu blockieren (5.5.5).
+        Nicht angebunden ist P7 — für die Arbeitskampfanzeige führt Kapitel 3 kein Feld (offene
+        Frage 30).
       </p>
 
       <h2>Testidentität</h2>
@@ -143,10 +146,9 @@ export default async function Home() {
 
       <h2>Berechtigungsmatrix (SPEC 2.2)</h2>
       <p>
-        Gelesen aus <code>lib/authz/matrix.ts</code>. Belegt sind die Zeilen zu 3.1 bis 3.8, 3.10,
-        3.11, 3.12 und die Abrechnungsperiode aus 3.9; jede andere Zeile verweigert jeden Zugriff,
-        bis ihr Fachmodul kommt. Zahlen in
-        Klammern sind die Fußnoten aus 2.2.
+        Gelesen aus <code>lib/authz/matrix.ts</code>. Mit der Abrechnung ist{' '}
+        <strong>jede</strong> Zeile belegt — eine unbelegte hätte jeden Zugriff verweigert, weil
+        Sichtbarkeit positiv festgelegt ist (2.3). Zahlen in Klammern sind die Fußnoten aus 2.2.
       </p>
       <table>
         <thead>
