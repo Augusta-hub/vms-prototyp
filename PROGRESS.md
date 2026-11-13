@@ -5,6 +5,95 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-13 — Befundliste für Vorschlag, Einsatz und Verlängerung (4.7)
+
+### Gemacht
+
+Die vorige Einheit ließ elf Zeilen aus 4.7 stumm, weil drei Dienste **keine
+Befundliste** führten: ihr `Regelstand` speiste nur die Vorbedingungen. Jetzt
+führen sie eine — `StaffingFinding` in `lib/services/staffing.ts` — und melden:
+
+- **Profilvorschlag** (4.2.3): **P1** an Q07, **P6** an Q08, **P11** an Q09 bei
+  der Sichtung; **P6** an Q12 und **P11** an Q13 bei der Zusage.
+- **Einsatz** (4.3.1): **P6** an Q15, **P11** an Q17, **P4** an Q18 beim
+  Anlegen.
+- **Verlängerung** (4.3.2): **P1** an Q28 und **P3** an Q29 bei der
+  Genehmigung, **P4** an Q32 bei der Wirksamkeit.
+
+Zwei Rechnungen fehlten dafür. **P6** wurde am Vorschlag gar nicht gerechnet —
+`regelstandFuerVorschlag` lud den Konzernverbund des Entleihers nicht, obwohl
+Q08 und Q12 nach Vorbeschäftigung „beim Entleiher **oder im Konzern**" fragen
+(§ 18 AktG, 5.3.1). Am Einsatz wurde der Drehtürstand zwar gerechnet, aber
+nicht weitergereicht: der `Regelstand` behielt nur die Tatsache, nicht den
+Befund. **P11** gab seine Adressaten nicht heraus; sie standen in der Regel
+(`adressatenArbeitsverhaeltnis`) und endeten an der Brücke. `Arbeitsverhaeltnis‐
+stand` in `lib/aueg/anbindung.ts` trägt sie jetzt wie die anderen Stände.
+
+### Entscheidungen
+
+1. **Q18 misst nicht, was Q36 misst.** Naheliegend wäre
+   `comparableWageUsable` gewesen — die Tatsache aus 5.2.4. Sie trägt aber die
+   **Sperre** aus Q36 und verlangt dafür zwei Teile: Fälligkeit erreicht *und*
+   kein verwendbarer Eintrag. Beim Anlegen liegt die Fälligkeit regelmäßig in
+   der Zukunft; an ihr gemessen wäre Q18 immer erfüllt und die Zeile ohne
+   Wirkung — derselbe Fehler, den die vorige Einheit an Q37 gefunden hat. 4.7
+   schreibt für Q18 die andere Bedingung: „Vergleichsentgelt hinterlegt".
+   Gemessen wird deshalb `verwendbar`. Q32 misst dagegen **doch**
+   `comparableWageUsable`, weil 4.7 dort ausdrücklich „für den Zeitraum ab
+   Equal-Pay-Fälligkeit" schreibt.
+2. **Die Sperre aus Q12 steht nicht in der Liste.** 4.7 nennt für Q12
+   „Warnung bei Treffer, **Sperre** bei fehlender Erklärung". Die Sperre ist
+   die Vorbedingung `hasPreviousEmploymentDeclaration` aus 4.2.3 — sie hat den
+   Übergang verhindert, bevor ein Befund entsteht. Ein Befund beschreibt, was
+   bei einem **vollzogenen** Übergang festgestellt wurde.
+3. **Q07 misst die Schwelle, nicht die Überschreitung.** `maxDurationExceeded`
+   ist die Sperre aus Q11. Q07 warnt **vor** ihr, also an den Stufen `warnung`
+   und `erreicht` aus 5.1.6. `hinweis` bleibt draußen: 5.1.6 gibt ihm die
+   Ergebnisart Information, und eine Information erzeugt nach 5.5.2 keine
+   Nachricht.
+4. **P4 an der Verlängerung wird nur einmal entschieden.** Zuerst stand die
+   Bedingung zweimal da — beim Rechnen (`transition === 'makeEffective'`) und
+   beim Melden. Eine Mutation zeigte, dass die zweite wirkungslos war. Zwei
+   Stellen, die dasselbe entscheiden, widersprechen sich irgendwann; die
+   Entscheidung fällt jetzt beim Rechnen, und `befundeVerlaengerung` meldet,
+   was vorliegt.
+5. **Der Prüfzeitpunkt von P11 ist der erste Überlassungstag, nicht der Tag
+   der Entscheidung** (5.3.4): am Vorschlag `availableFrom`, am Einsatz der
+   geplante Beginn. Ein Kandidat, der zwischen Sichtung und erstem Tag
+   eingestellt wird, löst deshalb keine Warnung aus.
+
+### Nachweis
+
+`npm test` 1107 grün, `npm run test:services` 284 grün (13 neue),
+`npm run test:aueg` 267 Szenarien / 120 vollständig geprüft / **0 verletzte
+Zusicherungen**, `npx tsc --noEmit` und `npm run build` sauber, `npm run
+db:seed` läuft. **17 Mutationen, alle gefangen** — darunter „Q18 an der Sperre
+aus Q36 gemessen", „Vorschlag ohne Konzernverbund", „P11 ohne Adressaten" und
+„P11 am Tag der Entscheidung statt am ersten Tag". Drei Mutationen überlebten
+zunächst; zwei waren falsch formuliert, die dritte (Q28 umgedreht) deckte eine
+echte Lücke auf und hat jetzt ihren Test.
+
+In der Oberfläche auf Musterdaten belegt: Profilvorschlag PV-2026-0001
+(Bewerber ohne Arbeitsverhältnis) vom Lieferanten vorgelegt und vom Betreiber
+gesichtet. Die Sichtung erzeugt neben der Nachricht aus Kapitel 4 die Warnung
+aus Q09 an `MD` **und** `LD`, jede in ihrer Organisation, mit
+`submitted → reviewed` und ohne Lauftag — und einen Protokolleintrag (5.5.2
+Nr. 1).
+
+### Offen
+
+- **P7** hat weiterhin keinen Rechenweg (*Frage 30*), **P8** und Q02 keine
+  Adressatenliste. Damit bleiben aus 4.7 nur noch Zeilen offen, denen die
+  Fachgrundlage fehlt — keine mehr, der nur die Anbindung fehlte.
+- Der Protokolleintrag zu einer Warnung liest sich als „P11: P11: …": die
+  Meldung der Regel trägt ihr Kürzel schon, und `benachrichtigeWarnung` stellt
+  es noch einmal voran. Kosmetisch, betrifft nur den Eintrag, und es gilt
+  ebenso für die Warnungen der vorigen Einheit — deshalb hier nur notiert.
+- **Zustellung** bleibt *Frage 56*, der **Zeitplan** des nächtlichen Laufs
+  fehlt weiterhin (heute ein Knopf).
+
+---
+
 ## 2026-11-13 — Warnungen aus 4.7 als Benachrichtigung (5.5.2, 3.14)
 
 ### Gemacht

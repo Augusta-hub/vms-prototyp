@@ -36,9 +36,11 @@ import { acceptDocument, rejectDocument, submitDocument } from '../../lib/servic
 import { loadNotifications } from '../../lib/services/nightly'
 import { transitionSupplier } from '../../lib/services/supplierStatus'
 import {
+  createAssignment,
   requestExtension,
   transitionAssignment,
   transitionExtension,
+  transitionSubmission,
 } from '../../lib/services/staffing'
 import { decideStage, submitTimesheet } from '../../lib/services/timesheets'
 import {
@@ -46,6 +48,8 @@ import {
   legeAbrechnungsperiodeAn,
   legeEinsatzAn,
   legeGenehmigtenZettelAn,
+  legeProfilvorschlagAn,
+  legeVergleichsentgeltAn,
   leereDatenbank,
   tag,
   type Welt,
@@ -1029,5 +1033,478 @@ describe('Nachweis (5.4.3)', () => {
     const anerkannt = liste[liste.length - 1]
     expect(anerkannt?.recipientRoleCode).toBe('supplierAdmin')
     expect(anerkannt?.message).not.toContain('Begründung')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 4.7 Warnungen an Vorschlag, Einsatz und Verlängerung                */
+/* ------------------------------------------------------------------ */
+
+/** Die Warnungen aus 4.7 zu einer Prüfung, in der Reihenfolge ihrer Entstehung. */
+async function warnungen(ruleRef?: string) {
+  return prisma.notification.findMany({
+    where: { trigger: 'ruleWarning', ...(ruleRef === undefined ? {} : { ruleRef }) },
+    orderBy: [{ raisedAt: 'asc' }, { recipientRoleCode: 'asc' }],
+  })
+}
+
+describe('Warnungen am Profilvorschlag (4.7, Q07 bis Q13)', () => {
+  it('meldet Q09 bei der Sichtung — kein Arbeitsverhältnis beim Verleiher', async () => {
+    // 5.3.4: ein **Bewerber** ist am ersten Überlassungstag nicht beschäftigt.
+    // 4.7 gibt Q09 dafür eine Warnung, keine Sperre — die steht in Q47.
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { employmentStatusWithSupplier: 'applicant', employedSince: null },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4701',
+      status: 'submitted',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    ok(
+      await transitionSubmission(
+        disponent,
+        { submissionId: vorschlag, transition: 'review', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P11')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    // Q09 gehört dem Übergang `submitted` → `reviewed` (4.7).
+    expect(gemeldet.every((zeile) => zeile.statusFrom === 'submitted')).toBe(true)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'reviewed')).toBe(true)
+    expect(gemeldet.every((zeile) => zeile.kind === 'warning')).toBe(true)
+    // Adressaten aus der Regelwerkkonfiguration zu P11 (5.3.4) — `MD` und `LD`.
+    expect(new Set(gemeldet.map((zeile) => zeile.recipientRoleCode))).toEqual(
+      new Set(['operatorCoordinator', 'supplierCoordinator']),
+    )
+    // [47]: jede Nachricht bleibt in der Organisation ihrer Rolle.
+    const lieferantenzeile = gemeldet.find(
+      (zeile) => zeile.recipientRoleCode === 'supplierCoordinator',
+    )
+    expect(lieferantenzeile?.recipientTenantId).toBe(welt.lieferantMandant)
+  })
+
+  it('meldet Q07 bei der Sichtung — die Warnschwelle aus 5.1.6 ist erreicht', async () => {
+    // Die Kette läuft seit 2025-06-01 bei diesem Kunden; die Regelgrenze von
+    // 18 Monaten endet damit am 2026-11-30. Der Prüfzeitraum des Vorschlags
+    // (5.0: `availableFrom` bis `endDate` der Anfrage) endet zehn Tage davor
+    // — innerhalb von `maxDurationWarningDays` (5.1.6).
+    await legeEinsatzAn(welt, {
+      nummer: 'E-2026-0009',
+      status: 'active',
+      plannedStartDate: tag('2025-06-01'),
+      plannedEndDate: tag('2026-11-15'),
+      actualStartDate: tag('2025-06-01'),
+      vergleichsentgelt: '18.5000',
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4705',
+      status: 'submitted',
+      verfuegbarAb: tag('2026-11-16'),
+      anfrageEnde: tag('2026-11-20'),
+    })
+    ok(
+      await transitionSubmission(
+        disponent,
+        { submissionId: vorschlag, transition: 'review', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P1')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'reviewed')).toBe(true)
+    // Adressaten der Warnstufe aus 5.1.6, Zeile 2: `MD` → `MA`, zusätzlich
+    // Information an `KB` — gestuft von der Regel, nicht vom Fachdienst.
+    expect(new Set(gemeldet.map((zeile) => zeile.recipientRoleCode))).toEqual(
+      new Set(['operatorCoordinator', 'operatorAdmin', 'demandOwner']),
+    )
+  })
+
+  it('meldet Q09 nicht, wenn das Arbeitsverhältnis am ersten Überlassungstag besteht', async () => {
+    // 5.3.4: Prüfzeitpunkt ist der **vorgesehene erste Überlassungstag**, nicht
+    // der Tag der Sichtung. Der Kandidat ist am 2026-11-20 eingestellt — nach
+    // der Sichtung (2026-11-05) und vor dem ersten Tag (2026-12-01).
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { employmentStatusWithSupplier: 'employed', employedSince: tag('2026-11-20') },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4706',
+      status: 'submitted',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    ok(
+      await transitionSubmission(
+        disponent,
+        { submissionId: vorschlag, transition: 'review', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+
+    expect(await warnungen('P11')).toHaveLength(0)
+  })
+
+  it('meldet Q08 bei der Sichtung — Vorbeschäftigung beim Entleiher (P6)', async () => {
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: {
+        previousEmploymentDeclaredAt: tag('2026-10-01'),
+        previousEmploymentExisted: true,
+        // Innerhalb des Rückschaufensters aus 5.3.1, gerechnet vom
+        // vorgesehenen ersten Überlassungstag.
+        previousEmploymentEndedOn: tag('2026-09-01'),
+        // **Nicht** der Entleiher selbst, sondern ein Unternehmen seines
+        // Konzerns: 5.3.1 zieht § 18 AktG heran, und der Verbund muss dafür
+        // geladen werden — sonst bliebe der Treffer aus.
+        previousEmploymentEmployer: 'Nordwerk Service GmbH',
+      },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4702',
+      status: 'submitted',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    ok(
+      await transitionSubmission(
+        disponent,
+        { submissionId: vorschlag, transition: 'review', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P6')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'reviewed')).toBe(true)
+    // 5.3.1, Schritt 5: Rechtsfolge ist Equal Pay ab dem ersten Tag — die
+    // Meldung nennt sie, damit die Nachricht ohne Rückfrage brauchbar ist.
+    expect(gemeldet[0]?.message).toContain('P6')
+  })
+
+  it('meldet Q12 und Q13 bei der Zusage — nicht schon bei der Vorlage', async () => {
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: {
+        employmentStatusWithSupplier: 'applicant',
+        employedSince: null,
+        previousEmploymentDeclaredAt: tag('2026-10-01'),
+        previousEmploymentExisted: false,
+        previousEmploymentEndedOn: null,
+        previousEmploymentEmployer: null,
+      },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4703',
+      status: 'releasedToCustomer',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    ok(
+      await transitionSubmission(
+        bedarfstraeger,
+        { submissionId: vorschlag, transition: 'accept', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P11')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    // Q13 gehört dem Übergang nach `accepted`; Q09 ist hier nicht gelaufen,
+    // weil die Sichtung vor dem Fixture-Stand lag.
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'accepted')).toBe(true)
+    // P6 hat **keinen** Treffer: die Erklärung sagt „keine Vorbeschäftigung".
+    expect(await warnungen('P6')).toHaveLength(0)
+  })
+
+  it('meldet nichts, wenn der Übergang nicht stattfindet (4.0, Regel 2)', async () => {
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { employmentStatusWithSupplier: 'applicant', employedSince: null },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-4704',
+      status: 'releasedToCustomer',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    // Die Zusage ist gesperrt: die Erklärung zur Vorbeschäftigung fehlt (P6).
+    const ergebnis = await transitionSubmission(
+      bedarfstraeger,
+      { submissionId: vorschlag, transition: 'accept', decisionReason: null, interviewAt: null },
+      HEUTE,
+    )
+    expect(ergebnis.ok).toBe(false)
+    expect(await warnungen()).toHaveLength(0)
+  })
+})
+
+describe('Warnungen am Einsatz und an der Verlängerung (4.7, Q15 bis Q32)', () => {
+  /** Ein zugesagter Vorschlag — die Vorbedingung des Einsatzes (4.2.3, 4.3.1). */
+  async function zugesagterVorschlag(nummer: string): Promise<string> {
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: {
+        previousEmploymentDeclaredAt: tag('2026-10-01'),
+        previousEmploymentExisted: false,
+        previousEmploymentEndedOn: null,
+        previousEmploymentEmployer: null,
+      },
+    })
+    const vorschlag = await legeProfilvorschlagAn(welt, {
+      nummer,
+      status: 'releasedToCustomer',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+    ok(
+      await transitionSubmission(
+        bedarfstraeger,
+        { submissionId: vorschlag, transition: 'accept', decisionReason: null, interviewAt: null },
+        HEUTE,
+      ),
+    )
+    return vorschlag
+  }
+
+  it('meldet Q18 beim Anlegen — für diese Tätigkeit ist kein Vergleichsentgelt hinterlegt', async () => {
+    const vorschlag = await zugesagterVorschlag('PV-4710')
+    ok(
+      await createAssignment(
+        disponent,
+        {
+          submissionId: vorschlag,
+          costCenterId: welt.kostenstelle,
+          // Keine Entsprechung in den Vergleichsentgelt-Einträgen des
+          // Standorts: P4 findet nichts (5.2.4, Schritt 1).
+          activityDescription: 'Kommissionierung im Wareneingang, Halle 7',
+          plannedStartDate: tag('2026-12-01'),
+          plannedEndDate: tag('2027-03-31'),
+          weeklyHours: 35,
+          shiftModel: null,
+          agreedRateCardItemId: welt.einkaufsposition,
+          customerRateCardItemId: welt.verkaufsposition,
+          comparableWage: null,
+        },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P4')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    // Q18 gehört dem Übergang „— → `planned`" (4.7).
+    expect(gemeldet.every((zeile) => zeile.statusFrom === null)).toBe(true)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'planned')).toBe(true)
+    expect(gemeldet[0]?.message).toContain('P4')
+    // 5.5.2 Nr. 1: das Ergebnis steht auch im Protokoll.
+    const eintrag = await prisma.auditEntry.findFirst({
+      where: { objectType: 'notification', ruleRef: 'P4' },
+    })
+    expect(eintrag).not.toBe(null)
+  })
+
+  it('meldet Q18 nicht, wenn für die Tätigkeit ein Eintrag des Standorts vorliegt', async () => {
+    // 5.2.4, Schritt 1: der Eintrag wird über `activityKey` **zur Tätigkeit
+    // des Einsatzes** gewählt. Stimmen sie überein, ist das Vergleichsentgelt
+    // hinterlegt und Q18 schweigt.
+    await legeVergleichsentgeltAn(welt, { taetigkeit: 'Montage von Baugruppen an der Linie 2' })
+    const vorschlag = await zugesagterVorschlag('PV-4713')
+    ok(
+      await createAssignment(
+        disponent,
+        {
+          submissionId: vorschlag,
+          costCenterId: welt.kostenstelle,
+          activityDescription: 'Montage von Baugruppen an der Linie 2',
+          plannedStartDate: tag('2026-12-01'),
+          plannedEndDate: tag('2027-03-31'),
+          weeklyHours: 35,
+          shiftModel: null,
+          agreedRateCardItemId: welt.einkaufsposition,
+          customerRateCardItemId: welt.verkaufsposition,
+          comparableWage: 18.5,
+        },
+        HEUTE,
+      ),
+    )
+
+    expect(await warnungen('P4')).toHaveLength(0)
+  })
+
+  it('meldet Q15 beim Anlegen — die Drehtürklausel greift (P6)', async () => {
+    const vorschlag = await zugesagterVorschlag('PV-4712')
+    // Die Erklärung liegt vor — der Übergang ist also **nicht** gesperrt —,
+    // aber sie nennt eine Vorbeschäftigung im Konzern des Entleihers. 4.7 gibt
+    // Q15 dafür eine Warnung mit der Rechtsfolge aus 5.3.1.
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: {
+        previousEmploymentExisted: true,
+        previousEmploymentEndedOn: tag('2026-09-01'),
+        previousEmploymentEmployer: 'Nordwerk Service GmbH',
+      },
+    })
+    ok(
+      await createAssignment(
+        disponent,
+        {
+          submissionId: vorschlag,
+          costCenterId: welt.kostenstelle,
+          activityDescription: 'Montage von Baugruppen an der Linie 2',
+          plannedStartDate: tag('2026-12-01'),
+          plannedEndDate: tag('2027-03-31'),
+          weeklyHours: 35,
+          shiftModel: null,
+          agreedRateCardItemId: welt.einkaufsposition,
+          customerRateCardItemId: welt.verkaufsposition,
+          comparableWage: 18.5,
+        },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P6')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'planned')).toBe(true)
+  })
+
+  it('meldet Q17 beim Anlegen — kein Arbeitsverhältnis am ersten Überlassungstag', async () => {
+    const vorschlag = await zugesagterVorschlag('PV-4711')
+    await prisma.candidate.update({
+      where: { id: welt.kandidat },
+      data: { employmentStatusWithSupplier: 'applicant', employedSince: null },
+    })
+    ok(
+      await createAssignment(
+        disponent,
+        {
+          submissionId: vorschlag,
+          costCenterId: welt.kostenstelle,
+          activityDescription: 'Montage von Baugruppen an der Linie 2',
+          plannedStartDate: tag('2026-12-01'),
+          plannedEndDate: tag('2027-03-31'),
+          weeklyHours: 35,
+          shiftModel: null,
+          agreedRateCardItemId: welt.einkaufsposition,
+          customerRateCardItemId: welt.verkaufsposition,
+          comparableWage: 18.5,
+        },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P11')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'planned')).toBe(true)
+  })
+
+  it('meldet Q29 bei der Genehmigung der Verlängerung — Fälligkeit im verlängerten Zeitraum', async () => {
+    const verlaengerter = await legeEinsatzAn(welt, {
+      nummer: 'E-2026-0010',
+      status: 'active',
+      plannedStartDate: tag('2026-06-01'),
+      plannedEndDate: tag('2026-12-31'),
+      actualStartDate: tag('2026-06-01'),
+      vergleichsentgelt: '18.5000',
+    })
+    ok(
+      await requestExtension(disponent, {
+        assignmentId: verlaengerter,
+        newEndDate: tag('2027-03-31'),
+        reason: 'Projekt läuft länger.',
+      }),
+    )
+    const verlaengerung = await prisma.assignmentExtension.findFirstOrThrow()
+    ok(
+      await transitionExtension(
+        genehmiger,
+        { extensionId: verlaengerung.id, transition: 'approve', rejectionReason: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P3')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    // Q29 gehört dem Übergang `requested` → `approved` (4.7).
+    expect(gemeldet.every((zeile) => zeile.statusFrom === 'requested')).toBe(true)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'approved')).toBe(true)
+    // Das Vergleichsentgelt liegt am Einsatz: 5.0 nennt dafür den **Hinweis**
+    // an `MD` und `KE`, nicht die weitere Liste mit `MA`.
+    expect(new Set(gemeldet.map((zeile) => zeile.recipientRoleCode))).toEqual(
+      new Set(['operatorCoordinator', 'procurementController']),
+    )
+    expect(gemeldet[0]?.message).toContain('verlängerten Zeitraum')
+  })
+
+  it('meldet Q28 bei der Genehmigung — das neue Ende liegt nach dem Fristende', async () => {
+    // Die Kette beginnt am 2025-06-01; die Regelgrenze von 18 Monaten endet am
+    // 2026-11-30. Das beantragte neue Ende liegt danach. 4.7 gibt Q28 eine
+    // **Warnung** — als Vorschau für die Kundenseite; die Sperre steht in Q30,
+    // an der Wirksamkeit.
+    const langer = await legeEinsatzAn(welt, {
+      nummer: 'E-2026-0012',
+      status: 'active',
+      plannedStartDate: tag('2025-06-01'),
+      plannedEndDate: tag('2026-11-30'),
+      actualStartDate: tag('2025-06-01'),
+      vergleichsentgelt: '18.5000',
+    })
+    ok(
+      await requestExtension(disponent, {
+        assignmentId: langer,
+        newEndDate: tag('2027-06-30'),
+        reason: 'Projekt läuft länger.',
+      }),
+    )
+    const verlaengerung = await prisma.assignmentExtension.findFirstOrThrow()
+    ok(
+      await transitionExtension(
+        genehmiger,
+        { extensionId: verlaengerung.id, transition: 'approve', rejectionReason: null },
+        HEUTE,
+      ),
+    )
+
+    const gemeldet = await warnungen('P1')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'approved')).toBe(true)
+    expect(gemeldet[0]?.message).toContain('P1')
+  })
+
+  it('meldet Q32 erst bei der Wirksamkeit, nicht schon bei der Genehmigung', async () => {
+    const verlaengerter = await legeEinsatzAn(welt, {
+      nummer: 'E-2026-0011',
+      status: 'active',
+      plannedStartDate: tag('2026-06-01'),
+      plannedEndDate: tag('2026-12-31'),
+      actualStartDate: tag('2026-06-01'),
+      vergleichsentgelt: '18.5000',
+    })
+    ok(
+      await requestExtension(disponent, {
+        assignmentId: verlaengerter,
+        newEndDate: tag('2027-03-31'),
+        reason: 'Projekt läuft länger.',
+      }),
+    )
+    const verlaengerung = await prisma.assignmentExtension.findFirstOrThrow()
+    ok(
+      await transitionExtension(
+        genehmiger,
+        { extensionId: verlaengerung.id, transition: 'approve', rejectionReason: null },
+        HEUTE,
+      ),
+    )
+    expect(await warnungen('P4')).toHaveLength(0)
+
+    ok(
+      await transitionExtension(
+        disponent,
+        { extensionId: verlaengerung.id, transition: 'makeEffective', rejectionReason: null },
+        HEUTE,
+      ),
+    )
+    const gemeldet = await warnungen('P4')
+    expect(gemeldet.length).toBeGreaterThan(0)
+    expect(gemeldet.every((zeile) => zeile.statusFrom === 'approved')).toBe(true)
+    expect(gemeldet.every((zeile) => zeile.statusTo === 'effective')).toBe(true)
   })
 })

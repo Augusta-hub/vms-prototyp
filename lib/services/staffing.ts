@@ -56,6 +56,7 @@
 import {
   bestehtArbeitsverhaeltnisAmErstenTag,
   drehtuerstand,
+  entgeltstand,
   equalPaystand,
   erlaubnisstand,
   haeltVerlaengerungDieFrist,
@@ -63,7 +64,10 @@ import {
   alsNachweiszeile,
   konkretisierungsstand,
   nachweisstand,
+  type Arbeitsverhaeltnisstand,
+  type Drehtuerstand,
   type Einsatzzeile,
+  type Entgeltstand,
   type EqualPaystand,
   type Erlaubnisstand,
   type Hoechstdauerstand,
@@ -72,6 +76,7 @@ import {
   type Nachweiszeile,
   type Rahmenvertragszeile,
   type Tarifzeile,
+  type Vergleichsentgeltzeile,
   type Verleiherzeile,
 } from '../aueg/anbindung'
 import {
@@ -86,9 +91,11 @@ import { checkPermission, type Decision, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
 import type { TenantType } from '../authz/roles'
+import { REGELWERK } from '../aueg/regelwerk'
 import type { Rollenkuerzel } from '../aueg/typen'
-import type { Vorgangslage } from '../notifications/uebergaenge'
-import { benachrichtigeUebergang, rolleDesHandelnden } from './notifications'
+import { warnungsbefunde, type Vorgangslage } from '../notifications/uebergaenge'
+import { benachrichtigeUebergang, benachrichtigeWarnung, rolleDesHandelnden } from './notifications'
+import type { Transaktion } from '../audit/record'
 import {
   ASSIGNMENT_MODEL,
   type AssignmentFacts,
@@ -189,6 +196,14 @@ interface Regelstand {
   readonly hoechstdauer: Hoechstdauerstand | null
   /** P3 (5.2.3): `equalPayDueDate` und die Fälligkeit am ersten Tag. */
   readonly equalPay: EqualPaystand | null
+  /**
+   * P6 (5.3.1): der Drehtürbefund mit Rückschaufenster, Adressaten und
+   * Meldung. Die **Tatsache** daraus steckt schon in `equalPayDueFromFirstDay`;
+   * der Stand selbst wird für die Warnungen aus 4.7 gebraucht (Q08, Q12, Q15),
+   * die nennen müssen, **was** gefunden wurde. Die Verlängerung führt ihn
+   * nicht: 4.7 ordnet ihr keine P6-Zeile zu.
+   */
+  readonly drehtuer: Drehtuerstand | null
 }
 
 /**
@@ -202,6 +217,7 @@ const OHNE_REGELSTAND: Regelstand = {
   newEndWithinMaxDuration: true,
   hoechstdauer: null,
   equalPay: null,
+  drehtuer: null,
 }
 
 /** Die Eingangsdaten, die P1 und P6 aus der Datenbank brauchen. */
@@ -436,6 +452,7 @@ async function regelstandFuerEinsatz(
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
     equalPay,
+    drehtuer,
   }
 }
 
@@ -481,17 +498,28 @@ async function regelstandFuerVerlaengerung(
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
     equalPay,
+    // 4.7 führt an der Verlängerung keine P6-Zeile (Q28 bis Q32): die
+    // Drehtürklausel hängt am ersten Überlassungstag, und den verschiebt eine
+    // Verlängerung nicht (5.3.1).
+    drehtuer: null,
   }
 }
 
 /**
- * Der Regelstand eines Profilvorschlags (P1 an Q07 und Q11). Prüfzeitraum nach
- * 5.0: `availableFrom` des Vorschlags bis `endDate` der Bedarfsanfrage, bei
- * leerem `endDate` bis `startDate`.
+ * Der Regelstand eines Profilvorschlags (P1 an Q07 und Q11, P6 an Q08 und
+ * Q12). Prüfzeitraum nach 5.0: `availableFrom` des Vorschlags bis `endDate`
+ * der Bedarfsanfrage, bei leerem `endDate` bis `startDate`.
  */
 async function regelstandFuerVorschlag(vorschlag: {
   readonly availableFrom: Date
-  readonly candidate: { readonly id: string; readonly workerIdentityId: string | null }
+  readonly candidate: {
+    readonly id: string
+    readonly workerIdentityId: string | null
+    readonly previousEmploymentDeclaredAt: Date | null
+    readonly previousEmploymentExisted: boolean | null
+    readonly previousEmploymentEndedOn: Date | null
+    readonly previousEmploymentEmployer: string | null
+  }
   readonly demandRequest: {
     readonly customerId: string
     readonly siteId: string
@@ -513,7 +541,9 @@ async function regelstandFuerVorschlag(vorschlag: {
     supplierId: null,
     workerIdentityId: vorschlag.candidate.workerIdentityId,
     candidateId: vorschlag.candidate.id,
-    corporateGroup: null,
+    // P6 braucht den Konzernverbund des Entleihers (5.3.1, § 18 AktG): Q08 und
+    // Q12 fragen nach Vorbeschäftigung „beim Entleiher **oder im Konzern**".
+    corporateGroup: kunde.corporateGroup,
   })
   const dauer = hoechstdauerstand({
     einsaetze: grundlage.kette,
@@ -526,12 +556,24 @@ async function regelstandFuerVorschlag(vorschlag: {
     },
     identitaetBestaetigt: grundlage.identitaetBestaetigt,
   })
+  // 5.0 ordnet dem Vorschlag den **vorgesehenen** ersten Überlassungstag zu;
+  // `availableFrom` ist der Tag, den der Lieferant zusagt (3.6).
+  const drehtuer = drehtuerstand({
+    kandidat: vorschlag.candidate,
+    entleiher: { name: kunde.legalName, corporateGroup: kunde.corporateGroup },
+    konzernunternehmen: grundlage.konzernunternehmen,
+    ersterUeberlassungstag: vorschlag.availableFrom,
+  })
   return {
     maxDurationExceeded: dauer.maxDurationExceeded,
+    // Die **Tatsache** bleibt hier aus: 4.2.3 führt sie am Vorschlag nicht als
+    // Vorbedingung, und Q12 gibt dem Treffer eine Warnung, keine Sperre. Der
+    // Befund steht im Stand und wird gemeldet, nicht in dieser Tatsache.
     equalPayDueFromFirstDay: false,
     newEndWithinMaxDuration: !dauer.maxDurationExceeded,
     hoechstdauer: dauer,
     equalPay: null,
+    drehtuer,
   }
 }
 
@@ -566,6 +608,311 @@ const MINUTE = (value: Date | null): string | null =>
   value === null ? null : value.toISOString().slice(0, 16).replace('T', ' ')
 const AMOUNT = (value: { toString: () => string } | null, currency: string | null): string | null =>
   value === null ? null : `${value.toString()} ${currency ?? 'EUR'}`
+
+// ── Befunde aus 4.7 (5.5.2) ───────────────────────────────────────────────
+
+/**
+ * Ein Befund aus Kapitel 5 zu einem Vorgang der Besetzung, in Worten (4.7).
+ *
+ * **Er ist nicht dasselbe wie eine Vorbedingung.** Der `Regelstand` liefert die
+ * Tatsachen, über die das Statusmodell entscheidet — er sagt, ob der Übergang
+ * stattfindet. Ein Befund sagt, **was** dabei festgestellt wurde, und trägt
+ * die Ergebnisart aus 4.7 mit sich: eine `Warnung` hält den Übergang nicht
+ * auf, erzeugt aber eine Benachrichtigung an die zuständige Rolle (5.5.2).
+ * Solange diese Dienste keine Befundliste führten, blieben die Warnungen aus
+ * 4.7 für Vorschlag, Einsatz und Verlängerung stumm.
+ */
+export interface StaffingFinding {
+  readonly check: 'P1' | 'P3' | 'P4' | 'P6' | 'P11'
+  readonly row:
+    | 'Q07'
+    | 'Q08'
+    | 'Q09'
+    | 'Q12'
+    | 'Q13'
+    | 'Q15'
+    | 'Q17'
+    | 'Q18'
+    | 'Q28'
+    | 'Q29'
+    | 'Q32'
+  readonly satisfied: boolean
+  /** `Sperre`, `Warnung` oder `Information` (5.5). */
+  readonly effect: 'Sperre' | 'Warnung' | 'Information'
+  /**
+   * Adressaten des Befunds (5.5.2 Nr. 6) — wer eine **Warnung** nach 4.7
+   * erfährt. Sie kommen aus der Regel oder aus der Regelwerkkonfiguration,
+   * nicht aus diesem Dienst: welche Rolle ein Befund angeht, entscheidet
+   * Kapitel 5.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
+  readonly message: string
+}
+
+/**
+ * Ein Vergleichsentgelt-Eintrag des Standorts als Zeile für P4 (3.3, 5.2.4).
+ * Die Beträge liegen als `Decimal` in der Datenbank; die Regel rechnet mit
+ * Zahlen.
+ */
+function alsVergleichsentgeltzeile(eintrag: {
+  readonly activityKey: string
+  readonly comparableWage: { toString: () => string }
+  readonly wageSource: string
+  readonly validFrom: Date
+  readonly validTo: Date | null
+  readonly deactivatedAt: Date | null
+}): Vergleichsentgeltzeile {
+  return {
+    activityKey: eintrag.activityKey,
+    comparableWage: Number(eintrag.comparableWage),
+    wageSource: eintrag.wageSource,
+    validFrom: eintrag.validFrom,
+    validTo: eintrag.validTo,
+    deactivatedAt: eintrag.deactivatedAt,
+  }
+}
+
+/**
+ * Die Schwellen aus 5.1.6, die 4.7 eine **Warnung** zuordnet.
+ *
+ * `hinweis` gehört nicht dazu: 5.1.6 gibt ihm die Ergebnisart `Information`,
+ * und eine Information erzeugt nach 5.5.2 keine Nachricht. Gemessen an der
+ * bloßen Überschreitung (`maxDurationExceeded`) wäre der Befund dagegen
+ * wirkungslos — sie ist die **Sperre** aus Q11, und vor ihr soll Q07 warnen.
+ */
+function warnschwelleErreicht(stand: Hoechstdauerstand | null): boolean {
+  return stand !== null && (stand.schwelle === 'warnung' || stand.schwelle === 'erreicht')
+}
+
+/**
+ * P1, P6 und P11 am Profilvorschlag: Q07, Q08 und Q09 bei der Sichtung,
+ * Q12 und Q13 bei der Zusage (4.7).
+ *
+ * Alle fünf Zeilen tragen eine **Warnung**. Die Sperre, die Q12 daneben nennt
+ * („bei fehlender Erklärung"), ist die Vorbedingung
+ * `hasPreviousEmploymentDeclaration` aus 4.2.3 — sie hat den Übergang
+ * verhindert, bevor dieser Befund entsteht, und steht deshalb nicht in dieser
+ * Liste.
+ */
+function befundeVorschlag(
+  regelstand: Regelstand,
+  arbeitsverhaeltnis: Arbeitsverhaeltnisstand,
+  uebergang: 'review' | 'accept',
+): readonly StaffingFinding[] {
+  const liste: StaffingFinding[] = []
+
+  if (uebergang === 'review') {
+    liste.push({
+      check: 'P1',
+      row: 'Q07',
+      satisfied: !warnschwelleErreicht(regelstand.hoechstdauer),
+      effect: 'Warnung',
+      // Gestuft nach 5.1.6 — die Rechnung liefert die Stufe und ihre
+      // Adressaten mit, statt dass der Dienst sie wählt.
+      adressaten: regelstand.hoechstdauer?.adressaten ?? [],
+      message:
+        regelstand.hoechstdauer?.meldung ??
+        'P1: die Überlassungskette ist nicht bildbar — nichts zu prüfen (5.1.8).',
+    })
+  }
+
+  if (regelstand.drehtuer !== null) {
+    liste.push({
+      check: 'P6',
+      row: uebergang === 'review' ? 'Q08' : 'Q12',
+      // Der **Treffer** ist der Befund, nicht die Erklärung: 5.3.1 nennt als
+      // Rechtsfolge Equal Pay ab dem ersten Überlassungstag.
+      satisfied: !regelstand.drehtuer.equalPayDueFromFirstDay,
+      effect: 'Warnung',
+      adressaten: regelstand.drehtuer.adressaten,
+      message: regelstand.drehtuer.meldung,
+    })
+  }
+
+  liste.push({
+    check: 'P11',
+    row: uebergang === 'review' ? 'Q09' : 'Q13',
+    satisfied: arbeitsverhaeltnis.employmentRelationshipOnFirstDay,
+    // 5.5.5 hat Q13 ausdrücklich zur Warnung geändert: das Arbeitsverhältnis
+    // muss am **ersten Überlassungstag** bestehen (5.3.4), nicht beim
+    // Vorschlag. Die Sperre steht in Q47, am Einsatzstart.
+    effect: 'Warnung',
+    adressaten: arbeitsverhaeltnis.adressaten,
+    message: arbeitsverhaeltnis.meldung,
+  })
+
+  return liste
+}
+
+/**
+ * P6, P11 und P4 beim Anlegen des Einsatzes: Q15, Q17 und Q18 (4.7).
+ *
+ * Q14 (P1) und Q16 (P9) stehen **nicht** hier: 4.7 gibt ihnen eine Sperre, und
+ * eine Sperre hat den Übergang verhindert — was hier ankommt, ist vollzogen.
+ */
+function befundeEinsatz(
+  regelstand: Regelstand,
+  arbeitsverhaeltnis: Arbeitsverhaeltnisstand,
+  entgelt: Entgeltstand,
+): readonly StaffingFinding[] {
+  const liste: StaffingFinding[] = []
+
+  if (regelstand.drehtuer !== null) {
+    liste.push({
+      check: 'P6',
+      row: 'Q15',
+      satisfied: !regelstand.drehtuer.equalPayDueFromFirstDay,
+      effect: 'Warnung',
+      adressaten: regelstand.drehtuer.adressaten,
+      message: regelstand.drehtuer.meldung,
+    })
+  }
+
+  liste.push({
+    check: 'P11',
+    row: 'Q17',
+    satisfied: arbeitsverhaeltnis.employmentRelationshipOnFirstDay,
+    effect: 'Warnung',
+    adressaten: arbeitsverhaeltnis.adressaten,
+    message: arbeitsverhaeltnis.meldung,
+  })
+
+  liste.push({
+    check: 'P4',
+    row: 'Q18',
+    // **Nicht** `comparableWageUsable`: das ist die Sperre aus Q36 („Fälligkeit
+    // erreicht **und** kein verwendbarer Eintrag", 5.2.4). Beim Anlegen liegt
+    // die Fälligkeit regelmäßig in der Zukunft — gemessen daran wäre Q18 immer
+    // erfüllt und die Zeile ohne Wirkung. 4.7 schreibt hier die andere
+    // Bedingung: „Vergleichsentgelt hinterlegt".
+    satisfied: entgelt.verwendbar,
+    effect: 'Warnung',
+    adressaten: entgelt.adressaten,
+    message: entgelt.meldung,
+  })
+
+  return liste
+}
+
+/**
+ * P1 und P3 bei der Genehmigung der Verlängerung (Q28, Q29), P4 bei ihrer
+ * Wirksamkeit (Q32) — alle drei Warnungen (4.7).
+ *
+ * Q30 (P1) und Q31 (P9) stehen nicht hier: sie sind die Sperren an der
+ * Wirksamkeit.
+ */
+function befundeVerlaengerung(
+  regelstand: Regelstand,
+  zeitraum: { readonly von: Date; readonly bis: Date },
+  vergleichsentgeltGesetzt: boolean,
+  /**
+   * P4 über den verlängerten Zeitraum — oder `null`, wenn 4.7 für diesen
+   * Übergang keine P4-Zeile führt. Die Entscheidung fällt beim **Rechnen**
+   * und nicht noch einmal hier: zwei Stellen, die dasselbe entscheiden,
+   * widersprechen sich irgendwann.
+   */
+  entgelt: Entgeltstand | null,
+  uebergang: 'approve' | 'makeEffective',
+): readonly StaffingFinding[] {
+  const liste: StaffingFinding[] = []
+
+  if (uebergang === 'approve') {
+    liste.push({
+      check: 'P1',
+      row: 'Q28',
+      satisfied: regelstand.newEndWithinMaxDuration,
+      // Vorschau für die Kundenseite (5.5.5): die Sperre greift erst bei der
+      // Wirksamkeit (Q30).
+      effect: 'Warnung',
+      adressaten: regelstand.hoechstdauer?.adressaten ?? [],
+      message:
+        regelstand.hoechstdauer?.meldung ??
+        'P1: die Überlassungskette ist nicht bildbar — nichts zu prüfen (5.1.8).',
+    })
+
+    const faelligkeit = regelstand.equalPay?.equalPayDueDate ?? null
+    const imZeitraum =
+      faelligkeit !== null && faelligkeit >= zeitraum.von && faelligkeit <= zeitraum.bis
+    liste.push({
+      check: 'P3',
+      row: 'Q29',
+      satisfied: !imZeitraum,
+      effect: 'Warnung',
+      // Dieselben zwei Listen wie an Q34 (4.4), mit derselben Bedingung: liegt
+      // das Vergleichsentgelt am Einsatz, ist die Fälligkeit ein Hinweis;
+      // fehlt es, ist sie die Warnung (5.0, 2.4).
+      adressaten: vergleichsentgeltGesetzt
+        ? REGELWERK.adressatenEqualPayHinweis
+        : REGELWERK.adressatenEqualPayWarnung,
+      message:
+        faelligkeit === null
+          ? 'P3: für diesen Einsatz steht keine Equal-Pay-Fälligkeit fest (5.2.3) — nichts zu prüfen.'
+          : imZeitraum
+            ? `P3: die Equal-Pay-Fälligkeit ${DAY(faelligkeit)} fällt in den verlängerten ` +
+              `Zeitraum ${DAY(zeitraum.von)} bis ${DAY(zeitraum.bis)} (5.2). Ab ihr ist das ` +
+              'Entgelt des Entleihers geschuldet.'
+            : `P3: die Equal-Pay-Fälligkeit ${DAY(faelligkeit)} liegt außerhalb des ` +
+              `verlängerten Zeitraums ${DAY(zeitraum.von)} bis ${DAY(zeitraum.bis)} (5.2).`,
+    })
+  }
+
+  if (entgelt !== null) {
+    liste.push({
+      check: 'P4',
+      row: 'Q32',
+      // Hier **doch** `comparableWageUsable`: 4.7 schreibt für Q32 den
+      // Zeitraum „ab Equal-Pay-Fälligkeit", und genau diese beiden Teile führt
+      // die Tatsache (5.2.4). Fällt die Fälligkeit nicht in den verlängerten
+      // Zeitraum, ist nichts geschuldet und nichts zu melden.
+      satisfied: entgelt.comparableWageUsable,
+      effect: 'Warnung',
+      adressaten: entgelt.adressaten,
+      message: entgelt.meldung,
+    })
+  }
+
+  return liste
+}
+
+/**
+ * Schreibt die Benachrichtigungen zu den **Warnungen** eines Übergangs (4.7,
+ * 3.14). Sie treten neben die Nachricht aus der Spalte „Nebenwirkungen" und
+ * ersetzen sie nicht: die eine sagt, dass der Vorgang weitergegangen ist, die
+ * andere, womit.
+ *
+ * Die Adressaten stehen am Befund und werden hier nicht gewählt — welche Rolle
+ * ein Befund angeht, entscheidet Kapitel 5 und nicht dieser Dienst.
+ */
+async function warnungenMelden(
+  tx: Transaktion,
+  bezug: {
+    readonly objectType: string
+    readonly objectRef: string
+    readonly tenantId: string
+    readonly statusFrom: string | null
+    readonly statusTo: string
+    readonly lage: Omit<Vorgangslage, 'operator'> & { readonly operator?: string }
+    readonly raisedAt: Date
+  },
+  befundliste: readonly StaffingFinding[],
+): Promise<number> {
+  let geschrieben = 0
+  for (const befund of warnungsbefunde(befundliste)) {
+    geschrieben += await benachrichtigeWarnung(tx, {
+      objectType: bezug.objectType,
+      objectRef: bezug.objectRef,
+      tenantId: bezug.tenantId,
+      statusFrom: bezug.statusFrom,
+      statusTo: bezug.statusTo,
+      ruleRef: befund.check,
+      meldung: befund.message,
+      adressaten: befund.adressaten,
+      lage: bezug.lage,
+      raisedAt: bezug.raisedAt,
+    })
+  }
+  return geschrieben
+}
 
 // ── Kandidat (3.6) ─────────────────────────────────────────────────────────
 
@@ -1297,16 +1644,20 @@ export async function transitionSubmission(
     ...(input.transition === 'rejectByOperator' ? { decisionReason: reason } : {}),
   }
 
+  const regelstand = await regelstandFuerVorschlag(submission)
+  // P11 am Vorschlag (5.3.4): Prüfzeitpunkt ist der **vorgesehene** erste
+  // Überlassungstag, also `availableFrom` — nicht der Tag der Entscheidung.
+  const arbeitsverhaeltnis = arbeitsverhaeltnisstand({
+    candidate: submission.candidate,
+    actualStartDate: null,
+    plannedStartDate: submission.availableFrom,
+  })
+
   const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, input.transition, {
     currentStatus: status,
     subject: identity.subject,
     resource: submissionResource(submission),
-    facts: submissionFacts(
-      submission,
-      await regelstandFuerVorschlag(submission),
-      evaluationDate,
-      overrides,
-    ),
+    facts: submissionFacts(submission, regelstand, evaluationDate, overrides),
   })
   if (!outcome.applied) {
     return rejection(outcome, {
@@ -1367,6 +1718,23 @@ export async function transitionSubmission(
         lage: vorschlagslage(submission),
         raisedAt: evaluationDate,
       })
+      // 4.7: Q07, Q08 und Q09 bei der Sichtung, Q12 und Q13 bei der Zusage.
+      // Die übrigen Übergänge des Vorschlags führt 4.7 nicht.
+      if (input.transition === 'review' || input.transition === 'accept') {
+        await warnungenMelden(
+          tx,
+          {
+            objectType: 'candidateSubmission',
+            objectRef: submission.id,
+            tenantId: submission.tenantId,
+            statusFrom: outcome.from,
+            statusTo: outcome.to,
+            lage: vorschlagslage(submission),
+            raisedAt: evaluationDate,
+          },
+          befundeVorschlag(regelstand, arbeitsverhaeltnis, input.transition),
+        )
+      }
       // 4.2.3: mit der Zusage wechselt die Offenlegungsstufe auf
       // `identified` — ab dann sind Klardaten sichtbar, und **jeder** Zugriff
       // darauf ist zu protokollieren (3.12, Nummer 3; 6.4). Der Wechsel selbst
@@ -1777,6 +2145,24 @@ function alsRahmenvertragszeile(position: {
  * Regel ein zweites Mal in diesem Modul — das Gesetz gehört an **eine** Stelle,
  * sonst laufen die beiden Fassungen auseinander.
  */
+function arbeitsverhaeltnisstand(assignment: {
+  readonly candidate: {
+    readonly employmentStatusWithSupplier: string
+    readonly employedSince: Date | null
+  }
+  readonly actualStartDate: Date | null
+  readonly plannedStartDate: Date
+}): Arbeitsverhaeltnisstand {
+  return bestehtArbeitsverhaeltnisAmErstenTag({
+    kandidat: assignment.candidate,
+    ersterUeberlassungstag: assignment.actualStartDate ?? assignment.plannedStartDate,
+    // Die Vorprüfung (Q09, Q13, Q17) und der Einsatzstart (Q47) unterscheiden
+    // sich in der **Ergebnisart** aus 4.7, nicht im Treffer; die Tatsache, die
+    // 4.3 hier verlangt, ist dieselbe.
+    amEinsatzstart: assignment.actualStartDate !== null,
+  })
+}
+
 function employmentOnFirstDay(assignment: {
   readonly candidate: {
     readonly employmentStatusWithSupplier: string
@@ -1785,14 +2171,7 @@ function employmentOnFirstDay(assignment: {
   readonly actualStartDate: Date | null
   readonly plannedStartDate: Date
 }): boolean {
-  return bestehtArbeitsverhaeltnisAmErstenTag({
-    kandidat: assignment.candidate,
-    ersterUeberlassungstag: assignment.actualStartDate ?? assignment.plannedStartDate,
-    // Die Vorprüfung (Q09, Q13, Q17) und der Einsatzstart (Q47) unterscheiden
-    // sich in der **Ergebnisart** aus 4.7, nicht im Treffer; die Tatsache, die
-    // 4.3 hier verlangt, ist dieselbe.
-    amEinsatzstart: assignment.actualStartDate !== null,
-  }).employmentRelationshipOnFirstDay
+  return arbeitsverhaeltnisstand(assignment).employmentRelationshipOnFirstDay
 }
 
 /**
@@ -2185,6 +2564,30 @@ export async function createAssignment(
     candidate: submission.candidate,
   })
 
+  // P4 an Q18 (5.2.4): **alle** Einträge des Standorts, nicht nur der zuletzt
+  // gültige — die Regel wählt über `activityKey` und die Gültigkeit aus, und
+  // ein Eintrag, der im Prüfzeitraum beginnt, gilt für ihn (5.5.3).
+  const entgeltzeilen = await prisma.comparableWageEntry.findMany({
+    where: { siteId: submission.demandRequest.siteId },
+  })
+  const entgelt = entgeltstand({
+    standort: submission.demandRequest.site.name,
+    taetigkeit: input.activityDescription.trim(),
+    eintraege: entgeltzeilen.map(alsVergleichsentgeltzeile),
+    einsatzwert: comparableWage === null ? null : Number(comparableWage),
+    abweichungBegruendet: false,
+    faelligkeit: regelstand.equalPay?.equalPayDueDate ?? null,
+    stichtag: null,
+    zeitraum: { von: input.plannedStartDate, bis: input.plannedEndDate },
+  })
+  // P11 an Q17 (5.3.4): der erste Überlassungstag ist der **geplante** Beginn;
+  // `actualStartDate` gibt es beim Anlegen noch nicht.
+  const arbeitsverhaeltnis = arbeitsverhaeltnisstand({
+    candidate: submission.candidate,
+    actualStartDate: null,
+    plannedStartDate: input.plannedStartDate,
+  })
+
   const facts: AssignmentFacts = {
     submissionStatus: submission.status,
     supplierStatus: submission.candidate.supplier.status,
@@ -2347,6 +2750,25 @@ export async function createAssignment(
         },
         raisedAt: evaluationDate,
       })
+      // 4.7: Q15, Q17 und Q18 am Anlegen. Q14 und Q16 sind Sperren — sie haben
+      // den Übergang verhindert, bevor es hierher kommt.
+      await warnungenMelden(
+        tx,
+        {
+          objectType: 'assignment',
+          objectRef: einsatz.id,
+          tenantId: einsatz.tenantId,
+          statusFrom: outcome.from,
+          statusTo: outcome.to,
+          lage: {
+            operator: einsatz.tenantId,
+            customer: customerTenantId,
+            supplier: supplierTenantId,
+          },
+          raisedAt: evaluationDate,
+        },
+        befundeEinsatz(regelstand, arbeitsverhaeltnis, entgelt),
+      )
     })
   } catch (error) {
     return asFailure(error, 'Einsatz konnte nicht angelegt werden')
@@ -2787,13 +3209,21 @@ export async function transitionExtension(
     status,
   )
 
+  const regelstand = await regelstandFuerVerlaengerung(assignment, extension.newEndDate)
+  // 5.0, Zeile „Verlängerung": bisheriges `plannedEndDate` + 1 Tag bis
+  // `newEndDate` — derselbe Zeitraum, über den P1, P3 und P9 schon rechnen.
+  const verlaengerterZeitraum = {
+    von: folgetagVon(assignment.plannedEndDate) ?? extension.newEndDate,
+    bis: extension.newEndDate,
+  }
+
   const outcome = attemptTransition(ASSIGNMENT_EXTENSION_MODEL, input.transition, {
     currentStatus: status,
     subject: identity.subject,
     resource: ref,
     facts: extensionFacts(
       assignment,
-      await regelstandFuerVerlaengerung(assignment, extension.newEndDate),
+      regelstand,
       {
         newEndDate: extension.newEndDate,
         reason: extension.reason,
@@ -2825,6 +3255,27 @@ export async function transitionExtension(
     data.effectiveAt = evaluationDate
     data.effectiveById = identity.user.id
   }
+
+  // P4 an Q32 (5.2.4): nur bei der Wirksamkeit — 4.7 ordnet die Zeile diesem
+  // Übergang zu, und vorher ist der verlängerte Zeitraum noch keiner.
+  const entgelt =
+    input.transition === 'makeEffective'
+      ? entgeltstand({
+          standort: assignment.site.name,
+          taetigkeit: assignment.activityDescription,
+          eintraege: (
+            await prisma.comparableWageEntry.findMany({ where: { siteId: assignment.siteId } })
+          ).map(alsVergleichsentgeltzeile),
+          einsatzwert:
+            assignment.comparableWage === null ? null : Number(assignment.comparableWage),
+          abweichungBegruendet: assignment.comparableWageDeviationReason !== null,
+          // Dieselbe Fälligkeit, über die Q29 warnt — zwei Zeilen desselben
+          // Vorgangs dürfen nicht über verschiedene Tage rechnen.
+          faelligkeit: regelstand.equalPay?.equalPayDueDate ?? null,
+          stichtag: null,
+          zeitraum: verlaengerterZeitraum,
+        })
+      : null
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -2874,6 +3325,29 @@ export async function transitionExtension(
         },
         raisedAt: evaluationDate,
       })
+      // 4.7: Q28 und Q29 bei der Genehmigung, Q32 bei der Wirksamkeit. Q30 und
+      // Q31 sind Sperren und kommen hier nicht an.
+      if (input.transition === 'approve' || input.transition === 'makeEffective') {
+        await warnungenMelden(
+          tx,
+          {
+            objectType: 'assignmentExtension',
+            objectRef: extension.id,
+            tenantId: assignment.tenantId,
+            statusFrom: outcome.from,
+            statusTo: outcome.to,
+            lage: einsatzlage(assignment),
+            raisedAt: evaluationDate,
+          },
+          befundeVerlaengerung(
+            regelstand,
+            verlaengerterZeitraum,
+            assignment.comparableWage !== null,
+            entgelt,
+            input.transition,
+          ),
+        )
+      }
     })
   } catch (error) {
     return asFailure(error, 'Statuswechsel an der Verlängerung konnte nicht gespeichert werden')

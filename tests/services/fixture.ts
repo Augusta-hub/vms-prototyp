@@ -1090,3 +1090,88 @@ export async function legeVergleichsentgeltAn(
   })
   return eintrag.id
 }
+
+/**
+ * Ein Profilvorschlag mit der Kette davor — Anfrage, Ausschreibung, Einladung,
+ * Angebot (3.4, 3.5, 3.6). Ohne sie gibt es keinen Vorschlag: 4.2.3 setzt das
+ * Angebot voraus, und die Vorbedingungen lesen es.
+ *
+ * Alle Daten sind synthetisch (CLAUDE.md, Regel 3).
+ */
+export async function legeProfilvorschlagAn(
+  welt: Welt,
+  angaben: {
+    readonly nummer: string
+    readonly status: 'submitted' | 'reviewed' | 'releasedToCustomer'
+    readonly verfuegbarAb: Date
+    readonly anfrageEnde?: Date | null
+    readonly kandidat?: string
+  },
+): Promise<string> {
+  const anfrage = await prisma.demandRequest.create({
+    data: {
+      tenantId: welt.kundenMandant,
+      requestNumber: `BA-${angaben.nummer}`,
+      customerId: welt.kunde,
+      siteId: welt.standort,
+      costCenterId: welt.kostenstelle,
+      title: 'Montage Linie 4',
+      activityDescription: 'Montage von Baugruppen, Werk Süd (synthetisch)',
+      startDate: angaben.verfuegbarAb,
+      endDate: angaben.anfrageEnde ?? null,
+      weeklyHours: '35.00',
+      headcount: 1,
+      status: 'inSelection',
+      requestedById: welt.bedarfstraeger,
+    },
+  })
+  const ausschreibung = await prisma.tender.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      tenderNumber: `${anfrage.requestNumber}-R1`,
+      demandRequestId: anfrage.id,
+      tenderRound: 1,
+      distributionMode: 'simultaneous',
+      publishedAt: tag('2026-10-01'),
+      publishedById: welt.administrator,
+      offerDeadline: tag('2026-10-20'),
+    },
+  })
+  const einladung = await prisma.tenderInvitation.create({
+    data: {
+      tenantId: welt.betreiberMandant,
+      tenderId: ausschreibung.id,
+      supplierId: welt.lieferant,
+      invitedAt: tag('2026-10-01'),
+      invitationStatus: 'offerSubmitted',
+    },
+  })
+  const angebot = await prisma.supplierOffer.create({
+    data: {
+      tenantId: welt.lieferantMandant,
+      offerNumber: `A-${angaben.nummer}`,
+      tenderInvitationId: einladung.id,
+      supplierId: welt.lieferant,
+      availableFrom: angaben.verfuegbarAb,
+      offeredHeadcount: 1,
+      submittedAt: tag('2026-10-05'),
+      status: 'submitted',
+    },
+  })
+  const vorschlag = await prisma.candidateSubmission.create({
+    data: {
+      tenantId: welt.lieferantMandant,
+      submissionNumber: angaben.nummer,
+      candidateId: angaben.kandidat ?? welt.kandidat,
+      supplierOfferId: angebot.id,
+      demandRequestId: anfrage.id,
+      availableFrom: angaben.verfuegbarAb,
+      disclosureLevel: 'pseudonymized',
+      releasedToCustomerAt:
+        angaben.status === 'releasedToCustomer' ? tag('2026-10-06') : null,
+      submittedAt: tag('2026-10-05'),
+      status: angaben.status,
+    },
+  })
+  return vorschlag.id
+}

@@ -668,6 +668,19 @@ export function drehtuerstand(eingabe: {
   }
 }
 
+/** Das Ergebnis von P11 für die Tatsachen aus 4.2 und 4.3 (SPEC 5.3.4). */
+export interface Arbeitsverhaeltnisstand {
+  /** Die Tatsache, die 4.3 als Vorbedingung nennt. */
+  readonly employmentRelationshipOnFirstDay: boolean
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
+  readonly meldung: string
+}
+
 /**
  * P11 für einen Vorgang (SPEC 5.3.4): besteht das Arbeitsverhältnis beim
  * Verleiher am ersten Überlassungstag? Das ist die Tatsache
@@ -680,7 +693,7 @@ export function bestehtArbeitsverhaeltnisAmErstenTag(eingabe: {
   }
   readonly ersterUeberlassungstag: Date
   readonly amEinsatzstart: boolean
-}): { readonly employmentRelationshipOnFirstDay: boolean; readonly meldung: string } {
+}): Arbeitsverhaeltnisstand {
   const status = eingabe.kandidat.employmentStatusWithSupplier
   const ergebnis = pruefeArbeitsverhaeltnis({
     person: '(Kandidat)',
@@ -694,6 +707,7 @@ export function bestehtArbeitsverhaeltnisAmErstenTag(eingabe: {
   })
   return {
     employmentRelationshipOnFirstDay: ergebnis.bestehtAmErstenTag,
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
