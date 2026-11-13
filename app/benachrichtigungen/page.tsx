@@ -17,7 +17,9 @@
  *  - die **Läufe selbst**, damit „nichts gemeldet" von „nicht gelaufen" zu
  *    unterscheiden ist.
  */
+import { REGELWERK } from '../../lib/aueg/regelwerk'
 import {
+  ladeLaufstand,
   loadNightlyRuns,
   loadNotifications,
   mayRunNightly,
@@ -52,6 +54,9 @@ export default async function BenachrichtigungenPage({
     loadNightlyRuns(identity),
     mayRunNightly(identity),
   ])
+  // Der Zeitplan ist Festwert des Regelwerks (5.5.1); der Stand sagt, ob ein
+  // Lauf aussteht und welche Tage ausgefallen sind.
+  const stand = darfLaufen ? await ladeLaufstand() : null
 
   return (
     <>
@@ -93,6 +98,64 @@ export default async function BenachrichtigungenPage({
           </p>
         </form>
       ) : null}
+
+      {stand === null ? null : (
+        <>
+          <h2>Zeitplan (5.5.1)</h2>
+          <p>
+            Fällig ist der Lauf eines Kalendertages um{' '}
+            <strong>{REGELWERK.lauf.uhrzeit}</strong> in der Zeitzone{' '}
+            <strong>{REGELWERK.lauf.zeitzone}</strong> — beides Festwerte des Regelwerks (5.0,
+            5.5.1), keine Zahl im Dienst. Der <strong>Stichtag</strong> ist der Kalendertag
+            dieser Zone, nicht der nach Weltzeit.
+          </p>
+          <table>
+            <tbody>
+              <tr>
+                <th>fälliger Stichtag</th>
+                <td>
+                  <Wert value={stand.stichtag.toISOString().slice(0, 10)} />{' '}
+                  {stand.offen ? <Status value="steht aus" /> : <Status value="gelaufen" />}
+                </td>
+              </tr>
+              <tr>
+                <th>fällig seit</th>
+                <td>{stand.faelligSeit.toISOString().slice(0, 16).replace('T', ' ')} UTC</td>
+              </tr>
+              <tr>
+                <th>nächste Fälligkeit</th>
+                <td>
+                  {stand.naechsteFaelligkeit.toISOString().slice(0, 16).replace('T', ' ')} UTC
+                </td>
+              </tr>
+              <tr>
+                <th>ausgefallen</th>
+                <td>
+                  {stand.ausgefalleneTage === 0 ? (
+                    '—'
+                  ) : (
+                    <>
+                      <strong>{stand.ausgefalleneTage}</strong> Tag(e):{' '}
+                      {stand.ausgefallen.map((tag) => tag.toISOString().slice(0, 10)).join(', ')}
+                      {stand.ausgefallen.length < stand.ausgefalleneTage ? ' …' : ''}
+                    </>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="hint">
+            Ein <strong>ausgefallener Lauf wird nicht nachgeholt</strong> (5.5.1): der Stichtag
+            ist der Tag des Laufs, ein Lauf von heute kann nicht der von gestern sein. Fachlich
+            ist das verkraftbar — N1 bis N6 prüfen <em>Spannen</em>, keine Kanten, und was
+            gestern fällig war, findet der Lauf von heute noch. Der ausgefallene Tag wird
+            deshalb nicht erzeugt, sondern <strong>ausgewiesen</strong>. Das System führt{' '}
+            <strong>keine eigene Uhr</strong>: ein Planer außerhalb ruft zur Fälligkeitszeit
+            <code> POST /api/naechtlicher-lauf</code> auf. Welcher Planer das ist, hängt vom
+            Hoster ab (<em>offene Frage 2</em>).
+          </p>
+        </>
+      )}
 
       <h2>Läufe (5.5.1 c)</h2>
       {runs.length === 0 ? (

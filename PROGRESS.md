@@ -5,6 +5,101 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-13 — Zeitplan des nächtlichen Laufs (5.5.1)
+
+### Gemacht
+
+Der nächtliche Lauf war bisher ein **Knopf**. 5.5.1 sagt „einmal täglich,
+Stichtag ist der Tag des Laufs" — mehr stand dort nicht, und das Fehlende ist
+jetzt spezifiziert und umgesetzt.
+
+- **SPEC 5.5.1** hat einen Abschnitt „Zeitplan des Laufs": Fälligkeitszeit
+  `nightlyRunTime` (03:00), Zeitzone `nightlyRunTimeZone` (`Europe/Berlin`),
+  beides Festwerte des Regelwerks und in 5.0 verzeichnet. Dazu die Regel für
+  ausgefallene Tage und die Frage, wer den Lauf auslöst. Glossar 1.5 erweitert.
+- **`lib/nightly/zeitplan.ts`** rechnet ohne Datenbank: Stichtag als
+  Kalendertag der Zone, Fälligkeit als Weltzeit zu einer Wanduhrzeit, Lücke
+  zwischen zwei Läufen.
+- **`runNightlyScheduled`** ist der Lauf ohne Benutzer; `ladeLaufstand` gibt
+  den Stand für Oberfläche und Planer.
+- **`POST /api/naechtlicher-lauf`** ist der Zugang für einen Planer außerhalb
+  des Systems, mit geteiltem Geheimnis aus `.env` (`NIGHTLY_RUN_TOKEN`, leerer
+  Platzhalter in `.env.example`). `GET` gibt denselben Stand aus, ohne etwas
+  auszulösen.
+- Die Seite **Benachrichtigungen** zeigt Zeitplan, fälligen Stichtag, nächste
+  Fälligkeit und ausgefallene Tage.
+
+### Entscheidungen
+
+1. **Ein ausgefallener Lauf wird nicht nachgeholt.** Der Stichtag ist nach
+   5.5.1 der Tag des Laufs; ein Lauf von heute kann deshalb nicht der von
+   gestern sein. Fachlich trägt das: N1 bis N6 prüfen **Spannen** („innerhalb
+   des Vorlaufs oder erreicht"), keine Kanten — was gestern fällig war, findet
+   der Lauf von heute noch. Der ausgefallene Tag wird deshalb **ausgewiesen**
+   statt erzeugt. Das ist genau der Zweck, den `nightlyRuleRun` schon hatte:
+   „nichts gemeldet" von „nicht gelaufen" zu unterscheiden.
+2. **Das System führt keine eigene Uhr.** Ein Anwendungsprozess ist kein
+   Planer, und ein zweiter Prozess, der wartet, wäre eine zweite Quelle der
+   Wahrheit über die Zeit. Es gibt eine Adresse, die ein beliebiger Planer
+   aufruft; welcher, hängt vom Hoster ab (*offene Frage 2*) und steht nicht im
+   Anwendungscode.
+3. **Der Aufruf ist eine Nachfrage, kein Befehl.** Ob gelaufen wird,
+   entscheidet der Zeitplan und nicht der Anrufer: zu früh oder zweimal löst
+   nichts aus. Deshalb genügt am Zugang ein geteiltes Geheimnis — eine
+   Rollenprüfung gibt es nicht, weil es keinen Benutzer gibt. Ohne gesetztes
+   Geheimnis ist der Zugang **zu**.
+4. **Der Planer bekommt keinen erfundenen Benutzer.** `startedById` bleibt
+   leer; im Protokoll ist der Handelnde ohnehin der Systemlauf (4.0,
+   Regel 10). Ein eingesetzter Benutzer würde eine Entscheidung vortäuschen,
+   die niemand getroffen hat.
+5. **Gerechnet wird in der Zeitzone des Betreibers**, nicht nach Weltzeit. Die
+   Kalendertage dieses Verfahrens sind deutsche Geschäftstage; ein Lauf nach
+   Weltzeit läge an zwei Tagen des Jahres auf dem falschen Kalendertag.
+   Stichtage bleiben als UTC-Mitternacht geführt — das ist eine Darstellung,
+   keine Zeitzone.
+
+### Gefunden
+
+**Der Stichtag wurde an zwei Stellen gerechnet.** Der erste Entwurf ließ den
+Stand den fälligen Stichtag bestimmen und den Lauf noch einmal — mit dem
+Ergebnis, dass ein Aufruf um 02:00 Berliner Zeit den Lauf des Vortags auslöste
+und ihn mit dem Stichtag von **heute** verbuchte. Ein Test hat es gezeigt.
+Jetzt gibt es genau eine Stelle: der Stichtag ist der heutige Kalendertag der
+Zone, und vor der Fälligkeitszeit ist sein Lauf schlicht noch nicht dran — er
+wird nicht zum Lauf von gestern.
+
+### Nachweis
+
+`npm test` 1125 grün (18 neue zum Zeitplan), `npm run test:services` 298 grün
+(14 neue), `npm run test:aueg` 267 Szenarien / 120 vollständig geprüft / **0
+verletzte Zusicherungen**, `npx tsc --noEmit` und `npm run build` sauber
+(die neue Route ist als `ƒ /api/naechtlicher-lauf` gebaut), `npm run db:seed`
+läuft. **13 Mutationen, alle gefangen** — darunter „Stichtag nach Weltzeit",
+„Versatz nur einmal gelesen", „Zugang ohne Geheimnis offen" und „Planer
+schreibt einen Benutzer". Eine überlebende Mutation („Lauf nimmt den Stichtag
+des Aufrufzeitpunkts") ist **gleichwertiger Code**: seit der Korrektur oben
+sind beide Ausdrücke dasselbe. Eine zweite („Mitternacht als Stunde 24
+gelesen") betraf eine Abfangzeile, die es jetzt nicht mehr gibt —
+`hourCycle: 'h23'` ist auf 00 bis 23 festgelegt, und ein Sonderfall, den man
+abfangen müsste, ist besser ein Sonderfall, den es nicht gibt.
+
+Am laufenden Prototyp belegt: `GET` meldet den offenen Stichtag, `POST` löst
+den Lauf aus (5 Vorgänge, 3 Befunde, 5 Nachrichten), der zweite `POST`
+antwortet „Kein Lauf fällig", ein falsches Geheimnis mit 401. Die Oberfläche
+zeigt danach „gelaufen" und — mit einer gesetzten Lücke — „3 Tag(e):
+2026-11-10, 2026-11-11, 2026-11-12".
+
+### Offen
+
+- **Welcher Planer** den Lauf aufruft, bleibt *offene Frage 2* (Hoster). Für
+  den Betrieb fehlt außerdem eine Überwachung, die meldet, wenn der Lauf
+  mehrere Tage ausbleibt — die Lücke ist sichtbar, aber niemand wird auf sie
+  hingewiesen. Das wäre eine Benachrichtigung über den Lauf selbst und gehört
+  erst in die SPEC.
+- **Zustellung** bleibt *Frage 56*, **P7** ohne Rechenweg *Frage 30*.
+
+---
+
 ## 2026-11-13 — Befundliste für Vorschlag, Einsatz und Verlängerung (4.7)
 
 ### Gemacht

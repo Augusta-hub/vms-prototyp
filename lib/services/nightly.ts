@@ -21,6 +21,8 @@
  */
 import { systemlauf } from '../audit/entry'
 import { protokolliere, type Transaktion } from '../audit/record'
+import { REGELWERK } from '../aueg/regelwerk'
+import { laufstand, stichtagAm, type Laufstand } from '../nightly/zeitplan'
 import { checkPermission } from '../authz/check'
 import type { RoleCode } from '../authz/roles'
 import type { Rollenkuerzel } from '../aueg/typen'
@@ -84,7 +86,59 @@ export async function runNightly(
     )
   }
 
-  const tag = tagesanfang(runDate)
+  return laufDurchfuehren(
+    operatorTenant.id,
+    stichtagAm(runDate, REGELWERK.lauf),
+    runDate,
+    identity.user.id,
+  )
+}
+
+/**
+ * Derselbe Lauf, ausgelöst vom **Planer außerhalb des Systems** (5.5.1,
+ * „Wer den Lauf auslöst").
+ *
+ * Er hat keinen Benutzer, und er bekommt auch keinen: im Protokoll ist der
+ * Handelnde ohnehin der Systemlauf (4.0, Regel 10), und ein erfundener
+ * Benutzer würde eine Entscheidung vortäuschen, die niemand getroffen hat.
+ * Statt der Berechtigungsprüfung steht am Zugang die Frage, ob der Lauf
+ * **fällig** ist: ein Planer, der zu früh oder zweimal ruft, soll nichts
+ * auslösen.
+ */
+export async function runNightlyScheduled(jetzt: Date = new Date()): Promise<ActionResult> {
+  const operatorTenant = await prisma.tenant.findFirst({ where: { tenantType: 'operator' } })
+  if (operatorTenant === null) return failure('Kein Betreibermandant vorhanden (3.11).')
+
+  const stand = await ladeLaufstand(jetzt)
+  if (!stand.faellig) {
+    return success(
+      `Kein Lauf fällig: der Lauf zum Stichtag ${iso(stand.stichtag)} wird erst am ` +
+        `${iso(stand.faelligSeit)} fällig (5.5.1).`,
+    )
+  }
+  if (!stand.offen) {
+    return success(
+      `Kein Lauf fällig: der Stichtag ${iso(stand.stichtag)} ist bereits gelaufen. Der nächste ` +
+        `Lauf wird am ${iso(stand.naechsteFaelligkeit)} fällig (5.5.1).`,
+    )
+  }
+  // Gerechnet wird zu **dem** Stichtag, den der Stand nennt. Ihn hier noch
+  // einmal zu bestimmen hieße, ihn an zwei Stellen zu rechnen.
+  return laufDurchfuehren(operatorTenant.id, stand.stichtag, jetzt, null)
+}
+
+/**
+ * Der Lauf selbst. Der **Stichtag** kommt von außen und wird hier nicht mehr
+ * bestimmt (5.5.1): `runDate` ist nur der Zeitpunkt, zu dem die Nachrichten
+ * entstanden sind.
+ */
+async function laufDurchfuehren(
+  operatorTenantId: string,
+  tag: Date,
+  runDate: Date,
+  startedById: string | null,
+): Promise<ActionResult> {
+  const operatorTenant = { id: operatorTenantId }
   const lagen = await ladeLagen(operatorTenant.id)
   const befunde: Nachtbefund[] = [
     ...befundeN1(lagen.lieferanten, tag, operatorTenant.id),
@@ -112,7 +166,7 @@ export async function runNightly(
           warnings: zaehle(befunde, 'warning'),
           escalations: zaehle(befunde, 'escalation'),
           notifications: geschrieben,
-          startedById: identity.user.id,
+          startedById,
         },
         create: {
           runDate: tag,
@@ -122,7 +176,7 @@ export async function runNightly(
           warnings: zaehle(befunde, 'warning'),
           escalations: zaehle(befunde, 'escalation'),
           notifications: geschrieben,
-          startedById: identity.user.id,
+          startedById,
         },
       })
     })
@@ -250,10 +304,26 @@ async function schreibeBenachrichtigungen(
   return geschrieben
 }
 
-function tagesanfang(wert: Date): Date {
-  return new Date(
-    Date.UTC(wert.getUTCFullYear(), wert.getUTCMonth(), wert.getUTCDate(), 0, 0, 0, 0),
-  )
+/** Ein Zeitpunkt in Worten — Tag für einen Stichtag, Minute für eine Uhrzeit. */
+function iso(wert: Date): string {
+  return wert.getUTCHours() === 0 && wert.getUTCMinutes() === 0
+    ? wert.toISOString().slice(0, 10)
+    : wert.toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+}
+
+/**
+ * Der Stand des Laufs für die Oberfläche und für den Planer (5.5.1).
+ *
+ * Der jüngste verzeichnete Lauf ist die einzige Auskunft darüber, seit wann
+ * geprüft wird; ohne ihn lässt sich keine Lücke benennen.
+ */
+export async function ladeLaufstand(jetzt: Date = new Date()): Promise<Laufstand> {
+  const letzter = await prisma.nightlyRuleRun.findFirst({ orderBy: { runDate: 'desc' } })
+  return laufstand({
+    jetzt,
+    letzterStichtag: letzter?.runDate ?? null,
+    zeitplan: REGELWERK.lauf,
+  })
 }
 
 /* ------------------------------------------------------------------ */

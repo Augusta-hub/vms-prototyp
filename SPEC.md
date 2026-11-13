@@ -241,6 +241,10 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Nachweisfluss | `verificationFlow` | Lebenszyklus der Anerkennung eines Nachweises: `submitted` → `accepted` / `rejected` (5.4.3) |
 | Vorlauffrist Nachweis | `documentExpiryNoticeDays` | gestufte Vorlaufwerte vor Ablauf eines Nachweises (5.0, 5.4.4) |
 | Nächtlicher Lauf | `nightlyRuleRun` | täglicher Prüflauf für zeitabhängige Befunde; erzeugt nie einen Statuswechsel und nie eine Sperre (5.5.1) |
+| Zeitplan des Laufs | `nightlyRunSchedule` | Fälligkeitszeit und Zeitzone, nach denen der nächtliche Lauf fällig wird (5.5.1) |
+| Fälligkeitszeit | `nightlyRunTime` | Uhrzeit, zu der der Lauf eines Kalendertages fällig wird (5.5.1) |
+| Zeitzone des Laufs | `nightlyRunTimeZone` | Zeitzone, in der Fälligkeitszeit und Stichtag gelesen werden (5.5.1) |
+| Ausgefallener Lauf | `missedRun` | Kalendertag, dessen Lauf fällig war und nicht stattgefunden hat; wird nicht nachgeholt (5.5.1) |
 | Festwert des Regelwerks | — | Schwellen- und Vorlaufwert, der Systemverhalten beschreibt und deshalb in 5.0 steht, nicht in der Konfiguration |
 | Gesetzliche Regelgrenze | — | Wert, der ohne Tarifzuordnung gilt: 18 Monate (5.1.2), 9 Monate bzw. bei fehlendem Verleihertarif der erste Überlassungstag (5.2.2) |
 
@@ -3748,6 +3752,8 @@ als die Prozessfristen in 4.0). Eine Änderung ist eine Änderung dieses Kapitel
 | Vorlauf Equal-Pay-Fälligkeit | `equalPayNoticeDays` | 60 Tage vor `equalPayDueDate` | Information an `MD` und `KE` |
 | Vorlauf Equal-Pay-Fälligkeit, Warnung | `equalPayWarningDays` | 30 Tage vor `equalPayDueDate`, wenn `comparableWage` fehlt | Warnung; Eskalationsanlass „Equal-Pay-Frist erreicht, Vergleichsentgelt fehlt" (2.4) |
 | Vorlauf Ablauf eines Nachweises | `documentExpiryNoticeDays` | je Nachweisart, Tabelle in 5.4.4 | Information, Warnung, Eskalation nach Stufen |
+| Fälligkeitszeit des nächtlichen Laufs | `nightlyRunTime` | 03:00, Tabelle in 5.5.1 | ab dieser Uhrzeit ist der Lauf des Tages fällig |
+| Zeitzone des nächtlichen Laufs | `nightlyRunTimeZone` | `Europe/Berlin`, Tabelle in 5.5.1 | in ihr werden Fälligkeitszeit und Stichtag gelesen |
 
 #### Was dieses Kapitel nicht tut
 
@@ -4805,6 +4811,43 @@ sie verhindert.
 | N4 | Einsätze in `active`, `interrupted` | P7 | Arbeitskampfanzeige deckt den Tag des Laufs | Warnung mit Pflicht-Eskalation; Unterbrechung wird vorgeschlagen (5.3.2) |
 | N5 | Nachweise mit `validTo`, deren Bezugsobjekt aktiv ist | P10 | Ablauf oder Vorlauf erreicht | nach Katalog 5.4.4 |
 | N6 | Einsätze in `interrupted` mit offener Unterbrechung | P2 | Unterbrechung überschreitet die Drei-Monats-Schwelle | Information: die Zählung wird mit der Wiederaufnahme zurückgesetzt (5.1.4) |
+
+**Zeitplan des Laufs** (`nightlyRunSchedule`). Der Lauf eines Kalendertages ist
+zur **Fälligkeitszeit** `nightlyRunTime` fällig, gelesen in der Zeitzone
+`nightlyRunTimeZone`. Beide sind Festwerte des Regelwerks (5.0): sie beschreiben
+Systemverhalten, keine Rechtslage. Vorbelegt sind **03:00** und
+**Europe/Berlin** — die Zeitzone des Betreibers, in der auch die Kalendertage
+dieses Kapitels gelesen werden; ein Lauf nach Weltzeit läge an zwei Tagen des
+Jahres auf dem falschen Kalendertag.
+
+| Festwert | Bezeichner | Wert | Wirkung |
+|---|---|---|---|
+| Fälligkeitszeit des Laufs | `nightlyRunTime` | 03:00 | ab dieser Uhrzeit ist der Lauf des Tages fällig |
+| Zeitzone des Laufs | `nightlyRunTimeZone` | `Europe/Berlin` | in ihr werden Fälligkeitszeit und Stichtag gelesen |
+
+Der **Stichtag** ist der Kalendertag, an dem der Lauf fällig wird — in dieser
+Zeitzone, nicht nach Weltzeit. Je Stichtag gibt es **einen** Lauf; ein zweiter
+Aufruf zum selben Stichtag wiederholt die Prüfung, erzeugt aber keine zweite
+Nachricht (3.14, Eindeutigkeit).
+
+**Ein ausgefallener Lauf wird nicht nachgeholt** (`missedRun`). Der Stichtag ist
+nach diesem Abschnitt der Tag des Laufs; ein Lauf von heute kann deshalb nicht
+der Lauf von gestern sein. Fachlich ist der Ausfall verkraftbar: die Zeilen N1
+bis N6 prüfen **Spannen** („innerhalb des Vorlaufs oder erreicht"), keine
+Kanten — was gestern fällig war, findet der Lauf von heute noch. Der ausgefallene
+Tag wird deshalb nicht erzeugt, sondern **ausgewiesen**: die Lücke zwischen zwei
+Läufen ist sichtbar zu machen, sonst wäre „nichts gemeldet" nicht von „nicht
+gelaufen" zu unterscheiden.
+
+**Wer den Lauf auslöst.** Zwei Wege, ein Ergebnis. Der Betreiberadministrator
+stößt ihn von Hand an (2.3); daneben gibt es einen Zugang für einen **Planer
+außerhalb des Systems**, der ihn zur Fälligkeitszeit aufruft. Das System führt
+**keine eigene Uhr**: ein Anwendungsprozess ist kein Planer, und ein zweiter
+Prozess, der wartet, wäre eine zweite Quelle der Wahrheit über die Zeit. Welcher
+Planer das ist, hängt vom Hoster ab (*offene Frage 2*) und steht nicht in diesem
+Kapitel. In beiden Fällen ist der Handelnde im Protokoll der **Systemlauf** und
+kein Benutzer (4.0, Regel 10): den Lauf löst keine fachliche Entscheidung aus,
+auch wenn ein Mensch den Knopf drückt.
 
 **Was der nächtliche Lauf nicht leistet.** Er kennt nur, was gemeldet ist. Eine
 Arbeitskampfanzeige, die niemand einstellt, erzeugt keine Warnung (5.3.2); eine

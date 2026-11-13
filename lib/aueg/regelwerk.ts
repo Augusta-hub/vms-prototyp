@@ -98,6 +98,21 @@ export interface Katalogzeile {
  * `hinweisTage` und `warnungTage` sind `maxDurationNoticeDays` und
  * `maxDurationWarningDays` aus 5.0, Abschnitt „Festwerte dieses Kapitels".
  */
+/**
+ * Der Zeitplan des nächtlichen Laufs (SPEC 5.5.1, „Zeitplan des Laufs").
+ *
+ * `uhrzeit` ist `nightlyRunTime`, `zeitzone` ist `nightlyRunTimeZone`. Beide
+ * sind Festwerte des Regelwerks: sie beschreiben Systemverhalten, nicht die
+ * Rechtslage. Sie stehen hier und nicht als Zeichenkette im Dienst — eine
+ * Änderung ist eine Änderung des Kapitels.
+ */
+export interface Laufkonfiguration {
+  /** `HH:MM` in der Zeitzone des Laufs (5.5.1). */
+  readonly uhrzeit: string
+  /** IANA-Kennung, etwa `Europe/Berlin` (5.5.1). */
+  readonly zeitzone: string
+}
+
 export interface Dauerkonfiguration {
   readonly regelgrenzeMonate: number
   readonly unterbrechungMonate: number
@@ -131,6 +146,8 @@ export interface EqualPaykonfiguration {
 export interface Regelwerkkonfiguration {
   readonly dauer: Dauerkonfiguration
   readonly equalPay: EqualPaykonfiguration
+  /** Fälligkeitszeit und Zeitzone des nächtlichen Laufs (5.5.1). */
+  readonly lauf: Laufkonfiguration
   /** Fehlende Tarifzuordnung der Verleiherseite (5.2.2, Fall 1). */
   readonly adressatenVerleihertarifFehlt: readonly Rollenkuerzel[]
   /** Unzulässige Fristkonfiguration (5.2.2, Fälle 5 und 6). */
@@ -221,6 +238,10 @@ const OHNE_STUFEN: Stufenadressaten = {
 const OHNE_VORLAUF: Vorlauf = { information: null, warnung: null, eskalation: null }
 
 export const REGELWERK: Regelwerkkonfiguration = {
+  // SPEC 5.5.1, Tabelle „Zeitplan des Laufs": `nightlyRunTime`,
+  // `nightlyRunTimeZone`. Die Zeitzone ist die des Betreibers — in ihr werden
+  // auch die Kalendertage dieses Kapitels gelesen.
+  lauf: { uhrzeit: '03:00', zeitzone: 'Europe/Berlin' },
   dauer: {
     // § 1 Abs. 1b Satz 1 AÜG, SPEC 5.1.2 Rang 3.
     regelgrenzeMonate: 18,

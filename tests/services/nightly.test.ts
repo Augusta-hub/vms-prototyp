@@ -22,10 +22,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { loadIdentity, type LoadedIdentity } from '../../lib/identity/loadSubject'
 import { prisma } from '../../lib/prisma'
 import {
+  ladeLaufstand,
   loadNightlyRuns,
   loadNotifications,
   mayRunNightly,
   runNightly,
+  runNightlyScheduled,
 } from '../../lib/services/nightly'
 import {
   baueWelt,
@@ -351,5 +353,75 @@ describe('Protokoll des Laufs (3.12, 5.5.2 Nr. 1)', () => {
     const lauf = await prisma.nightlyRuleRun.findFirstOrThrow()
     expect(lauf.notifications).toBe(0)
     expect(lauf.checked).toBeGreaterThan(0)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 5.5.1 Zeitplan des Laufs                                            */
+/* ------------------------------------------------------------------ */
+
+describe('Zeitplan des Laufs (5.5.1)', () => {
+  it('nimmt den Kalendertag der Betreiberzeitzone als Stichtag, nicht den nach Weltzeit', async () => {
+    // 23:30 Weltzeit ist in Europe/Berlin schon der 13.; der Lauf gehört
+    // deshalb zum Stichtag 2026-11-13.
+    ok(await runNightly(administrator, new Date('2026-11-12T23:30:00.000Z')))
+    const laeufe = await prisma.nightlyRuleRun.findMany()
+    expect(laeufe).toHaveLength(1)
+    expect(laeufe[0]?.runDate.toISOString().slice(0, 10)).toBe('2026-11-13')
+  })
+
+  it('läuft über den Planer, wenn der Stichtag aussteht — ohne Benutzer', async () => {
+    const ergebnis = await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z'))
+    expect(ergebnis.ok).toBe(true)
+    const lauf = await prisma.nightlyRuleRun.findFirstOrThrow()
+    expect(lauf.runDate.toISOString().slice(0, 10)).toBe('2026-11-12')
+    // 4.0 Regel 10: den Lauf löst keine fachliche Entscheidung aus. Ein
+    // erfundener Benutzer würde eine vortäuschen, die niemand getroffen hat.
+    expect(lauf.startedById).toBe(null)
+  })
+
+  it('läuft über den Planer nicht zweimal zum selben Stichtag', async () => {
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    const zweiter = await runNightlyScheduled(new Date('2026-11-12T09:00:00.000Z'))
+    expect(ok(zweiter)).toContain('Kein Lauf fällig')
+    expect(await prisma.nightlyRuleRun.count()).toBe(1)
+  })
+
+  it('läuft über den Planer vor der Fälligkeitszeit gar nicht', async () => {
+    // 01:00 Weltzeit = 02:00 Berliner Zeit, also vor 03:00. Der Lauf wird
+    // **nicht** zum Lauf von gestern: „Stichtag ist der Tag des Laufs" (5.5.1).
+    const ergebnis = await runNightlyScheduled(new Date('2026-11-12T01:00:00.000Z'))
+    expect(ok(ergebnis)).toContain('wird erst am')
+    expect(await prisma.nightlyRuleRun.count()).toBe(0)
+  })
+
+  it('weist ausgefallene Tage aus, statt sie nachzuholen', async () => {
+    ok(await runNightly(administrator, tag('2026-11-09')))
+    const stand = await ladeLaufstand(new Date('2026-11-12T08:00:00.000Z'))
+    expect(stand.stichtag.toISOString().slice(0, 10)).toBe('2026-11-12')
+    expect(stand.offen).toBe(true)
+    expect(stand.ausgefallen.map((wert) => wert.toISOString().slice(0, 10))).toEqual([
+      '2026-11-10',
+      '2026-11-11',
+    ])
+
+    // Der Lauf von heute erzeugt **einen** Lauf — nicht drei.
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    const laeufe = await prisma.nightlyRuleRun.findMany({ orderBy: { runDate: 'asc' } })
+    expect(laeufe.map((zeile) => zeile.runDate.toISOString().slice(0, 10))).toEqual([
+      '2026-11-09',
+      '2026-11-12',
+    ])
+    // Die Lücke bleibt sichtbar: sie ist der Unterschied zwischen „nichts
+    // gemeldet" und „nicht gelaufen".
+    const danach = await ladeLaufstand(new Date('2026-11-12T09:00:00.000Z'))
+    expect(danach.offen).toBe(false)
+    expect(danach.ausgefalleneTage).toBe(0)
+  })
+
+  it('nennt ohne verzeichneten Lauf keine Lücke', async () => {
+    const stand = await ladeLaufstand(new Date('2026-11-12T08:00:00.000Z'))
+    expect(stand.ausgefalleneTage).toBe(0)
+    expect(stand.offen).toBe(true)
   })
 })
