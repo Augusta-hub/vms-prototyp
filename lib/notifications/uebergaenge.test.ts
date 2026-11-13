@@ -25,6 +25,8 @@ import {
   mandantenDerRolle,
   meldung,
   UEBERGANGSKATALOG,
+  warnungsbefunde,
+  type Pruefbefund,
   type Vorgangslage,
 } from './uebergaenge'
 
@@ -277,5 +279,40 @@ describe('Meldung', () => {
       null,
     )
     expect(katalogzeile('gibtEsNicht', 'submit')).toBe(null)
+  })
+})
+
+
+describe('Warnungen aus 4.7 (5.5.2)', () => {
+  const befund = (eigenes: Partial<Pruefbefund>): Pruefbefund => ({
+    check: 'P1',
+    satisfied: false,
+    effect: 'Warnung',
+    adressaten: ['MD'],
+    message: 'P1: …',
+    ...eigenes,
+  })
+
+  it('meldet die unerfüllte Warnung', () => {
+    const liste = [befund({})]
+    expect(warnungsbefunde(liste)).toEqual(liste)
+  })
+
+  it('meldet einen erfüllten Befund nicht — er nennt kein verletztes Datum', () => {
+    expect(warnungsbefunde([befund({ satisfied: true })])).toEqual([])
+  })
+
+  it('meldet eine Information nicht (5.5.2: „keine Benachrichtigung")', () => {
+    expect(warnungsbefunde([befund({ effect: 'Information' })])).toEqual([])
+  })
+
+  it('meldet eine Sperre nicht — sie hat den Übergang verhindert', () => {
+    expect(warnungsbefunde([befund({ effect: 'Sperre' })])).toEqual([])
+  })
+
+  it('sortiert nicht um und lässt die übrigen stehen', () => {
+    const eins = befund({ check: 'P1' })
+    const zwei = befund({ check: 'P10' })
+    expect(warnungsbefunde([eins, befund({ satisfied: true }), zwei])).toEqual([eins, zwei])
   })
 })

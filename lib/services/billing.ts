@@ -48,8 +48,14 @@ import {
 } from '../billing/items'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { pruefeAbrechnungsbeleg } from '../masterdata/invariants'
+import type { Rollenkuerzel } from '../aueg/typen'
+import { warnungsbefunde } from '../notifications/uebergaenge'
 import { prisma } from '../prisma'
-import { benachrichtigeUebergang, rolleDesHandelnden } from './notifications'
+import {
+  benachrichtigeUebergang,
+  benachrichtigeWarnung,
+  rolleDesHandelnden,
+} from './notifications'
 import {
   BILLING_DOCUMENT_MODEL,
   BILLING_DOCUMENT_STATE_LABELS,
@@ -146,6 +152,11 @@ export interface BillingFinding {
   readonly satisfied: boolean
   /** An diesem Objekt nie `Sperre` — siehe Kopfkommentar (5.5.5). */
   readonly effect: 'Warnung' | 'Information'
+  /**
+   * Adressaten des Befunds (5.5.2 Nr. 6) — wer die **Warnung** nach 4.7
+   * erfährt. Sie kommen aus der Regel, nicht aus diesem Dienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly message: string
 }
 
@@ -234,7 +245,7 @@ export async function loadBillingDocuments(
     // Die Befunde der Zeile, die der Beleg schon hinter sich hat: 4.7 ordnet
     // alle drei der **Anlage** zu, und sie bleiben am Beleg sichtbar, solange
     // er lebt (5.5.2 Nr. 1: jedes Ergebnis wird vermerkt).
-    const findings = await befunde(row)
+    const findings = await befunde(belegbezug(row))
     views.push(asView(row, identity, decision.crossTenant, findings, evaluationDate))
   }
   return views
@@ -435,6 +446,28 @@ function fristTage(config: unknown): number {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Was die Prüfungen aus 4.7 über einen Beleg wissen müssen — **ohne** ihn zu
+ * laden.
+ *
+ * Der Zuschnitt ist der Grund: Q38 bis Q40 gehören dem Übergang „— →
+ * `created`" (4.7), und zu diesem Zeitpunkt ist der Beleg noch nicht
+ * geschrieben. Eine Rechnung über die gespeicherten Positionen könnte erst
+ * **nach** der Transaktion laufen — dann aber wäre die Warnung keine
+ * Nebenwirkung des Übergangs mehr, sondern ein zweiter Vorgang, der auch
+ * ausbleiben kann. Deshalb nimmt die Prüfung die Zettel und Einsätze als
+ * Kennungen entgegen: bei der Erstellung aus der Ableitung, in der Ansicht aus
+ * dem geladenen Beleg.
+ */
+interface Belegbezug {
+  readonly direction: BillingDirection
+  readonly supplier: { readonly id: string; readonly legalName: string } | null
+  /** Die zugrunde liegenden Stundenzettel — sie geben den Leistungszeitraum. */
+  readonly timesheetIds: readonly string[]
+  /** Die abgerechneten Einsätze (3.9, über die Belegpositionen). */
+  readonly assignmentIds: readonly string[]
+}
+
+/**
  * Die Prüfungen, die 4.7 der Belegerstellung zuordnet.
  *
  * **Q38 nur auf der Einkaufsseite** — so steht es in 4.7 („→ `created`
@@ -445,21 +478,21 @@ function fristTage(config: unknown): number {
  * Der **Prüfzeitraum** ist der Leistungszeitraum des Belegs: frühester
  * `periodFrom` bis spätester `periodTo` der zugrunde liegenden Zettel (5.0).
  */
-async function befunde(row: LoadedDocument): Promise<readonly BillingFinding[]> {
+async function befunde(bezug: Belegbezug): Promise<readonly BillingFinding[]> {
   const liste: BillingFinding[] = []
-  const zeitraum = await leistungszeitraum(row.id)
+  const zeitraum = await leistungszeitraum(bezug.timesheetIds)
   if (zeitraum === null) return liste
 
   // ── Q38: P9, Erlaubnis im ganzen Leistungszeitraum (Einkaufsseite) ──────
-  if (row.direction === 'purchase' && row.supplier !== null) {
+  if (bezug.direction === 'purchase' && bezug.supplier !== null) {
     const erlaubnisse = await prisma.supplierPermit.findMany({
-      where: { supplierId: row.supplier.id },
+      where: { supplierId: bezug.supplier.id },
     })
     const urkunden = await prisma.document.findMany({
-      where: { supplierId: row.supplier.id },
+      where: { supplierId: bezug.supplier.id },
     })
     const stand = erlaubnisstand({
-      lieferant: row.supplier.legalName,
+      lieferant: bezug.supplier.legalName,
       erlaubnisse: erlaubnisse.map((erlaubnis) => ({
         id: erlaubnis.id,
         permitNumber: erlaubnis.permitNumber,
@@ -490,13 +523,15 @@ async function befunde(row: LoadedDocument): Promise<readonly BillingFinding[]> 
       // „Erbrachte Leistung wird abgerechnet; der Befund wird dokumentiert,
       // die Abrechnung nicht blockiert" (5.4.2 b, bestätigt in 5.5.5).
       effect: 'Warnung',
+      adressaten: stand.adressaten,
       message: stand.meldung,
     })
   }
 
   // ── Q39: P4, Vergleichsentgelt für Zeiträume nach der Fälligkeit ────────
-  const zeilen = await abgerechneteEinsaetze(row.id)
+  const zeilen = await abgerechneteEinsaetze(bezug.assignmentIds)
   const entgeltbefunde: string[] = []
+  const entgeltadressaten = new Set<Rollenkuerzel>()
   let entgeltErfuellt = true
   for (const einsatz of zeilen) {
     const eintraege = await prisma.comparableWageEntry.findMany({
@@ -522,6 +557,7 @@ async function befunde(row: LoadedDocument): Promise<readonly BillingFinding[]> 
     if (stand.treffer) {
       entgeltErfuellt = false
       entgeltbefunde.push(`${einsatz.assignmentNumber}: ${stand.meldung}`)
+      for (const rolle of stand.adressaten) entgeltadressaten.add(rolle)
     }
   }
   liste.push({
@@ -529,6 +565,7 @@ async function befunde(row: LoadedDocument): Promise<readonly BillingFinding[]> 
     row: 'Q39',
     satisfied: entgeltErfuellt,
     effect: 'Warnung',
+    adressaten: [...entgeltadressaten],
     message:
       entgeltbefunde.length === 0
         ? 'P4: zu jedem abgerechneten Einsatz liegt das Vergleichsentgelt vor, soweit es im ' +
@@ -566,19 +603,33 @@ async function befunde(row: LoadedDocument): Promise<readonly BillingFinding[]> 
     row: 'Q40',
     satisfied: !zuschlag.treffer,
     // „Plausibilität der Stufe, nicht der Höhe" (5.5.5) — eine Information.
+    // Sie erzeugt **keine** Benachrichtigung (5.5.2); die Adressatenliste
+    // bleibt deshalb leer, statt eine zu nennen, die niemand anschreibt.
     effect: 'Information',
+    adressaten: [],
     message: zuschlag.meldung,
   })
 
   return liste
 }
 
+/** Der Bezug eines **gespeicherten** Belegs (für die Ansicht). */
+function belegbezug(row: LoadedDocument): Belegbezug {
+  return {
+    direction: row.direction,
+    supplier: row.supplier,
+    timesheetIds: row.basedOnTimesheets.map((zettel) => zettel.id),
+    assignmentIds: [...new Set(row.items.map((position) => position.assignmentId))],
+  }
+}
+
 /** Der Leistungszeitraum des Belegs (5.0): über alle zugrunde liegenden Zettel. */
 async function leistungszeitraum(
-  billingDocumentId: string,
+  timesheetIds: readonly string[],
 ): Promise<{ readonly von: Date; readonly bis: Date } | null> {
+  if (timesheetIds.length === 0) return null
   const zettel = await prisma.timesheet.findMany({
-    where: { billingDocuments: { some: { id: billingDocumentId } } },
+    where: { id: { in: [...timesheetIds] } },
     select: { periodFrom: true, periodTo: true },
   })
   const erster = zettel[0]
@@ -593,7 +644,7 @@ async function leistungszeitraum(
 }
 
 /** Die Einsätze, die dieser Beleg abrechnet — Grundlage von Q39 und Q40. */
-async function abgerechneteEinsaetze(billingDocumentId: string): Promise<
+async function abgerechneteEinsaetze(assignmentIds: readonly string[]): Promise<
   readonly {
     readonly assignmentNumber: string
     readonly siteId: string
@@ -606,8 +657,9 @@ async function abgerechneteEinsaetze(billingDocumentId: string): Promise<
     readonly countedDurationDays: number | null
   }[]
 > {
+  if (assignmentIds.length === 0) return []
   const einsaetze = await prisma.assignment.findMany({
-    where: { billingDocumentItems: { some: { billingDocumentId } } },
+    where: { id: { in: [...assignmentIds] } },
     include: { site: { select: { name: true } } },
     orderBy: { assignmentNumber: 'asc' },
   })
@@ -1012,6 +1064,15 @@ export async function createBillingDocument(
     stichtag: evaluationDate,
   })
   const summen = belegsummen(ableitung.positionen, taxRate)
+  // Die Prüfungen aus 4.7 laufen auf der **Ableitung**, nicht auf dem
+  // gespeicherten Beleg: Q38 bis Q40 gehören dem Übergang „— → `created`",
+  // und zu diesem Zeitpunkt gibt es den Beleg noch nicht.
+  const pruefungen = await befunde({
+    direction: input.direction,
+    supplier: lieferant,
+    timesheetIds: auswahl.zeilen.map((zeile) => zeile.timesheetId),
+    assignmentIds: [...new Set(ableitung.positionen.map((position) => position.assignmentId))],
+  })
 
   const outcome = attemptTransition(BILLING_DOCUMENT_MODEL, 'create', {
     currentStatus: null,
@@ -1106,6 +1167,29 @@ export async function createBillingDocument(
           occurredAt: evaluationDate,
         }),
       )
+      // 4.7, Q38 und Q39: die Erstellung trägt zwei **Warnungen** — die
+      // Erlaubnis im Leistungszeitraum (Einkaufsseite) und das
+      // Vergleichsentgelt. Jede erzeugt ihre eigene Benachrichtigung (3.14).
+      // Q40 ist eine Information und erzeugt keine (5.5.2).
+      for (const befund of warnungsbefunde(pruefungen)) {
+        await benachrichtigeWarnung(tx, {
+          objectType: 'billingDocument',
+          objectRef: beleg.id,
+          tenantId: beleg.tenantId,
+          statusFrom: outcome.from,
+          statusTo: outcome.to,
+          ruleRef: befund.check,
+          meldung: befund.message,
+          adressaten: befund.adressaten,
+          lage: {
+            operator: operatorTenant.id,
+            customer: kunde?.tenantId ?? null,
+            supplier: lieferant?.tenantId ?? null,
+            richtung: input.direction,
+          },
+          raisedAt: evaluationDate,
+        })
+      }
     })
   } catch (error) {
     return asFailure(error, 'Der Abrechnungsbeleg konnte nicht erstellt werden')

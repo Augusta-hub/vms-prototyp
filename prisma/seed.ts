@@ -958,6 +958,30 @@ async function main(): Promise<void> {
   })
 
   // ── Vergleichsentgelte (3.3, Grundlage 5.2) ──────────────────────────────
+  //
+  // **Ein Eintrag trägt die Tätigkeit eines Einsatzes wörtlich.** 5.2.4
+  // Schritt 1 wählt den Eintrag über die `activityDescription` des Einsatzes;
+  // ohne eine Übereinstimmung sperrt P4 **jede** Zettelgenehmigung (Q36), und
+  // der Beispielstand könnte weder eine Genehmigung noch eine Abrechnung
+  // zeigen — und damit auch keine der Warnungen, die 4.7 an diesen Übergängen
+  // führt. Die übrigen Einträge bleiben bewusst unpassend: die Sperre aus Q36
+  // ist an ihnen genauso zu sehen.
+  await prisma.comparableWageEntry.create({
+    data: {
+      tenantId: customer1.tenantId,
+      siteId: site1.id,
+      activityKey: 'Bedienung der CNC-Maschinen 3 und 4 in der Nachtschicht, Halle 2',
+      comparableWage: 21.6,
+      currency: 'EUR',
+      validFrom: day('2026-01-01'),
+      wageSource: 'collectiveAgreement',
+      reportedAt: day('2026-01-05'),
+      reportedById: userId('procurementController1'),
+      createdById: userId('procurementController1'),
+      createdAt: SEED_DATE,
+    },
+  })
+
   await prisma.comparableWageEntry.create({
     data: {
       tenantId: customer1.tenantId,
@@ -2383,13 +2407,18 @@ async function main(): Promise<void> {
   //
   // Eine der drei trägt ein **Enddatum**, das bald erreicht ist: nur dann hat
   // der nächtliche Lauf etwas zu melden (N5), und nur dann ist an echten Daten
-  // zu sehen, dass die Stufe aus der Restzeit kommt (5.4.4). Die beiden
-  // anderen bleiben unbefristet — auch das ist nach 3.10 zulässig und wird
-  // beim Anerkennen als Information vermerkt.
+  // zu sehen, dass die Stufe aus der Restzeit kommt (5.4.4).
+  //
+  // Eine zweite ist **vor dem Ende ihres Einsatzes abgelaufen**: E-2026-0005
+  // lief bis zum 28.11., die Unterweisung deckt nur bis zum 31.10. Damit ist
+  // die Warnung aus **Q37** an echten Daten zu sehen — die Genehmigung eines
+  // Novemberzettels findet statt und meldet den Mangel an `KB` und `LD`
+  // (4.7, 5.4.4). Ohne diesen Fall bliebe die Zeile eine Zusicherung, die man
+  // nur im Test sieht.
   const unterweisungen: ReadonlyArray<readonly [string, string, string | null]> = [
     ['E-2026-0003', '2026-04-01', '2026-11-25'],
     ['E-2026-0004', '2025-09-01', null],
-    ['E-2026-0005', '2026-10-05', null],
+    ['E-2026-0005', '2026-10-05', '2026-10-31'],
   ]
   for (const [nummer, ab, bis] of unterweisungen) {
     await prisma.document.create({

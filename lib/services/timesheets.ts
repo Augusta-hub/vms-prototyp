@@ -44,7 +44,7 @@ import {
 import { prisma } from '../prisma'
 import { REGELWERK } from '../aueg/regelwerk'
 import type { Rollenkuerzel } from '../aueg/typen'
-import type { Vorgangslage } from '../notifications/uebergaenge'
+import { warnungsbefunde, type Vorgangslage } from '../notifications/uebergaenge'
 import {
   benachrichtigeUebergang,
   benachrichtigeWarnung,
@@ -160,6 +160,13 @@ export interface TimesheetFinding {
   readonly satisfied: boolean
   /** `Sperre`, `Warnung` oder `Information` (5.5). */
   readonly effect: 'Sperre' | 'Warnung' | 'Information'
+  /**
+   * Adressaten des Befunds (5.5.2 Nr. 6) — wer eine **Warnung** nach 4.7
+   * erfährt. Sie kommen aus der Regel oder aus der Regelwerkkonfiguration,
+   * nicht aus diesem Dienst: welche Rolle ein Befund angeht, entscheidet
+   * Kapitel 5.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly message: string
 }
 
@@ -280,18 +287,15 @@ function alsKuerzel(roleCode: RoleCode | null): Rollenkuerzel | null {
  * statt, erzeugt aber eine Benachrichtigung an die zuständige Rolle und einen
  * Eskalationsanlass" (5.5.2).
  *
- * Gemeldet wird **P1**. Ihre Adressaten stehen im Regelwerk und sind durch
- * 5.1.6 bestimmt: die Zeile „Fristende erreicht, Einsatz läuft weiter" ist
- * genau dieser Befund — Zeiten, die nach `maxDurationEndDate` liegen —, und
- * 2.4 führt für den Anlass „Warnschwelle Höchstüberlassungsdauer erreicht"
- * dieselbe Folge.
+ * Gemeldet wird **jeder** Befund, dessen Ergebnisart `Warnung` ist und der
+ * nicht erfüllt ist — P1 (Q33, Q35), P3 (Q34) und P10 (Q37). Eine
+ * **Information** erzeugt keine Nachricht (5.5.2), und eine **Sperre** hat den
+ * Übergang verhindert; was hier ankommt, ist vollzogen.
  *
- * **P3 und P10 fehlen hier**, und zwar nicht aus Nachlässigkeit: ihre
- * Adressaten hängen an einer **Stufe** (5.0 für Equal Pay, 5.4.4 je
- * Nachweisart), und die trägt der Befund in `TimesheetFinding` nicht. Sie
- * durch die AÜG-Anbindung zu führen ist eine eigene Arbeitseinheit; eine
- * geratene Rolle wäre eine Entscheidung über die Belastung einer Organisation
- * (CLAUDE.md, Regel 5).
+ * Die Adressaten stehen am Befund und werden hier nicht gewählt: sie kommen
+ * aus der Regel (P10 aus dem Pflichtkatalog in 5.4.4) oder aus der
+ * Regelwerkkonfiguration (P1 aus 5.1.6, P3 aus 5.0 und 2.4). Welche Rolle ein
+ * Befund angeht, entscheidet Kapitel 5 — nicht dieser Dienst.
  */
 async function warnungenMelden(
   tx: Transaktion,
@@ -302,8 +306,8 @@ async function warnungenMelden(
   raisedAt: Date,
 ): Promise<number> {
   let geschrieben = 0
-  for (const befund of befundliste) {
-    if (befund.satisfied || befund.effect !== 'Warnung' || befund.check !== 'P1') continue
+  const lage = await zettellage(tx, row, raisedAt)
+  for (const befund of warnungsbefunde(befundliste)) {
     geschrieben += await benachrichtigeWarnung(tx, {
       objectType: 'timesheet',
       objectRef: row.id,
@@ -312,8 +316,8 @@ async function warnungenMelden(
       statusTo,
       ruleRef: befund.check,
       meldung: befund.message,
-      adressaten: REGELWERK.adressatenDauerErreicht,
-      lage: await zettellage(tx, row, raisedAt),
+      adressaten: befund.adressaten,
+      lage,
       raisedAt,
     })
   }
@@ -528,6 +532,10 @@ async function befunde(
       // keine Sperre. Erbrachte Zeiten werden genehmigt — gesperrt wird eine
       // Handlung, nicht eine Feststellung.
       effect: 'Warnung',
+      // 5.1.6, Zeile 3 („Fristende erreicht, Einsatz läuft weiter") ist genau
+      // dieser Befund; 2.4 führt für den Anlass „Warnschwelle
+      // Höchstüberlassungsdauer erreicht" dieselbe Folge.
+      adressaten: REGELWERK.adressatenDauerErreicht,
       message:
         fristende === null
           ? 'P1: am Einsatz steht kein Fristende der Höchstüberlassungsdauer (5.1.3) — ' +
@@ -553,6 +561,16 @@ async function befunde(
       row: 'Q34',
       satisfied: !imZeitraum,
       effect: 'Warnung',
+      // Zwei Listen, zwei Lagen — beide stehen in der Konfiguration mit ihrer
+      // eigenen Bedingung: 5.0 nennt `adressatenEqualPayHinweis` für
+      // „`equalPayNoticeDays` erreicht", 2.4 nennt die Warnung „Equal-Pay-Frist
+      // erreicht, Vergleichsentgelt fehlt". Welche gilt, entscheidet der
+      // Vorgang und nicht dieser Dienst: liegt das Vergleichsentgelt am
+      // Einsatz, ist die Fälligkeit ein Hinweis; fehlt es, ist sie die Warnung.
+      adressaten:
+        einsatz.comparableWage === null
+          ? REGELWERK.adressatenEqualPayWarnung
+          : REGELWERK.adressatenEqualPayHinweis,
       message:
         faelligkeit === null
           ? 'P3: am Einsatz steht keine Equal-Pay-Fälligkeit (5.2.3) — nichts zu prüfen.'
@@ -573,6 +591,7 @@ async function befunde(
       satisfied: stand.usable,
       // Die **einzige** Sperre an diesem Übergang (4.7, Q36).
       effect: 'Sperre',
+      adressaten: stand.adressaten,
       message: stand.message,
     })
 
@@ -588,8 +607,17 @@ async function befunde(
     liste.push({
       check: 'P10',
       row: 'Q37',
-      satisfied: unterweisung.mandatoryDocumentsPresent,
+      // **Nicht** `mandatoryDocumentsPresent`: das ist die Tatsache, die eine
+      // Vorbedingung liest — „nicht gesperrt" (5.4.4). Q37 trägt aber eine
+      // **Warnung**, und eine Warnung ist nach 5.4.4 keine Sperre; gemessen an
+      // jener Tatsache wäre dieser Befund immer erfüllt und die Zeile ohne
+      // Wirkung. Erfüllt ist er, wenn der Katalog **keinen** Mangel nennt
+      // (5.5.2 Nr. 2: jede Feststellung nennt das fehlende Datum).
+      satisfied: unterweisung.fehlendeArten.length === 0,
       effect: 'Warnung',
+      // Aus dem Pflichtkatalog in 5.4.4, je Nachweisart und Stufe — die
+      // Rechnung liefert sie mit, statt dass der Dienst sie wählt.
+      adressaten: unterweisung.adressaten,
       message: unterweisung.meldung,
     })
   }
@@ -615,7 +643,11 @@ async function befunde(
  */
 async function vergleichsentgeltstand(
   row: LoadedTimesheet,
-): Promise<{ readonly usable: boolean; readonly message: string }> {
+): Promise<{
+  readonly usable: boolean
+  readonly adressaten: readonly Rollenkuerzel[]
+  readonly message: string
+}> {
   const eintraege = await prisma.comparableWageEntry.findMany({
     where: { siteId: row.assignment.siteId },
   })
@@ -639,6 +671,7 @@ async function vergleichsentgeltstand(
   })
   return {
     usable: stand.comparableWageUsable,
+    adressaten: stand.adressaten,
     // Die Meldung der Regel trägt ihr Kürzel schon (5.5.2).
     message: stand.meldung,
   }
@@ -1146,6 +1179,10 @@ export async function submitTimesheet(
   }
 
   const q33 = await befunde(row, 'Q33')
+  // Q34 gehört dem **Systemübergang** `submitted` → `inApproval` (4.7) und
+  // wird deshalb vor der Transaktion gerechnet: seine Warnung entsteht mit
+  // ihm, nicht nach ihm.
+  const q34 = await befunde(row, 'Q34')
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -1204,12 +1241,12 @@ export async function submitTimesheet(
       // erzeugt ihre eigene Nachricht (3.14) — die eine sagt, dass der Zettel
       // weitergegangen ist, die andere, womit.
       await warnungenMelden(tx, row, q33, eingereicht.from, eingereicht.to, evaluationDate)
+      await warnungenMelden(tx, row, q34, eroeffnet.from, eroeffnet.to, evaluationDate)
     })
   } catch (error) {
     return asFailure(error, 'Der Stundenzettel konnte nicht eingereicht werden')
   }
 
-  const q34 = await befunde(row, 'Q34')
   return success(
     `${eingereicht.label}: ${row.timesheetNumber} steht jetzt auf ` +
       `„${TIMESHEET_STATE_LABELS.inApproval}" mit ${folge.length} Stufe(n) — ` +

@@ -290,6 +290,12 @@ export interface EqualPaystand {
   readonly equalPayDueFromFirstDay: boolean
   /** Die Fristkonfiguration ist zu beanstanden (5.2.2, Fälle 1, 5 und 6). */
   readonly konfigurationsmangel: boolean
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -371,6 +377,7 @@ export function equalPaystand(eingabe: {
     ),
     equalPayDueFromFirstDay: amOderVorErstemTag,
     konfigurationsmangel: ergebnis.konfigurationsmangel,
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
@@ -441,6 +448,12 @@ export interface Entgeltstand {
   /** Der Treffer ist auf eine Warnung begrenzt (Schätzung, 5.2.4). */
   readonly nurWarnung: boolean
   readonly mangel: string | null
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -515,6 +528,7 @@ export function entgeltstand(eingabe: {
     treffer: ergebnis.treffer,
     nurWarnung: ergebnis.nurWarnung,
     mangel: ergebnis.mangel,
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
@@ -593,6 +607,12 @@ export interface Drehtuerstand {
   readonly hasPreviousEmploymentDeclaration: boolean
   readonly rueckschauVon: Date | null
   readonly rueckschauBis: Date | null
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -643,6 +663,7 @@ export function drehtuerstand(eingabe: {
     hasPreviousEmploymentDeclaration: liegtVor,
     rueckschauVon: alsDatum(ergebnis.fensterVon),
     rueckschauBis: alsDatum(ergebnis.fensterBis),
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
@@ -824,6 +845,12 @@ export interface Erlaubnisstand {
   readonly ersterUngedeckterTag: Date | null
   readonly tageUngedeckt: number
   readonly mangel: string | null
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -878,6 +905,7 @@ export function erlaubnisstand(eingabe: {
     ersterUngedeckterTag: alsDatum(ergebnis.ersterUngedeckterTag),
     tageUngedeckt: ergebnis.ungedeckteTage.length,
     mangel: ergebnis.mangel,
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }
@@ -1025,6 +1053,12 @@ export interface Nachweisstand {
   /** Das strengste Einzelergebnis (5.4.4); eine Warnung sperrt nicht. */
   readonly ergebnisart: Ergebnisart
   readonly fehlendeArten: readonly string[]
+  /**
+   * Adressaten des Befunds als Rollenkürzel (5.5.2 Nr. 6). Sie kommen aus der
+   * Regel und nicht aus dem Aufrufer: welche Rolle ein Befund angeht, steht in
+   * Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+   */
+  readonly adressaten: readonly Rollenkuerzel[]
   readonly meldung: string
 }
 
@@ -1099,6 +1133,7 @@ export function nachweisstand(eingabe: {
     mandatoryDocumentsPresent: ergebnis.ergebnisart !== 'sperre',
     ergebnisart: ergebnis.ergebnisart,
     fehlendeArten: ergebnis.maengel.map((befund) => befund.art),
+    adressaten: ergebnis.adressaten,
     meldung: ergebnis.meldung,
   }
 }

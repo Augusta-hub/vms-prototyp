@@ -5,6 +5,95 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-13 — Warnungen aus 4.7 als Benachrichtigung (5.5.2, 3.14)
+
+### Gemacht
+
+4.7 sagt zu jeder **Warnung**: „Der Übergang findet statt, erzeugt aber eine
+Benachrichtigung an die zuständige Rolle und einen Eskalationsanlass." Die
+vorige Einheit löste das für **P1** am Stundenzettel ein; jetzt tun es alle
+Warnungen, die ein Fachdienst an seinem Übergang rechnet:
+
+- **Stundenzettel** (4.4): **P3** an Q34, **P10** an Q37 — zusätzlich zu P1 an
+  Q33 und Q35. Q34 gehört dem Systemübergang `submitted` → `inApproval` und
+  wird jetzt **vor** der Transaktion gerechnet, damit seine Warnung mit ihm
+  entsteht und nicht nach ihm.
+- **Abrechnungsbeleg** (4.5.2): **P9** an Q38 und **P4** an Q39. Q40 (P5) ist
+  eine Information und erzeugt nach 5.5.2 keine Nachricht.
+
+Dafür geben die Brücken in `lib/aueg/anbindung.ts` jetzt die **Adressaten**
+heraus, die die Regeln ohnehin rechnen — `Entgeltstand`, `EqualPaystand`,
+`Drehtuerstand`, `Erlaubnisstand` und `Nachweisstand` tragen sie wie
+`Hoechstdauerstand` schon vorher. Welche Rolle ein Befund angeht, steht damit
+in Kapitel 5 und in der Regelwerkkonfiguration, nicht im Fachdienst.
+
+Die Belegprüfungen laufen jetzt auf der **Ableitung** statt auf dem
+gespeicherten Beleg: Q38 bis Q40 gehören dem Übergang „— → `created`", und zu
+diesem Zeitpunkt gibt es den Beleg noch nicht. `befunde` nimmt deshalb Zettel-
+und Einsatzkennungen entgegen (`Belegbezug`), nicht die geladene Zeile.
+
+### Entscheidungen
+
+1. **Ein Befund aus Q37 war nie unerfüllt.** Der Dienst maß ihn an
+   `mandatoryDocumentsPresent` — der Tatsache, die eine **Vorbedingung** liest
+   („nicht gesperrt", 5.4.4). Q37 trägt aber eine Warnung, und eine Warnung ist
+   nach 5.4.4 keine Sperre: an jener Tatsache gemessen war die Zeile immer
+   erfüllt und damit wirkungslos. Erfüllt ist sie jetzt, wenn der Pflichtkatalog
+   **keinen** Mangel nennt. Das ist ein Fehler im Code gewesen, nicht in der
+   Spezifikation — korrigiert wurde der Code (CLAUDE.md, Regel 1).
+2. **Welche der beiden Equal-Pay-Listen gilt, entscheidet der Vorgang.** 5.0
+   nennt `adressatenEqualPayHinweis` für „`equalPayNoticeDays` erreicht", 2.4
+   die Warnung „Equal-Pay-Frist erreicht, **Vergleichsentgelt fehlt**". Q34
+   kennt beide Tatsachen: liegt das Entgelt am Einsatz, ist die Fälligkeit ein
+   Hinweis an `MD` und `KE`; fehlt es, tritt `MA` hinzu. Gewählt wird nach der
+   Bedingung, die in der Konfiguration selbst steht — nicht nach Gefühl.
+3. **Eine Stelle entscheidet, was gemeldet wird.** `warnungsbefunde` in
+   `lib/notifications/uebergaenge.ts` ist der eine Filter für beide Dienste:
+   gemeldet wird, was **unerfüllt** ist und die Ergebnisart **Warnung** trägt.
+   Die Information erzeugt nach 5.5.2 keine Nachricht, und die Sperre hat den
+   Übergang verhindert. Vorher stand derselbe Satz zweimal im Code — und ein
+   Satz, der zweimal dasteht, steht irgendwann verschieden da.
+4. **Der Beispielstand zeigt die Warnungen jetzt an echten Daten.** Zwei
+   Zeilen im Seed: die Unterweisung von E-2026-0005 läuft vor dem Ende des
+   Einsatzes ab (Q37), und **ein** Vergleichsentgelt-Eintrag trägt die
+   Tätigkeit eines Einsatzes wörtlich. Ohne den zweiten sperrte P4 jede
+   Genehmigung (Q36) — es gab im Beispielstand keinen genehmigten Zettel, keine
+   Abrechnung und damit auch keine der Warnungen zu sehen. Die übrigen Einträge
+   bleiben bewusst unpassend: die Sperre aus Q36 ist an ihnen genauso zu sehen.
+
+### Offen
+
+- **Einsatz, Verlängerung und Profilvorschlag** melden ihre Warnungen noch
+  nicht (Q07, Q08, Q09, Q12 bis Q15, Q17, Q18, Q28, Q29, Q32). Der Grund ist
+  nicht die Anbindung — die Adressaten liegen jetzt vor —, sondern dass diese
+  drei Dienste **keine Befundliste** führen: ihr Regelstand speist nur die
+  Vorbedingungen. Eine Liste dort einzuführen ändert, wie diese Übergänge
+  berichten, und gehört in eine eigene Einheit.
+- **P7 und P8** bleiben außen vor: P7 hat keinen Rechenweg (*Frage 30*), und
+  P8 führt an der Bedarfsanfrage (Q02) eine Warnung, deren Adressaten 5.3.3
+  nur für die Kriterien am Einsatz nennt.
+- Zustellung gibt es weiterhin nicht (*Frage 56*).
+
+### Geprüft
+
+- `npm test` **1107 grün** (5 neu), `npm run test:services` **271 grün**
+  (5 neu), `npm run test:aueg` unverändert **267 Szenarien / 120 grün /
+  0 rot**, Kontrolllauf ohne Überspringen **0 verletzte Zusicherungen**.
+- `npx tsc --noEmit` und `npm run build` sauber, `npm run db:seed` läuft.
+- **12 Mutationen, 0 überlebt** — darunter „Q37 misst wieder die Sperre statt
+  des Mangels", „Q34 adressiert immer nur den Hinweis", „Q34 hängt am falschen
+  Übergang", „P4/P9/P10 geben ihre Adressaten nicht heraus" und vier am Beleg.
+  Zwei Mutationen am Filter überlebten zunächst in den Fachdiensten; sie sind
+  der Grund, warum er jetzt an **einer** Stelle steht und dort eigene Tests hat.
+- In der Oberfläche: ein Novemberzettel zu E-2026-0005, vom Lieferanten
+  erfasst und eingereicht, vom Bedarfsträger und vom Betreiber genehmigt. Die
+  Genehmigung erzeugt die Warnung aus Q37 — „Der Nachweis ist am 2026-11-01
+  abgelaufen" — an `KB` **und** `LD`, jeden in seiner Organisation, neben der
+  Nachricht aus Kapitel 4 („ist genehmigt"). Beide tragen den Statuswechsel
+  `inApproval` → `approved` und keinen Lauftag.
+
+---
+
 ## 2026-11-12 — Benachrichtigungen aus den Übergängen (Kapitel 4, 3.14)
 
 ### Gemacht

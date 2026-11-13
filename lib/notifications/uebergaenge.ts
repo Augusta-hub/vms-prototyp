@@ -749,3 +749,39 @@ export function meldung(args: {
   if (zeile.mitBegruendung !== true || begruendung === undefined || begruendung === '') return kern
   return `${kern} Begründung: ${begruendung}`
 }
+
+/* ------------------------------------------------------------------ */
+/* Warnungen aus 4.7                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ein Prüfergebnis zu einem Übergang, so weit die Benachrichtigung es braucht
+ * (4.7, 5.5.2). Die Fachdienste führen reichere Typen; dieser ist der
+ * gemeinsame Nenner.
+ */
+export interface Pruefbefund {
+  /** `P1` … `P11`. */
+  readonly check: string
+  readonly satisfied: boolean
+  readonly effect: 'Sperre' | 'Warnung' | 'Information'
+  readonly adressaten: readonly Rollenkuerzel[]
+  readonly message: string
+}
+
+/**
+ * Die Befunde, die nach 4.7 eine Benachrichtigung auslösen.
+ *
+ * Genau eine Art tut das: die **Warnung**. 5.5.2 ist darin ausdrücklich — die
+ * Information erzeugt „keine Benachrichtigung, keinen Eskalationsanlass", und
+ * die Sperre hat den Übergang verhindert, es gibt also nichts zu melden. Und
+ * ein **erfüllter** Befund ist kein Befund: 5.5.2 Nr. 2 verlangt, dass jede
+ * Feststellung „das fehlende oder verletzte Datum" nennt.
+ *
+ * Diese drei Sätze stehen hier und nicht in den Fachdiensten, weil sie sonst
+ * in jedem einzeln stünden — und einer davon wäre anders.
+ */
+export function warnungsbefunde<T extends Pruefbefund>(
+  befunde: readonly T[],
+): readonly T[] {
+  return befunde.filter((befund) => !befund.satisfied && befund.effect === 'Warnung')
+}

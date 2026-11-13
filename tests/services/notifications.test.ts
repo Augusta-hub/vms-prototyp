@@ -436,6 +436,83 @@ describe('Abrechnung (4.5)', () => {
     expect(liste[0]?.recipientTenantId).toBe(welt.lieferantMandant)
   })
 
+it('meldet die Warnung aus Q39 — das Vergleichsentgelt fehlt für den Zeitraum', async () => {
+    // Die Equal-Pay-Fälligkeit liegt im Leistungszeitraum, und der Standort
+    // führt keinen Eintrag: 5.2.4 nennt dafür `KE` — „der Entleiher pflegt den
+    // Eintrag".
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-10'), comparableWage: null },
+    })
+    await legeGenehmigtenZettelAn(welt, {
+      nummer: 'SZ-1',
+      einsatz,
+      periode,
+      von: PERIODE_VON,
+      bis: PERIODE_BIS,
+      positionen: [{ tag: tag('2026-10-05'), stunden: '100.0000' }],
+    })
+    ok(
+      await createBillingDocument(
+        administrator,
+        {
+          billingPeriodId: periode,
+          direction: 'sales',
+          customerId: welt.kunde,
+          supplierId: null,
+          taxRate: 19,
+        },
+        HEUTE,
+      ),
+    )
+    const beleg = await prisma.billingDocument.findFirstOrThrow({ where: { direction: 'sales' } })
+    const warnungen = await prisma.notification.findMany({ where: { trigger: 'ruleWarning' } })
+    expect(warnungen.map((zeile) => zeile.recipientRoleCode)).toEqual(['procurementController'])
+    expect(warnungen[0]?.ruleRef).toBe('P4')
+    expect(warnungen[0]?.objectRef).toBe(beleg.id)
+    // Die Warnung gehört dem Übergang „— → `created`" (4.7) und trägt ihn.
+    expect(warnungen[0]?.statusFrom).toBe(null)
+    expect(warnungen[0]?.statusTo).toBe('created')
+    // Q40 ist eine **Information** und erzeugt keine Nachricht (5.5.2).
+    expect(warnungen.some((zeile) => zeile.ruleRef === 'P5')).toBe(false)
+  })
+
+  it('meldet die Warnung aus Q38 — die Erlaubnis deckt den Leistungszeitraum nicht', async () => {
+    // Die Erlaubnis des Lieferanten endet vor dem Leistungszeitraum. 5.4.2 b)
+    // sagt dazu: erbrachte Leistung wird abgerechnet, der Befund dokumentiert.
+    await prisma.supplierPermit.updateMany({
+      where: { supplierId: welt.lieferant },
+      data: { validTo: tag('2026-09-30') },
+    })
+    await legeGenehmigtenZettelAn(welt, {
+      nummer: 'SZ-1',
+      einsatz,
+      periode,
+      von: PERIODE_VON,
+      bis: PERIODE_BIS,
+      positionen: [{ tag: tag('2026-10-05'), stunden: '100.0000' }],
+    })
+    ok(
+      await createBillingDocument(
+        administrator,
+        {
+          billingPeriodId: periode,
+          direction: 'purchase',
+          customerId: null,
+          supplierId: welt.lieferant,
+          taxRate: 19,
+        },
+        HEUTE,
+      ),
+    )
+    const warnungen = await prisma.notification.findMany({
+      where: { trigger: 'ruleWarning', ruleRef: 'P9' },
+    })
+    expect(warnungen.length).toBeGreaterThan(0)
+    expect(warnungen.every((zeile) => zeile.kind === 'warning')).toBe(true)
+    expect(warnungen.every((zeile) => zeile.statusTo === 'created')).toBe(true)
+  })
+
   it('erzeugt denselben Übergang zweimal, wenn er zweimal stattfindet (3.14)', async () => {
     await legeGenehmigtenZettelAn(welt, {
       nummer: 'SZ-1',
@@ -643,6 +720,100 @@ describe('Stundenzettel (4.4)', () => {
       'operatorCoordinator',
       'supplierCoordinator',
     ])
+  })
+
+
+  it('meldet die Warnung aus Q34 — die Equal-Pay-Fälligkeit fällt in den Zeitraum', async () => {
+    // Fälligkeit im Zettelzeitraum, Vergleichsentgelt am Einsatz vorhanden:
+    // 5.0 nennt dafür den **Hinweis** an `MD` und `KE`.
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-15') },
+    })
+    const id = await erfassterZettel()
+    ok(await submitTimesheet(lieferantDisponent, { timesheetId: id }, HEUTE))
+
+    const warnungen = await prisma.notification.findMany({
+      where: { trigger: 'ruleWarning', ruleRef: 'P3' },
+    })
+    expect(warnungen.map((zeile) => zeile.recipientRoleCode).sort()).toEqual([
+      'operatorCoordinator',
+      'procurementController',
+    ])
+    // Q34 gehört dem Systemübergang `submitted` → `inApproval` (4.7).
+    expect(warnungen[0]?.statusFrom).toBe('submitted')
+    expect(warnungen[0]?.statusTo).toBe('inApproval')
+  })
+
+  it('weitet die Adressaten aus Q34, wenn das Vergleichsentgelt fehlt', async () => {
+    // Dieselbe Lage ohne Entgelt am Einsatz: 2.4 führt dafür „Equal-Pay-Frist
+    // erreicht, Vergleichsentgelt fehlt" mit `MA` zusätzlich.
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { equalPayDueDate: tag('2026-10-15'), comparableWage: null },
+    })
+    const id = await erfassterZettel()
+    ok(await submitTimesheet(lieferantDisponent, { timesheetId: id }, HEUTE))
+
+    const warnungen = await prisma.notification.findMany({
+      where: { trigger: 'ruleWarning', ruleRef: 'P3' },
+    })
+    expect(warnungen.map((zeile) => zeile.recipientRoleCode).sort()).toEqual([
+      'operatorAdmin',
+      'operatorCoordinator',
+      'procurementController',
+    ])
+  })
+
+  it('meldet die Warnung aus Q37 — der Unterweisungsnachweis fehlt', async () => {
+    const ohneUnterweisung = await legeEinsatzAn(welt, {
+      nummer: 'E-2026-0002',
+      status: 'active',
+      plannedStartDate: tag('2026-09-01'),
+      actualStartDate: tag('2026-09-01'),
+      vergleichsentgelt: '18.5000',
+      mitUnterweisung: false,
+    })
+    const id = await legeGenehmigtenZettelAn(welt, {
+      nummer: 'SZ-2',
+      einsatz: ohneUnterweisung,
+      periode,
+      von: PERIODE_VON,
+      bis: PERIODE_BIS,
+      positionen: [{ tag: tag('2026-10-05'), stunden: '8.0000' }],
+      status: 'recorded',
+    })
+    ok(await submitTimesheet(lieferantDisponent, { timesheetId: id }, HEUTE))
+    ok(
+      await decideStage(
+        bedarfstraeger,
+        { timesheetId: id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+    ok(
+      await decideStage(
+        disponent,
+        { timesheetId: id, decision: 'approved', rejectionReason: null, comment: null },
+        HEUTE,
+      ),
+    )
+
+    const warnungen = await prisma.notification.findMany({
+      where: { trigger: 'ruleWarning', ruleRef: 'P10' },
+    })
+    // Die Adressaten kommen aus dem Pflichtkatalog in 5.4.4, Stufe
+    // „abgelaufen" der Unterweisung — nicht aus dem Fachdienst.
+    expect(warnungen.length).toBeGreaterThan(0)
+    expect(warnungen.every((zeile) => zeile.statusTo === 'approved')).toBe(true)
+    // Stufe „Warnung" der Unterweisung in 5.4.4: `KB` und `LD`, jeder in
+    // seiner Organisation — der Katalog nennt sie, nicht der Fachdienst.
+    expect(new Set(warnungen.map((zeile) => zeile.recipientRoleCode))).toEqual(
+      new Set(['demandOwner', 'supplierCoordinator']),
+    )
+    expect(new Set(warnungen.map((zeile) => zeile.recipientTenantId))).toEqual(
+      new Set([welt.kundenMandant, welt.lieferantMandant]),
+    )
   })
 
   it('erzeugt zur Warnung aus 4.7 eine eigene Nachricht mit Prüfung (Q35, P1)', async () => {
