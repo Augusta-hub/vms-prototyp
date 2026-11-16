@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest'
 import { DAY, OPERATOR_TENANT, CUSTOMER_TENANT, SUPPLIER_TENANT } from '../testing/fixtures'
 import {
+  befundLaufAusgefallen,
   befundeBelegBeanstandet,
   befundeN1,
   befundeN2,
@@ -27,6 +28,7 @@ import {
   type Lieferantenzeile,
   type Zettellage,
 } from './befunde'
+import { REGELWERK } from '../aueg/regelwerk'
 
 const STICHTAG = DAY('2026-11-12')
 
@@ -418,5 +420,87 @@ describe('Was der Lauf nicht tut (SPEC 5.5.1 c)', () => {
       expect(befund.tenantId).not.toBe('')
       expect(befund.meldung.length).toBeGreaterThan(20)
     }
+  })
+})
+
+describe('Der ausgebliebene Lauf (SPEC 5.5.1)', () => {
+  const tag = (wert: string): Date => new Date(`${wert}T00:00:00.000Z`)
+
+  /** Ein Laufstand mit der gewünschten Lücke — die Zeiten tragen hier nicht. */
+  function stand(ausgefallen: readonly string[], gesamt = ausgefallen.length) {
+    return {
+      stichtag: tag('2026-11-13'),
+      faelligSeit: new Date('2026-11-13T02:00:00.000Z'),
+      faellig: true,
+      naechsteFaelligkeit: new Date('2026-11-14T02:00:00.000Z'),
+      offen: true,
+      ausgefallen: ausgefallen.map(tag),
+      ausgefalleneTage: gesamt,
+    }
+  }
+
+  it('erzeugt ohne Lücke keinen Befund', () => {
+    expect(befundLaufAusgefallen(stand([]), OPERATOR_TENANT)).toEqual([])
+  })
+
+  it('meldet eine Nacht als Information an MD — eine Wartung ist kein Fehler', () => {
+    const [befund] = befundLaufAusgefallen(stand(['2026-11-12']), OPERATOR_TENANT)
+    expect(befund?.art).toBe('information')
+    expect(befund?.adressaten).toEqual(['MD'])
+    expect(befund?.anlass).toBe('nightlyRunMissed')
+    // Keine Prüfung aus Kapitel 5: der Befund betrifft den Lauf selbst.
+    expect(befund?.pruefung).toBe(null)
+    expect(befund?.objectType).toBe('nightlyRuleRun')
+    // Der Stichtag ist die Kennung — je Lauf **eine** Meldung (3.14).
+    expect(befund?.objectRef).toBe('2026-11-13')
+    expect(befund?.tenantId).toBe(OPERATOR_TENANT)
+  })
+
+  it('meldet drei Nächte als Warnung mit Eskalation an MA', () => {
+    const [befund] = befundLaufAusgefallen(
+      stand(['2026-11-10', '2026-11-11', '2026-11-12']),
+      OPERATOR_TENANT,
+    )
+    expect(befund?.art).toBe('warning')
+    // Kumulativ: die Warnung geht **zusätzlich** an `MA`, nicht statt an `MD`.
+    expect(befund?.adressaten).toEqual(['MD', 'MA'])
+  })
+
+  it('nennt die Tage, nicht nur ihre Zahl — eine Frist darin ist nachzusehen', () => {
+    const [befund] = befundLaufAusgefallen(
+      stand(['2026-11-10', '2026-11-11', '2026-11-12']),
+      OPERATOR_TENANT,
+    )
+    expect(befund?.meldung).toContain('2026-11-10')
+    expect(befund?.meldung).toContain('2026-11-12')
+    expect(befund?.meldung).toContain('3 Tag(e)')
+  })
+
+  it('sagt bei gekürzter Liste, dass weitere folgen', () => {
+    const [befund] = befundLaufAusgefallen(stand(['2026-01-02'], 40), OPERATOR_TENANT)
+    expect(befund?.meldung).toContain('und weitere')
+    expect(befund?.meldung).toContain('40 Tag(e)')
+  })
+
+  it('nimmt die Schwelle und die Adressaten aus der Konfiguration', () => {
+    const eigenes = {
+      ...REGELWERK,
+      lauf: { ...REGELWERK.lauf, ausfallWarnungTage: 2 },
+      adressatenLaufAusgefallenWarnung: ['MA'] as const,
+    }
+    const [befund] = befundLaufAusgefallen(
+      stand(['2026-11-11', '2026-11-12']),
+      OPERATOR_TENANT,
+      eigenes,
+    )
+    expect(befund?.art).toBe('warning')
+    expect(befund?.adressaten).toEqual(['MA'])
+  })
+
+  it('bleibt beim Betreiber — kein Kunde, kein Lieferant ist betroffen', () => {
+    const [befund] = befundLaufAusgefallen(stand(['2026-11-12']), OPERATOR_TENANT)
+    expect(befund?.mandantJeRolle.MD).toBe(OPERATOR_TENANT)
+    expect(befund?.mandantJeRolle.KB).toBe(undefined)
+    expect(befund?.mandantJeRolle.LD).toBe(undefined)
   })
 })

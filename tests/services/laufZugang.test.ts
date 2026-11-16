@@ -95,8 +95,31 @@ describe('Zugang zum Lauf (5.5.1)', () => {
     const stand = await antwort.json()
     expect(stand.ok).toBe(true)
     expect(stand.stichtag).toBe('2026-11-12')
+    expect(stand.faellig).toBe(true)
     expect(stand.offen).toBe(true)
     expect(await prisma.nightlyRuleRun.count()).toBe(0)
+  })
+
+  it('gibt der Überwachung die Stufe und nicht nur die Zahl der Tage (5.5.1)', async () => {
+    // Eine Überwachung außerhalb des Systems soll die Schwelle aus 5.5.1 nicht
+    // nachbauen müssen — sie bekommt das Urteil.
+    await prisma.nightlyRuleRun.create({
+      data: {
+        runDate: new Date('2026-11-08T00:00:00.000Z'),
+        startedAt: new Date('2026-11-08T02:00:00.000Z'),
+        checked: 0,
+        informations: 0,
+        warnings: 0,
+        escalations: 0,
+        notifications: 0,
+      },
+    })
+    const stand = await (await GET(anfrage(GEHEIMNIS))).json()
+    expect(stand.ausgefalleneTage).toBe(3)
+    expect(stand.ausfallstufe).toBe('warnung')
+    // Der Status bleibt 200: die Anwendung antwortet, der Planer ist das
+    // Problem. Das Urteil steht im Inhalt, nicht im Statuscode.
+    expect((await GET(anfrage(GEHEIMNIS))).status).toBe(200)
   })
 
   it('gibt den Stand nicht ohne Geheimnis aus', async () => {

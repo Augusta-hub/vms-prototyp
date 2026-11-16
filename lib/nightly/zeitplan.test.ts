@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { REGELWERK } from '../aueg/regelwerk'
-import { faelligkeitDes, laufstand, stichtagAm } from './zeitplan'
+import { ausfallstufe, faelligkeitDes, laufstand, stichtagAm } from './zeitplan'
 
 const PLAN = REGELWERK.lauf
 const tag = (wert: string): Date => new Date(`${wert}T00:00:00.000Z`)
@@ -19,6 +19,31 @@ describe('Festwerte (5.5.1)', () => {
   it('nimmt die Werte aus dem Regelwerk und nicht aus dem Dienst', () => {
     expect(PLAN.uhrzeit).toBe('03:00')
     expect(PLAN.zeitzone).toBe('Europe/Berlin')
+    expect(PLAN.ausfallWarnungTage).toBe(3)
+  })
+})
+
+describe('Stufe eines Ausfalls (5.5.1)', () => {
+  it('ist ohne ausgefallenen Tag kein Befund', () => {
+    expect(ausfallstufe(0, PLAN)).toBe('keine')
+    // Ein negativer Wert kann nur ein Rechenfehler sein und ist erst recht
+    // kein Befund.
+    expect(ausfallstufe(-1, PLAN)).toBe('keine')
+  })
+
+  it('ist unter der Schwelle eine Information — eine Nacht ist eine Wartung', () => {
+    expect(ausfallstufe(1, PLAN)).toBe('information')
+    expect(ausfallstufe(2, PLAN)).toBe('information')
+  })
+
+  it('ist ab der Schwelle eine Warnung — drei Nächte sind ein defekter Zeitplan', () => {
+    expect(ausfallstufe(3, PLAN)).toBe('warnung')
+    expect(ausfallstufe(30, PLAN)).toBe('warnung')
+  })
+
+  it('nimmt die Schwelle aus der Konfiguration', () => {
+    expect(ausfallstufe(2, { ausfallWarnungTage: 2 })).toBe('warnung')
+    expect(ausfallstufe(2, { ausfallWarnungTage: 7 })).toBe('information')
   })
 })
 

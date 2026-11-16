@@ -21,7 +21,11 @@
 
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { ladeLaufstand, runNightlyScheduled } from '../../../lib/services/nightly'
+import {
+  ladeLaufstand,
+  laufAusfallstufe,
+  runNightlyScheduled,
+} from '../../../lib/services/nightly'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +61,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 /**
  * Der Stand ohne Lauf — damit ein Planer (oder eine Überwachung) nachsehen
  * kann, ob etwas aussteht, ohne etwas auszulösen.
+ *
+ * **Für die Überwachung außerhalb des Systems** (5.5.1): die Nachricht über
+ * einen ausgebliebenen Lauf entsteht im Lauf, und bleibt er weg, bleibt auch
+ * sie weg. Wer den Ausfall **während** des Ausfalls bemerken will, fragt hier.
+ * Mitgegeben wird deshalb auch die **Stufe** und nicht nur die Zahl der Tage:
+ * eine Überwachung soll die Schwelle aus 5.5.1 nicht nachbauen müssen.
+ *
+ * Der Status bleibt 200, auch wenn Läufe fehlen: die Anwendung antwortet, der
+ * Planer ist das Problem. Das Urteil steht im Inhalt, nicht im Statuscode.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   if (!geprueft(request)) return abgewiesen()
@@ -66,7 +79,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     stichtag: stand.stichtag.toISOString().slice(0, 10),
     faelligSeit: stand.faelligSeit.toISOString(),
     naechsteFaelligkeit: stand.naechsteFaelligkeit.toISOString(),
+    faellig: stand.faellig,
     offen: stand.offen,
+    ausfallstufe: laufAusfallstufe(stand),
     ausgefalleneTage: stand.ausgefalleneTage,
     ausgefallen: stand.ausgefallen.map((tag) => tag.toISOString().slice(0, 10)),
   })

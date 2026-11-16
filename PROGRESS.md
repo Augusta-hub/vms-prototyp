@@ -5,6 +5,80 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-16 — Der ausgebliebene Lauf wird gemeldet (5.5.1, 2.4)
+
+### Gemacht
+
+Die vorige Einheit machte die Lücke zwischen zwei Läufen **sichtbar**; sie fiel
+aber nur auf, wenn jemand hinsah. Jetzt meldet sie sich.
+
+- **SPEC 5.5.1** hat den Abschnitt „Der ausgebliebene Lauf wird gemeldet": ab
+  einem ausgefallenen Tag eine Information an `MD`, ab
+  `nightlyRunMissingWarningDays` (3) eine Warnung mit Eskalation an `MA`. Der
+  Schwellenwert ist Festwert des Regelwerks und in 5.0 verzeichnet; 2.4 hat den
+  Eskalationsanlass „Nächtlicher Lauf ausgeblieben", Glossar 1.5 den Bezeichner.
+- **`ausfallstufe`** in `lib/nightly/zeitplan.ts` stuft, **`befundLaufAusgefallen`**
+  in `lib/nightly/befunde.ts` baut den Befund. Beide Wege des Laufs melden ihn —
+  der Planer und der Knopf.
+- Neuer Anlass `nightlyRunMissed` (Prisma-Enum, Migration
+  `20261116090000_ausgebliebener_lauf`).
+- **`GET /api/naechtlicher-lauf`** gibt jetzt auch `faellig` und `ausfallstufe`
+  aus; die Seite zeigt die Stufe an der Lücke.
+
+### Entscheidungen
+
+1. **Das System kann sein eigenes Schweigen nicht melden.** Die Nachricht über
+   einen ausgebliebenen Lauf entsteht **im** Lauf — also erst, wenn er wieder
+   läuft. Bleibt er weg, bleibt auch sie weg. Das steht als Grenze in der SPEC,
+   neben der nicht eingetragenen Erlaubnis: ein Verfahren erkennt nicht, was
+   ihm niemand sagt. Wer den Ausfall *während* des Ausfalls bemerken will,
+   braucht eine Überwachung **außerhalb**; das System stellt ihr die Tatsachen.
+2. **Die Überwachung bekommt das Urteil, nicht nur die Zahl.** Der Zugang gibt
+   `ausfallstufe` mit aus, damit eine Überwachung die Schwelle aus 5.5.1 nicht
+   nachbaut — sonst gäbe es sie an zwei Stellen, und die zweite wäre außerhalb
+   dieses Repositorys.
+3. **Der Status bleibt 200, auch wenn Läufe fehlen.** Die Anwendung antwortet;
+   der Planer ist das Problem. Das Urteil gehört in den Inhalt, nicht in den
+   Statuscode — ein 503 hieße, die Anwendung sei kaputt.
+4. **Gestuft, nicht binär.** Eine ausgefallene Nacht ist eine Wartung, drei
+   sind ein defekter Zeitplan. Die Stufung folgt 5.1.6 und 5.4.4: kumulative
+   Adressaten, die Warnung **zusätzlich** an `MA`.
+5. **Die Meldung nennt die Tage, nicht nur ihre Zahl.** Eine Frist, die in
+   dieser Zeit erreicht wurde, ist nachzusehen; „drei Tage" allein sagt nicht,
+   welche.
+6. **Kennung des Befunds ist der Stichtag.** So entsteht je Lauf genau eine
+   Meldung, und ein wiederholter Lauf desselben Tages verdoppelt sie nicht
+   (3.14, Eindeutigkeit).
+
+### Nachweis
+
+`npm test` 1136 grün (11 neue), `npm run test:services` 305 grün (7 neue),
+`npm run test:aueg` 267 Szenarien / 120 grün / **0 rot**, `npx tsc --noEmit`
+und `npm run build` sauber, `npm run db:deploy` und `npm run db:seed` laufen.
+**10 Mutationen, alle gefangen** — darunter „Schwelle exklusiv statt inklusiv",
+„Warnung nur an MA (nicht kumulativ)", „Tage nicht genannt", „Lauf von Hand
+meldet die Lücke nicht" und „Zugang gibt die Stufe nicht aus".
+
+Am laufenden Prototyp belegt: bei drei Tagen Lücke meldet `GET`
+`ausfallstufe: "warnung"` mit den Tagen 2026-11-13 bis 15, der Lauf erzeugt
+daraus zwei Nachrichten — `MD` auf Stufe 1 und `MA` auf Stufe 2, beide mit
+Lauftag und ohne Statuswechsel — und einen Protokolleintrag als Systemlauf.
+Die Seite zeigt an der Lücke „3 Tag(e): … Warnung (5.5.1)".
+
+Die **Gherkin-Suite ohne Übersprungene** (das Werkzeug außerhalb des
+Repositorys) wurde nicht erneut gefahren: ihre Datei lag im Arbeitsverzeichnis
+der Sitzung und ist dort nicht mehr. Diese Einheit berührt keine Regel in
+`lib/aueg/regeln/`; `npm run test:aueg` weist 0 rot aus.
+
+### Offen
+
+- **Welche Überwachung** außerhalb fragt, bleibt wie der Planer *offene
+  Frage 2* (Hoster).
+- **Zustellung** bleibt *Frage 56*, **P7** ohne Rechenweg *Frage 30*,
+  **Q02** ohne Adressatenliste.
+
+---
+
 ## 2026-11-13 — Zeitplan des nächtlichen Laufs (5.5.1)
 
 ### Gemacht

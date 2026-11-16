@@ -2972,6 +2972,10 @@ enum NotificationTrigger {
   /// 4.7: die Prüfung zum Übergang ergab eine **Warnung** — eigener Anlass
   /// desselben Übergangs, mit `ruleRef` (3.14).
   ruleWarning
+  /// 5.5.1: der nächtliche Lauf war an einem oder mehreren Tagen ausgefallen.
+  /// Der Befund entsteht in dem Lauf, der die Lücke schließt — das System kann
+  /// sein eigenes Schweigen nicht melden.
+  nightlyRunMissed
 }
 
 /// Benachrichtigung (`notification`, SPEC 3.14).

@@ -425,3 +425,89 @@ describe('Zeitplan des Laufs (5.5.1)', () => {
     expect(stand.offen).toBe(true)
   })
 })
+
+describe('Der ausgebliebene Lauf wird gemeldet (5.5.1)', () => {
+  /** Ein verzeichneter Lauf ohne Befunde — nur, damit es einen gibt. */
+  async function laufAm(stichtag: string): Promise<void> {
+    await prisma.nightlyRuleRun.create({
+      data: {
+        runDate: tag(stichtag),
+        startedAt: new Date(`${stichtag}T02:00:00.000Z`),
+        checked: 0,
+        informations: 0,
+        warnings: 0,
+        escalations: 0,
+        notifications: 0,
+      },
+    })
+  }
+
+  async function ausfallmeldungen() {
+    return prisma.notification.findMany({
+      where: { trigger: 'nightlyRunMissed' },
+      orderBy: { recipientRoleCode: 'asc' },
+    })
+  }
+
+  it('meldet nichts, wenn kein Tag ausgefallen ist', async () => {
+    await laufAm('2026-11-11')
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    expect(await ausfallmeldungen()).toHaveLength(0)
+  })
+
+  it('meldet eine ausgefallene Nacht als Information an MD', async () => {
+    await laufAm('2026-11-10')
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    const gemeldet = await ausfallmeldungen()
+    expect(gemeldet).toHaveLength(1)
+    expect(gemeldet[0]?.kind).toBe('information')
+    expect(gemeldet[0]?.recipientRoleCode).toBe('operatorCoordinator')
+    expect(gemeldet[0]?.recipientTenantId).toBe(welt.betreiberMandant)
+    expect(gemeldet[0]?.objectType).toBe('nightlyRuleRun')
+    // Die Nachricht gehört dem Lauf, nicht einem Übergang: sie trägt einen
+    // Lauftag und keinen Statuswechsel (3.14).
+    expect(gemeldet[0]?.runDate?.toISOString().slice(0, 10)).toBe('2026-11-12')
+    expect(gemeldet[0]?.statusTo).toBe(null)
+    expect(gemeldet[0]?.message).toContain('2026-11-11')
+  })
+
+  it('meldet drei ausgefallene Nächte als Warnung mit Eskalation an MA', async () => {
+    await laufAm('2026-11-08')
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    const gemeldet = await ausfallmeldungen()
+    expect(gemeldet.map((zeile) => zeile.recipientRoleCode)).toEqual([
+      'operatorAdmin',
+      'operatorCoordinator',
+    ])
+    expect(gemeldet.every((zeile) => zeile.kind === 'warning')).toBe(true)
+    // 2.4, Regel 2: die Stufe ist die Stellung in der kumulativen Liste.
+    const eskalation = gemeldet.find((zeile) => zeile.recipientRoleCode === 'operatorAdmin')
+    expect(eskalation?.escalationLevel).toBe(2)
+  })
+
+  it('meldet die Lücke auch beim Lauf von Hand', async () => {
+    await laufAm('2026-11-08')
+    ok(await runNightly(administrator, new Date('2026-11-12T08:00:00.000Z')))
+    expect((await ausfallmeldungen()).length).toBeGreaterThan(0)
+  })
+
+  it('verdoppelt die Meldung nicht, wenn derselbe Tag zweimal läuft', async () => {
+    await laufAm('2026-11-10')
+    ok(await runNightly(administrator, new Date('2026-11-12T08:00:00.000Z')))
+    ok(await runNightly(administrator, new Date('2026-11-12T09:00:00.000Z')))
+    expect(await ausfallmeldungen()).toHaveLength(1)
+  })
+
+  it('protokolliert die Feststellung als Systemlauf (3.12, 5.5.2 Nr. 1)', async () => {
+    await laufAm('2026-11-10')
+    ok(await runNightlyScheduled(new Date('2026-11-12T08:00:00.000Z')))
+    const eintrag = await prisma.auditEntry.findFirst({
+      where: { objectType: 'notification', objectRef: '2026-11-12' },
+    })
+    expect(eintrag).not.toBe(null)
+    // 3.12: genau eines von beiden ist gesetzt. Beim Lauf ist es das
+    // Systemkennzeichen (4.0, Regel 10).
+    expect(eintrag?.actorUserId).toBe(null)
+    expect(eintrag?.systemActor).not.toBe(null)
+  })
+})

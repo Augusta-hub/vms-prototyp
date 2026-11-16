@@ -22,12 +22,13 @@
 import { systemlauf } from '../audit/entry'
 import { protokolliere, type Transaktion } from '../audit/record'
 import { REGELWERK } from '../aueg/regelwerk'
-import { laufstand, stichtagAm, type Laufstand } from '../nightly/zeitplan'
+import { ausfallstufe, laufstand, type Ausfallstufe, type Laufstand } from '../nightly/zeitplan'
 import { checkPermission } from '../authz/check'
 import type { RoleCode } from '../authz/roles'
 import type { Rollenkuerzel } from '../aueg/typen'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import {
+  befundLaufAusgefallen,
   befundeBelegBeanstandet,
   befundeN1,
   befundeN2,
@@ -86,12 +87,9 @@ export async function runNightly(
     )
   }
 
-  return laufDurchfuehren(
-    operatorTenant.id,
-    stichtagAm(runDate, REGELWERK.lauf),
-    runDate,
-    identity.user.id,
-  )
+  // Auch der Lauf von Hand meldet die Lücke, die er schließt (5.5.1): wer ihn
+  // anstößt, soll erfahren, dass er zu spät kommt.
+  return laufDurchfuehren(operatorTenant.id, await ladeLaufstand(runDate), runDate, identity.user.id)
 }
 
 /**
@@ -122,23 +120,24 @@ export async function runNightlyScheduled(jetzt: Date = new Date()): Promise<Act
         `Lauf wird am ${iso(stand.naechsteFaelligkeit)} fällig (5.5.1).`,
     )
   }
-  // Gerechnet wird zu **dem** Stichtag, den der Stand nennt. Ihn hier noch
-  // einmal zu bestimmen hieße, ihn an zwei Stellen zu rechnen.
-  return laufDurchfuehren(operatorTenant.id, stand.stichtag, jetzt, null)
+  // Gerechnet wird zu **dem** Stand, den die Fälligkeit ergeben hat. Ihn hier
+  // noch einmal zu bestimmen hieße, ihn an zwei Stellen zu rechnen.
+  return laufDurchfuehren(operatorTenant.id, stand, jetzt, null)
 }
 
 /**
- * Der Lauf selbst. Der **Stichtag** kommt von außen und wird hier nicht mehr
- * bestimmt (5.5.1): `runDate` ist nur der Zeitpunkt, zu dem die Nachrichten
- * entstanden sind.
+ * Der Lauf selbst. Der **Stichtag** kommt aus dem Laufstand und wird hier
+ * nicht mehr bestimmt (5.5.1): `runDate` ist nur der Zeitpunkt, zu dem die
+ * Nachrichten entstanden sind.
  */
 async function laufDurchfuehren(
   operatorTenantId: string,
-  tag: Date,
+  stand: Laufstand,
   runDate: Date,
   startedById: string | null,
 ): Promise<ActionResult> {
   const operatorTenant = { id: operatorTenantId }
+  const tag = stand.stichtag
   const lagen = await ladeLagen(operatorTenant.id)
   const befunde: Nachtbefund[] = [
     ...befundeN1(lagen.lieferanten, tag, operatorTenant.id),
@@ -149,6 +148,9 @@ async function laufDurchfuehren(
     ...befundeZettelNichtEingereicht(lagen.zettel, tag),
     ...befundeZettelNichtGenehmigt(lagen.zettel, tag),
     ...befundeBelegBeanstandet(lagen.belege, tag),
+    // 5.5.1: die Lücke, die dieser Lauf schließt. Sie steht **im** Lauf, weil
+    // es den einzigen Zeitpunkt gibt, zu dem das System sie bemerken kann.
+    ...befundLaufAusgefallen(stand, operatorTenant.id),
   ]
 
   let geschrieben = 0
@@ -324,6 +326,16 @@ export async function ladeLaufstand(jetzt: Date = new Date()): Promise<Laufstand
     letzterStichtag: letzter?.runDate ?? null,
     zeitplan: REGELWERK.lauf,
   })
+}
+
+/**
+ * Die Stufe des Ausfalls zu einem Stand (5.5.1) — dieselbe Rechnung, die den
+ * Befund im Lauf erzeugt. Sie steht hier mit, damit eine Überwachung
+ * **außerhalb** des Systems die Schwelle nicht nachbauen muss: sie bekommt
+ * das Urteil, nicht nur die Zahl.
+ */
+export function laufAusfallstufe(stand: Laufstand): Ausfallstufe {
+  return ausfallstufe(stand.ausgefalleneTage, REGELWERK.lauf)
 }
 
 /* ------------------------------------------------------------------ */
@@ -532,6 +544,7 @@ export const NOTIFICATION_TRIGGER_LABELS: Readonly<Record<string, string>> = {
   billingDocumentDisputed: 'Abrechnungsbeleg beanstandet und nicht geklärt (2.4)',
   statusTransition: 'Statuswechsel (Kapitel 4)',
   ruleWarning: 'Warnung aus der Prüfung zum Übergang (4.7)',
+  nightlyRunMissed: 'Nächtlicher Lauf ausgeblieben (5.5.1)',
 }
 
 /**

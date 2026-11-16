@@ -16,6 +16,13 @@
 
 import type { Laufkonfiguration } from '../aueg/regelwerk'
 
+/**
+ * Der Teil des Zeitplans, aus dem sich Fälligkeit und Stichtag ergeben. Die
+ * Warnschwelle gehört nicht dazu: sie beurteilt den Ausfall, sie rechnet keine
+ * Zeit. Jede Funktion nimmt, was sie braucht.
+ */
+export type Zeitangabe = Pick<Laufkonfiguration, 'uhrzeit' | 'zeitzone'>
+
 /** Der Stand des Laufs zu einem Zeitpunkt (5.5.1). */
 export interface Laufstand {
   /**
@@ -64,7 +71,7 @@ export const HOECHSTENS_AUSGEFALLEN = 30
  * `en-CA` liefert `YYYY-MM-DD` und ist damit die kürzeste verlässliche Form;
  * die Sprache wählt hier das Format, nicht die Sprache der Oberfläche.
  */
-export function stichtagAm(zeitpunkt: Date, zeitplan: Laufkonfiguration): Date {
+export function stichtagAm(zeitpunkt: Date, zeitplan: Zeitangabe): Date {
   const datum = new Intl.DateTimeFormat('en-CA', {
     timeZone: zeitplan.zeitzone,
     year: 'numeric',
@@ -124,7 +131,7 @@ function minutenDerUhrzeit(uhrzeit: string): number {
  * geschätzt, einmal am gefundenen Zeitpunkt bestätigt. Mehr braucht es nicht —
  * die Zeitzonen der Welt springen um höchstens eine Stunde.
  */
-export function faelligkeitDes(stichtag: Date, zeitplan: Laufkonfiguration): Date {
+export function faelligkeitDes(stichtag: Date, zeitplan: Zeitangabe): Date {
   const wanduhr = stichtag.getTime() + minutenDerUhrzeit(zeitplan.uhrzeit) * 60_000
   const erste = new Date(wanduhr - zonenversatz(new Date(wanduhr), zeitplan.zeitzone))
   return new Date(wanduhr - zonenversatz(erste, zeitplan.zeitzone))
@@ -141,7 +148,7 @@ export function faelligkeitDes(stichtag: Date, zeitplan: Laufkonfiguration): Dat
 export function laufstand(args: {
   readonly jetzt: Date
   readonly letzterStichtag: Date | null
-  readonly zeitplan: Laufkonfiguration
+  readonly zeitplan: Zeitangabe
   readonly hoechstens?: number
 }): Laufstand {
   const { jetzt, letzterStichtag, zeitplan } = args
@@ -182,4 +189,22 @@ export function laufstand(args: {
     ausgefallen,
     ausgefalleneTage,
   }
+}
+
+/**
+ * Die Stufe eines Ausfalls (5.5.1, Tabelle „Der ausgebliebene Lauf wird
+ * gemeldet").
+ *
+ * Gestuft wird nach der Zahl der ausgefallenen Tage: keiner ist kein Befund,
+ * wenige sind eine Information, ab der Warnschwelle ist es eine Warnung mit
+ * Eskalation. Die Schwelle kommt aus dem Regelwerk und steht nicht hier.
+ */
+export type Ausfallstufe = 'keine' | 'information' | 'warnung'
+
+export function ausfallstufe(
+  ausgefalleneTage: number,
+  zeitplan: Pick<Laufkonfiguration, 'ausfallWarnungTage'>,
+): Ausfallstufe {
+  if (ausgefalleneTage <= 0) return 'keine'
+  return ausgefalleneTage >= zeitplan.ausfallWarnungTage ? 'warnung' : 'information'
 }

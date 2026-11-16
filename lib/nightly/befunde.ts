@@ -40,8 +40,9 @@ import {
   type Erlaubniszeile,
   type Nachweiszeile,
 } from '../aueg/anbindung'
-import { REGELWERK } from '../aueg/regelwerk'
+import { REGELWERK, type Regelwerkkonfiguration } from '../aueg/regelwerk'
 import type { Rollenkuerzel } from '../aueg/typen'
+import { ausfallstufe, type Laufstand } from './zeitplan'
 
 /** Die Anlässe, die dieser Lauf erzeugt — die Zeilen aus 5.5.1 und 2.4. */
 export type Anlass =
@@ -53,6 +54,7 @@ export type Anlass =
   | 'timesheetNotSubmitted'
   | 'timesheetNotApproved'
   | 'billingDocumentDisputed'
+  | 'nightlyRunMissed'
 
 /** Art des Befunds — sie folgt der Ergebnisart aus 5.5.2. */
 export type Befundart = 'information' | 'warning' | 'escalation'
@@ -588,4 +590,65 @@ export function befundeBelegBeanstandet(
 
 function tag(wert: Date): string {
   return wert.toISOString().slice(0, 10)
+}
+
+/* ------------------------------------------------------------------ */
+/* Der ausgebliebene Lauf (5.5.1)                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Der Befund über **ausgefallene Läufe** (SPEC 5.5.1, Tabelle „Der
+ * ausgebliebene Lauf wird gemeldet").
+ *
+ * Er entsteht in dem Lauf, der die Lücke schließt — das ist der einzige
+ * Zeitpunkt, zu dem das System sie bemerken kann: die Nachricht über einen
+ * ausgebliebenen Lauf entsteht im Lauf, und bleibt er weg, bleibt auch sie
+ * weg. Wer den Ausfall **während** des Ausfalls bemerken will, braucht eine
+ * Überwachung außerhalb (5.5.1).
+ *
+ * Gemeldet werden die **Tage**, nicht nur ihre Zahl: eine Frist, die in dieser
+ * Zeit erreicht wurde, ist nachzusehen.
+ */
+export function befundLaufAusgefallen(
+  stand: Laufstand,
+  operatorTenantId: string,
+  konfiguration: Regelwerkkonfiguration = REGELWERK,
+): readonly Nachtbefund[] {
+  const stufe = ausfallstufe(stand.ausgefalleneTage, konfiguration.lauf)
+  if (stufe === 'keine') return []
+
+  const benannt = stand.ausgefallen.map(tag)
+  const tage =
+    benannt.length < stand.ausgefalleneTage
+      ? `${benannt.join(', ')} und weitere`
+      : benannt.join(', ')
+
+  return [
+    {
+      zeile: 'Lauf',
+      anlass: 'nightlyRunMissed',
+      art: stufe === 'warnung' ? 'warning' : 'information',
+      // Keine Prüfung aus Kapitel 5: der Befund betrifft den Lauf selbst.
+      pruefung: null,
+      objectType: 'nightlyRuleRun',
+      // Der Stichtag ist die Kennung: so entsteht je Lauf **eine** Meldung,
+      // und ein wiederholter Lauf desselben Tages verdoppelt sie nicht (3.14).
+      objectRef: tag(stand.stichtag),
+      tenantId: operatorTenantId,
+      adressaten:
+        stufe === 'warnung'
+          ? konfiguration.adressatenLaufAusgefallenWarnung
+          : konfiguration.adressatenLaufAusgefallen,
+      mandantJeRolle: mandantJeRolle({ operator: operatorTenantId }),
+      meldung:
+        `Der nächtliche Lauf ist ${stand.ausgefalleneTage} Tag(e) ausgefallen: ${tage}. ` +
+        (stufe === 'warnung'
+          ? `Ab ${konfiguration.lauf.ausfallWarnungTage} Tagen ist das ein defekter Zeitplan ` +
+            'und keine Wartung (SPEC 5.5.1); Eskalation an `MA`. '
+          : '') +
+        'Die ausgefallenen Tage werden **nicht** nachgeholt — der Stichtag ist der Tag des ' +
+        'Laufs (5.5.1). Fristen, die in dieser Zeit erreicht wurden, nennt dieser Lauf mit, ' +
+        'weil N1 bis N6 Spannen prüfen und keine Kanten.',
+    },
+  ]
 }

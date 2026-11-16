@@ -245,6 +245,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Fälligkeitszeit | `nightlyRunTime` | Uhrzeit, zu der der Lauf eines Kalendertages fällig wird (5.5.1) |
 | Zeitzone des Laufs | `nightlyRunTimeZone` | Zeitzone, in der Fälligkeitszeit und Stichtag gelesen werden (5.5.1) |
 | Ausgefallener Lauf | `missedRun` | Kalendertag, dessen Lauf fällig war und nicht stattgefunden hat; wird nicht nachgeholt (5.5.1) |
+| Warnschwelle ausgebliebener Läufe | `nightlyRunMissingWarningDays` | Zahl ausgefallener Tage, ab der der Ausfall eine Warnung ist und nicht nur eine Information (5.5.1) |
 | Festwert des Regelwerks | — | Schwellen- und Vorlaufwert, der Systemverhalten beschreibt und deshalb in 5.0 steht, nicht in der Konfiguration |
 | Gesetzliche Regelgrenze | — | Wert, der ohne Tarifzuordnung gilt: 18 Monate (5.1.2), 9 Monate bzw. bei fehlendem Verleihertarif der erste Überlassungstag (5.2.2) |
 
@@ -758,6 +759,7 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
 | Equal-Pay-Frist erreicht, Vergleichsentgelt fehlt | MD | MA, zusätzlich Information an KE | 5.2 |
 | Abrechnungsbeleg beanstandet und nicht geklärt | MD | MA | 4.5 |
 | AÜG-Sperre blockiert einen Vorgang | MD | MA | 5.5, offene Frage 10 |
+| Nächtlicher Lauf ausgeblieben | MD | MA | 5.5.1 |
 
 ## 3. Objekte / Datenmodell
 
@@ -3754,6 +3756,7 @@ als die Prozessfristen in 4.0). Eine Änderung ist eine Änderung dieses Kapitel
 | Vorlauf Ablauf eines Nachweises | `documentExpiryNoticeDays` | je Nachweisart, Tabelle in 5.4.4 | Information, Warnung, Eskalation nach Stufen |
 | Fälligkeitszeit des nächtlichen Laufs | `nightlyRunTime` | 03:00, Tabelle in 5.5.1 | ab dieser Uhrzeit ist der Lauf des Tages fällig |
 | Zeitzone des nächtlichen Laufs | `nightlyRunTimeZone` | `Europe/Berlin`, Tabelle in 5.5.1 | in ihr werden Fälligkeitszeit und Stichtag gelesen |
+| Warnschwelle ausgebliebener Läufe | `nightlyRunMissingWarningDays` | 3 Tage, Tabelle in 5.5.1 | ab hier Warnung statt Information, Eskalation an `MA` |
 
 #### Was dieses Kapitel nicht tut
 
@@ -4838,6 +4841,35 @@ Kanten — was gestern fällig war, findet der Lauf von heute noch. Der ausgefal
 Tag wird deshalb nicht erzeugt, sondern **ausgewiesen**: die Lücke zwischen zwei
 Läufen ist sichtbar zu machen, sonst wäre „nichts gemeldet" nicht von „nicht
 gelaufen" zu unterscheiden.
+
+**Der ausgebliebene Lauf wird gemeldet.** Dass eine Lücke sichtbar ist, genügt
+nicht — sie muss jemandem auffallen. Der Lauf, der eine Lücke schließt, meldet
+sie deshalb als eigenen Befund:
+
+| Ausgefallene Tage | Ergebnis | Adressat |
+|---|---|---|
+| 1 bis `nightlyRunMissingWarningDays` − 1 | Information | `MD` |
+| `nightlyRunMissingWarningDays` (3) oder mehr | Warnung, Eskalationsanlass „Nächtlicher Lauf ausgeblieben" (2.4) | `MD` → `MA` |
+
+Der Schwellenwert ist Festwert des Regelwerks (5.0). Die Stufung trennt den
+Betriebsfall vom Fehler: **eine** ausgefallene Nacht ist eine Wartung, **drei**
+sind ein defekter Zeitplan. Die Meldung nennt die ausgefallenen Tage, nicht nur
+ihre Zahl — eine Frist, die in dieser Zeit erreicht wurde, ist nachzusehen.
+
+| Festwert | Bezeichner | Wert | Wirkung |
+|---|---|---|---|
+| Warnschwelle ausgebliebener Läufe | `nightlyRunMissingWarningDays` | 3 Tage | ab hier Warnung statt Information, Eskalation an `MA` |
+
+> **Das System kann sein eigenes Schweigen nicht melden.** Die Nachricht über
+> einen ausgebliebenen Lauf entsteht im Lauf — also erst, wenn er wieder läuft.
+> Bleibt er weg, bleibt auch sie weg. Das ist keine Lücke der Rechenvorschrift,
+> sondern dieselbe Grenze wie bei einer nicht eingetragenen Erlaubnis: ein
+> Verfahren erkennt nicht, was ihm niemand sagt. Wer den Ausfall **während** des
+> Ausfalls bemerken will, braucht eine Überwachung **außerhalb** des Systems.
+> Das System stellt ihr die Tatsachen: der Zugang unten gibt den fälligen
+> Stichtag, die ausgefallenen Tage und die daraus folgende Stufe aus, ohne
+> etwas auszulösen. Welche Überwachung das ist, hängt wie der Planer vom Hoster
+> ab (*offene Frage 2*).
 
 **Wer den Lauf auslöst.** Zwei Wege, ein Ergebnis. Der Betreiberadministrator
 stößt ihn von Hand an (2.3); daneben gibt es einen Zugang für einen **Planer

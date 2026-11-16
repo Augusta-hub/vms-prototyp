@@ -20,6 +20,7 @@
 import { REGELWERK } from '../../lib/aueg/regelwerk'
 import {
   ladeLaufstand,
+  laufAusfallstufe,
   loadNightlyRuns,
   loadNotifications,
   mayRunNightly,
@@ -137,7 +138,12 @@ export default async function BenachrichtigungenPage({
                     <>
                       <strong>{stand.ausgefalleneTage}</strong> Tag(e):{' '}
                       {stand.ausgefallen.map((tag) => tag.toISOString().slice(0, 10)).join(', ')}
-                      {stand.ausgefallen.length < stand.ausgefalleneTage ? ' …' : ''}
+                      {stand.ausgefallen.length < stand.ausgefalleneTage ? ' …' : ''}{' '}
+                      <Status
+                        value={
+                          laufAusfallstufe(stand) === 'warnung' ? 'Warnung (5.5.1)' : 'Information'
+                        }
+                      />
                     </>
                   )}
                 </td>
@@ -149,7 +155,14 @@ export default async function BenachrichtigungenPage({
             ist der Tag des Laufs, ein Lauf von heute kann nicht der von gestern sein. Fachlich
             ist das verkraftbar — N1 bis N6 prüfen <em>Spannen</em>, keine Kanten, und was
             gestern fällig war, findet der Lauf von heute noch. Der ausgefallene Tag wird
-            deshalb nicht erzeugt, sondern <strong>ausgewiesen</strong>. Das System führt{' '}
+            deshalb nicht erzeugt, sondern <strong>ausgewiesen</strong> — und von dem Lauf
+            gemeldet, der die Lücke schließt: ab einem Tag als Information an <code>MD</code>,
+            ab {REGELWERK.lauf.ausfallWarnungTage} Tagen als Warnung mit Eskalation an{' '}
+            <code>MA</code> (5.5.1, 2.4). <strong>Sein eigenes Schweigen kann das System
+            nicht melden</strong>: bleibt der Lauf weg, bleibt auch die Nachricht weg. Wer den
+            Ausfall <em>während</em> des Ausfalls bemerken will, braucht eine Überwachung
+            außerhalb — <code>GET /api/naechtlicher-lauf</code> gibt ihr Stichtag, ausgefallene
+            Tage und Stufe aus, ohne etwas auszulösen. Das System führt{' '}
             <strong>keine eigene Uhr</strong>: ein Planer außerhalb ruft zur Fälligkeitszeit
             <code> POST /api/naechtlicher-lauf</code> auf. Welcher Planer das ist, hängt vom
             Hoster ab (<em>offene Frage 2</em>).

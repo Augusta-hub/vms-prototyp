@@ -111,6 +111,13 @@ export interface Laufkonfiguration {
   readonly uhrzeit: string
   /** IANA-Kennung, etwa `Europe/Berlin` (5.5.1). */
   readonly zeitzone: string
+  /**
+   * `nightlyRunMissingWarningDays` (5.5.1): ab so vielen ausgefallenen Tagen
+   * ist der Ausfall eine **Warnung** und nicht nur eine Information. Die
+   * Stufung trennt den Betriebsfall vom Fehler — eine ausgefallene Nacht ist
+   * eine Wartung, drei sind ein defekter Zeitplan.
+   */
+  readonly ausfallWarnungTage: number
 }
 
 export interface Dauerkonfiguration {
@@ -180,6 +187,10 @@ export interface Regelwerkkonfiguration {
   readonly adressatenKonzernUnbekannt: readonly Rollenkuerzel[]
   /** Arbeitsverhältnis beim Verleiher fehlt oder beginnt zu spät (5.3.4). */
   readonly adressatenArbeitsverhaeltnis: readonly Rollenkuerzel[]
+  /** Lauf ausgefallen, unter der Warnschwelle (5.5.1): Information. */
+  readonly adressatenLaufAusgefallen: readonly Rollenkuerzel[]
+  /** Lauf ausgefallen, Warnschwelle erreicht (5.5.1, 2.4). */
+  readonly adressatenLaufAusgefallenWarnung: readonly Rollenkuerzel[]
   /**
    * Arbeitskampf am Einsatzort, **ohne** Zusicherung (5.3.2, Schritt 3). 5.3.2
    * nennt für diesen Fall keine Adressaten; 2.4 führt für den Anlass
@@ -241,7 +252,7 @@ export const REGELWERK: Regelwerkkonfiguration = {
   // SPEC 5.5.1, Tabelle „Zeitplan des Laufs": `nightlyRunTime`,
   // `nightlyRunTimeZone`. Die Zeitzone ist die des Betreibers — in ihr werden
   // auch die Kalendertage dieses Kapitels gelesen.
-  lauf: { uhrzeit: '03:00', zeitzone: 'Europe/Berlin' },
+  lauf: { uhrzeit: '03:00', zeitzone: 'Europe/Berlin', ausfallWarnungTage: 3 },
   dauer: {
     // § 1 Abs. 1b Satz 1 AÜG, SPEC 5.1.2 Rang 3.
     regelgrenzeMonate: 18,
@@ -282,6 +293,10 @@ export const REGELWERK: Regelwerkkonfiguration = {
   adressatenErklaerungFehlt: ['MD', 'LD'],
   adressatenKonzernUnbekannt: ['MA'],
   adressatenArbeitsverhaeltnis: ['MD', 'LD'],
+  // 5.5.1, Tabelle „Der ausgebliebene Lauf wird gemeldet": Information an
+  // `MD`, Warnung zusätzlich an `MA` — kumulativ wie überall in Kapitel 5.
+  adressatenLaufAusgefallen: ['MD'],
+  adressatenLaufAusgefallenWarnung: ['MD', 'MA'],
   // 2.4, Anlass „AÜG-Sperre blockiert einen Vorgang": `MD`, Eskalation `MA`.
   adressatenArbeitskampf: ['MD', 'MA'],
   adressatenArbeitskampfZulaessig: ['MD'],
