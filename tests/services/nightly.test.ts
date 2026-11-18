@@ -101,6 +101,37 @@ describe('Wer den Lauf anstoßen darf (2.3, 3.14)', () => {
   })
 })
 
+describe('Zustellung aus dem Lauf (3.14)', () => {
+  // Ohne Mailweg geht nichts hinaus; die `.env` des Entwicklers darf das
+  // Ergebnis nicht verschieben.
+  beforeEach(async () => {
+    delete process.env.MAIL_FROM
+    delete process.env.MAIL_RELAY_URL
+    delete process.env.MAIL_OUTBOX_DIR
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { maxDurationEndDate: tag('2026-12-01') },
+    })
+  })
+
+  it('legt zu jeder Nachricht des Laufs Zustellaufträge an', async () => {
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.count()
+    expect(nachrichten).toBeGreaterThan(0)
+    const auftraege = await prisma.notificationDelivery.count()
+    expect(auftraege).toBeGreaterThan(0)
+    expect(await prisma.notificationDelivery.count({ where: { status: 'pending' } })).toBe(
+      auftraege,
+    )
+  })
+
+  it('meldet, dass nichts versandt wurde — „nichts zugestellt" sieht nicht wie „alles zugestellt" aus', async () => {
+    const meldung = ok(await runNightly(administrator, HEUTE))
+    expect(meldung).toContain('Zustellung: nichts versandt')
+    expect(meldung).toContain('MAIL_FROM')
+  })
+})
+
 describe('N2 — Höchstüberlassungsdauer (5.1.6)', () => {
   beforeEach(async () => {
     await prisma.assignment.update({

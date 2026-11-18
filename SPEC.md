@@ -74,6 +74,13 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Eskalation | `escalation` | Weitergabe eines liegengebliebenen Vorgangs an eine weitere Stelle |
 | Eskalationsstufe | `escalationLevel` | Position in der Stufenfolge einer Eskalation |
 | Eskalationsfrist | `escalationDeadline` | Frist, nach deren Ablauf eskaliert wird |
+| Zustellweg | `deliveryChannel` | Weg, auf dem eine Benachrichtigung den Empfänger erreicht (Kapitel 3.14) |
+| Postfach | `inbox` | Anzeige der Benachrichtigungen einer Person im System (Kapitel 3.14) |
+| Zustellung | `notificationDelivery` | Auftrag, eine Benachrichtigung einer Person per E-Mail zuzustellen, mit seinem Verlauf |
+| Zustellzustand | `deliveryStatus` | `pending`, `sent`, `failed` oder `suppressed` (Kapitel 3.14) |
+| Postausgang | `outbox` | die noch offenen Zustellungen |
+| Versuche je Zustellung | `deliveryAttemptLimit` | Zahl der Versuche, nach der eine Zustellung als gescheitert gilt (Kapitel 3.14) |
+| Lesevermerk | `notificationRead` | Vermerk, dass eine Person eine Benachrichtigung gelesen hat |
 | Mandantentyp | `tenantType` | `operator`, `customer` oder `supplier` (Kapitel 3.11) |
 | Fachliche Kennung | `…Number` | lesbare, mandantenweit eindeutige Nummer eines Objekts (z. B. `customerNumber`) |
 | Gültigkeitsbeginn / -ende | `validFrom` / `validTo` | fachlicher Gültigkeitszeitraum; `validTo` leer = unbefristet |
@@ -2400,8 +2407,11 @@ fast jeder Zeile nennt, eine Zusage ohne Gegenstand.
 
 **Abgrenzung.** Die Benachrichtigung **ändert nichts**. Sie genehmigt nicht,
 verlängert nicht und besetzt nicht (2.4, Regel 1); sie ist weder ein Übergang
-noch eine Vorbedingung. Sie ist auch **kein** Zustellweg: ob die Nachricht als
-E-Mail, im System oder beides erscheint, ist *(offene Frage 56)*.
+noch eine Vorbedingung. Sie ist auch **nicht** der Zustellweg: sie ist das, was
+festgestellt wurde, und **wie** sie den Empfänger erreicht, steht unten in
+„Zustellweg" — in zwei eigenen Objekten, der Zustellung
+(`notificationDelivery`) und dem Lesevermerk (`notificationRead`). Beide treten
+neben die Benachrichtigung und ändern sie nicht.
 
 | Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
 |---|---|---|---|---|
@@ -2499,12 +2509,143 @@ ersetzt sie nicht — die eine sagt, dass der Vorgang weitergegangen ist, die
 andere, womit.
 
 **Statusmodell.** Keines. Eine Benachrichtigung wird erzeugt und bleibt; sie
-hat keinen Lebenslauf, den Kapitel 4 führen müsste. Ob sie einen Zustand
-„gelesen" trägt, hängt am Zustellweg und ist Teil von *(offener Frage 56)*.
+hat keinen Lebenslauf, den Kapitel 4 führen müsste. Einen Zustand „gelesen"
+trägt sie **nicht**: er gehört nicht der Nachricht, sondern der Person, die sie
+gelesen hat, und steht deshalb im Lesevermerk (unten). Die Zeile
+„Benachrichtigung" in 2.2 trägt darum weiter nur `L` — ein Lesevermerk ändert
+die Benachrichtigung nicht, er entsteht neben ihr.
 
 **Datenkategorie (→ 6.3).** Mittelbar personenbezogen: die Meldung kann einen
 Einsatz und damit eine Person benennen. Sie unterliegt deshalb denselben
 Sichtbarkeitsregeln wie der Vorgang selbst (2.3, 2.4 Regel 3).
+
+#### Zustellweg (`deliveryChannel`)
+
+**Zwei Wege, beide immer.** Eine Benachrichtigung erscheint im **Postfach** des
+Systems *und* geht als **E-Mail mit der Meldung** hinaus. Keiner der beiden
+ersetzt den anderen: das Postfach ist der Bestand — vollständig, nachlesbar und
+an die Sichtbarkeitsregeln gebunden —, die E-Mail ist der Anstoß, der den
+Empfänger erreicht, ohne dass er nachsieht. Eine Frist, die niemand bemerkt,
+ist der Anlass dieses Kapitels.
+
+Das **Postfach** ist keine Kopie, sondern eine Sicht auf die
+Benachrichtigungen selbst: wer sie nach [47] lesen darf, findet sie dort. Es
+entsteht deshalb kein Objekt je Postfacheintrag.
+
+Die **Übergabe an ein Fremdsystem** bleibt *offene Frage 7*. Sie wäre ein
+dritter Weg und kein Ersatz für diese zwei.
+
+**Wer die E-Mail erhält.** Die Personen, die die **adressierte
+Rollenzuweisung** tragen — eigen oder in Vertretung (2.4, Regel 2; dieselben,
+denen [47] die Nachricht im System zeigt). Zwei Abgrenzungen dazu:
+
+- Wer die Nachricht nur **kraft Aufsicht** sieht, erhält keine E-Mail. `MA`
+  sieht das Benachrichtigungsaufkommen des Betriebs wie das Protokoll ([47],
+  letzter Satz); das ist ein Leserecht und macht ihn nicht zum Adressaten. Ist
+  die Nachricht an `MA` gerichtet, erhält er sie wie jeder Adressat.
+- Die **Vertretung** erhält die E-Mail der Stufe, zu der die vertretene
+  Rollenzuweisung gehört. Das ist nicht die Stufe „an deren Vertretung" aus
+  2.4 Regel 2: die ist eine **eigene** Erinnerung, weil nichts geschehen ist.
+  Hier geht es um die erste Nachricht — und wäre der Rolleninhaber abwesend und
+  die Vertretung nicht adressiert, erreichte sie niemanden, der handeln kann.
+
+**Die Adresse** ist die Anmeldekennung (`loginIdentifier`, 3.11) — sie **ist**
+eine E-Mail-Adresse. Ein zweites Adressfeld gibt es nicht: eine abweichende
+Zustelladresse wäre eine zweite Wahrheit über die Person, ohne dass ein Kapitel
+sie verlangt.
+
+**Was in der E-Mail steht.** Betreff: Art und Anlass. Text: die Meldung
+(`message`), der Vorgang, die Stufe, die Prüfung, der Zeitpunkt und der Lauftag,
+soweit gesetzt — also genau die Felder, die die Anzeige auch zeigt. Nichts
+darüber hinaus: `message` ist nach 2.4 Regel 3 bereits auf das beschränkt, was
+der Empfänger sehen darf, und die E-Mail fügt keine Namen, keine Begründung und
+keine Anhänge hinzu.
+
+**Geprüft wird zweimal.** Beim Anlegen des Auftrags und erneut unmittelbar vor
+dem Versand. Wer die Rollenzuweisung in der Zwischenzeit verloren hat oder
+deaktiviert ist, erhält nichts mehr (2.3) — der Auftrag endet als
+`suppressed`: unterblieben, nicht gescheitert. Die zweite Prüfung ist nötig,
+weil zwischen Anlegen und Versand Zeit liegt; ohne sie würde eine
+Rechteänderung von einer wartenden E-Mail überholt.
+
+**Zum Datenschutz.** Mit dem Inhalt verlässt ein mittelbar personenbezogener
+Text das System. Der Mailbetreiber ist damit **Auftragsverarbeiter**: AVV,
+Serverstandort und Transportverschlüsselung gelten für ihn wie für den Hoster
+(6.8, 6.9) — welcher es ist, hängt an *offener Frage 2*. Ohne konfigurierten
+Mailweg geht nichts hinaus; die Aufträge bleiben offen, statt stillschweigend
+zu verfallen.
+
+#### Zustellung (`notificationDelivery`)
+
+**Zweck.** Der Auftrag, eine Benachrichtigung **einer Person** zuzustellen —
+und die Spur, ob es gelungen ist. Ohne ihn wäre der Versand eine Handlung ohne
+Gedächtnis: niemand könnte sagen, ob die E-Mail hinausgegangen ist, und der
+nächste Durchgang würde sie erneut senden.
+
+| Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
+|---|---|---|---|---|
+| Benachrichtigung | `notificationId` | Verweis (3.14) | Pflicht | |
+| Empfänger | `recipientUserId` | Verweis (3.11) | Pflicht | die **Person**; die adressierte Rolle steht an der Benachrichtigung |
+| Zustand | `status` | `pending`, `sent`, `failed`, `suppressed` | Pflicht | |
+| Versuche | `attempts` | Ganzzahl ab 0 | Pflicht | |
+| Letzter Versuch | `lastAttemptAt` | Zeitpunkt | optional | |
+| Zugestellt am | `sentAt` | Zeitpunkt | optional | gesetzt bei `sent` |
+| Grund | `statusReason` | Text | optional | bei `failed` der Fehler, bei `suppressed` der Grund nach 2.3 |
+
+**Eindeutigkeit.** Je Benachrichtigung und Person **eine** Zustellung. Eine
+Nachricht wird einmal zugestellt, auch wenn sie an eine Rolle geht, die mehrere
+Personen tragen — jede erhält ihre eigene.
+
+**Übergänge.** `pending` → `sent`, `pending` → `failed` (nach
+`deliveryAttemptLimit` Versuchen, endgültig) und `pending` → `suppressed`. Kein
+Weg zurück: eine zugestellte E-Mail ist nicht zurückzuholen. Das ist **kein**
+Statusmodell im Sinne von Kapitel 4 — über eine Zustellung entscheidet niemand,
+sie wird versucht; die Werte sind das Protokoll des Versuchs.
+
+**Kein Lesenachweis.** Zugestellt heißt nicht gelesen. Einen Lesenachweis per
+E-Mail gibt es nicht — er wäre eine Zusage, die kein Mailweg hält. „Gelesen"
+entsteht nur im Postfach.
+
+**Protokoll.** Kein Audit-Eintrag je E-Mail. Die Benachrichtigung ist nach 3.14
+ihre eigene Spur, und die Zustellung ist die Spur des Versands: Empfänger,
+Zeitpunkt, Zustand und Grund stehen in ihr. Was 2.4 Regel 4 verlangt — die
+Eskalationsstufe mit Anlass, Adressat und Zeitpunkt —, ist beim Anlegen der
+Nachricht schon protokolliert.
+
+**Datenkategorie (→ 6.3).** Wie die Benachrichtigung mittelbar
+personenbezogen; zusätzlich benennt die Zustellung die **Person**, die etwas
+erfahren hat. Für sie gilt deshalb, was 6.6 für Protokolldaten festlegt.
+
+#### Lesevermerk (`notificationRead`)
+
+**Zweck.** Der Vermerk, dass **diese Person** diese Nachricht gesehen hat. Ein
+Postfach ohne „neu" ist nach wenigen Tagen unbenutzbar, und damit auch die
+Nachricht, auf die es ankommt.
+
+| Deutsch | Bezeichner | Typ / Wertebereich | Pflicht | Bemerkung |
+|---|---|---|---|---|
+| Benachrichtigung | `notificationId` | Verweis (3.14) | Pflicht | |
+| Leser | `userId` | Verweis (3.11) | Pflicht | immer der Handelnde |
+| Gelesen am | `readAt` | Zeitpunkt | Pflicht | |
+
+**Je Person, nicht je Rolle.** Dass ein Koordinator eine Nachricht gelesen hat,
+sagt nichts darüber, ob die Vertretung oder ein zweiter Koordinator sie gesehen
+hat. Der Vermerk hängt deshalb an der Person — adressiert bleibt die Rolle
+(3.14), gelesen wird einzeln.
+
+**Wer ihn setzen darf.** Wer die Nachricht nach [47] lesen darf, und **nur für
+sich selbst**. Ein fremder Lesevermerk ist nicht ausdrückbar: der Leser ist
+immer der Handelnde. Deshalb braucht 2.2 keine neue Zeile — das Recht ist das
+Leserecht an der Benachrichtigung, und die Benachrichtigung selbst bleibt
+unverändert.
+
+**Ohne Wirkung auf die Eskalation.** Die Eskalation läuft nach Zeit (2.4,
+Regel 2): ein gelesener Hinweis hält die nächste Stufe nicht auf, ein
+ungelesener löst sie nicht aus. Der Lesevermerk erleichtert dem Empfänger die
+Übersicht; eine Tatsache des Verfahrens ist er nicht.
+
+**Rücknahme.** Ein Lesevermerk wird nicht zurückgenommen. Er sagt nicht „diese
+Nachricht ist erledigt", sondern „ich habe sie gesehen", und das bleibt wahr.
 
 > *(offene Frage 57)* **In welchem Abstand rückt eine Eskalation auf die
 > nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die
@@ -3757,6 +3898,7 @@ als die Prozessfristen in 4.0). Eine Änderung ist eine Änderung dieses Kapitel
 | Fälligkeitszeit des nächtlichen Laufs | `nightlyRunTime` | 03:00, Tabelle in 5.5.1 | ab dieser Uhrzeit ist der Lauf des Tages fällig |
 | Zeitzone des nächtlichen Laufs | `nightlyRunTimeZone` | `Europe/Berlin`, Tabelle in 5.5.1 | in ihr werden Fälligkeitszeit und Stichtag gelesen |
 | Warnschwelle ausgebliebener Läufe | `nightlyRunMissingWarningDays` | 3 Tage, Tabelle in 5.5.1 | ab hier Warnung statt Information, Eskalation an `MA` |
+| Versuche je Zustellung | `deliveryAttemptLimit` | 3 Versuche, 3.14 | danach gilt die Zustellung als gescheitert |
 
 #### Was dieses Kapitel nicht tut
 
@@ -5156,8 +5298,15 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 - 6.7 Betroffenenrechte: Auskunft, Berichtigung, Löschung, Übertragbarkeit —
   Umsetzung im System — TODO
 - 6.8 Technische und organisatorische Maßnahmen: Mandantentrennung,
-  Verschlüsselung, Zugriffsprotokollierung, Berechtigungsreview — TODO
-- 6.9 Hosting: Serverstandort Deutschland/EU, AVV, Unterauftragnehmer — TODO
+  Verschlüsselung, Zugriffsprotokollierung, Berechtigungsreview — TODO.
+  Festgelegt ist bereits: die **Zustellung** einer Benachrichtigung per E-Mail
+  (3.14) geht nur über einen Transport mit Verschlüsselung, und ohne
+  konfigurierten Mailweg geht nichts hinaus.
+- 6.9 Hosting: Serverstandort Deutschland/EU, AVV, Unterauftragnehmer — TODO.
+  Dazu gehört der **Mailbetreiber**: mit dem Inhalt der Benachrichtigung
+  (3.14) verlässt ein mittelbar personenbezogener Text das System, der
+  Betreiber des Mailwegs ist damit Auftragsverarbeiter und unterliegt AVV und
+  Serverstandort wie der Hoster selbst (*offene Frage 2*).
 - 6.10 Umgang mit Testdaten (nur synthetisch, siehe CLAUDE.md) — TODO
 
 ## 7. Offene Fragen
@@ -5229,7 +5378,7 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 
 | 55 | **Wie sieht ein Lieferant die Abrechnungsperiode, deren Schlusstermin seine Frist ist?** 2.2 gibt `LD` und `LA` an der Zeile „Abrechnungsperiode (3.9)" ein `L[7]`, und [7] lautet „nur die eigene Lieferantenorganisation". Die Periode gehört aber dem **Betreiber** und nennt **keinen** Lieferanten — mehrere liefern in dieselbe Periode, und 3.9 führt für sie kein Feld, nur das optionale `customerRef`. Damit ist [7] an dieser Zeile nicht erfüllbar, obwohl 2.4 gerade den `closingDate` zum Eskalationsanlass gegenüber `LD` macht: er soll die Frist kennen, die ihn trifft. Denkbar: die Sicht über die **Beauftragung** führen (wie [3] es für Kunden und Standorte tut), oder die Periode je Lieferant führen (dann wird aus einer Periode je Kunde eine je Vertragsverhältnis). Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt die Periode damit dem Betreiber und — bei einer kundenbezogenen Periode — dem `KE` über [2]. Dieselbe Bauart wie *Frage 42* und *Frage 49*. | Kapitel 2.2, 2.4, 3.9 | offen |
 
-| 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg: E-Mail, Anzeige im System, beides, oder eine Übergabe an ein Fremdsystem (*Frage 7*). Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. Mit dem Weg hängt zusammen, ob die Nachricht einen Zustand „gelesen" trägt — die **Eskalation** braucht ihn nicht, sie läuft nach Zeit (2.4, Regel 2), eine Anzeige mit Postfach dagegen schon. Die Umsetzung erzeugt die Benachrichtigung als **Objekt** (3.14) und zeigt sie im System an; sie versendet nichts und führt keinen Lesezustand. | Kapitel 2.4, 3.14, 6 | offen |
+| 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg. Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. | Kapitel 2.4, 3.14, 6 | **entschieden:** beide Wege, beide immer — **Postfach** im System *und* **E-Mail mit der Meldung** an die Träger der adressierten Rollenzuweisung; Adresse ist die Anmeldekennung (3.11). Der Mailbetreiber ist Auftragsverarbeiter (6.8, 6.9); ohne konfigurierten Mailweg geht nichts hinaus. „Gelesen" entsteht **je Person** im Postfach, als eigener Lesevermerk — die Benachrichtigung bleibt unverändert, und die Eskalation läuft weiter nach Zeit (2.4, Regel 2). Zustellweg, Zustellung und Lesevermerk stehen in 3.14. Die Übergabe an ein Fremdsystem bleibt *Frage 7*. |
 | 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0) — der nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. Zu entscheiden sind der Abstand und die Ebene, auf der er gilt (je Anlass oder je Kunde, 2.4 Regel 5). Bis zur Antwort erzeugt der nächtliche Lauf für diese Anlässe die Stufe der **zuständigen Rolle** und keine weitere — eine geratene Taktzahl wäre eine Entscheidung über die Belastung des Betreibers. | Kapitel 2.4, 3.14, 4.0 | offen |
 | 58 | **Welche Rolle ist „der Antragsteller", wenn eine Person mehrere Rollen in derselben Organisation trägt?** Kapitel 4 adressiert mehrere Nachrichten relativ: „an den Antragsteller" (4.3), „an die erfassende Seite" (4.4), „an den Einsteller" (5.4). 3.14 adressiert aber eine **Rolle in einer Organisation**, nicht eine Person — und 3.11 erlaubt einer Person mehrere Rollenzuweisungen im selben Mandanten. Trägt der Antragsteller `KB` **und** `KG`, ist offen, welche Rolle die Nachricht erhält: beide, die höhere, oder die, in der gehandelt wurde (dann wäre die Rollenzuweisung der Handlung festzuhalten, über den Audit-Eintrag hinaus). Die Umsetzung nimmt bis zur Antwort die **erste** Rolle nach der Reihenfolge in 2.1; die Nachricht bleibt damit in der Organisation, in der gehandelt wurde, und offenbart nichts über 2.3 hinaus. | Kapitel 2.1, 3.11, 3.14, 4.3, 4.4 | offen |
 

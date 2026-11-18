@@ -26,8 +26,9 @@
  * **Die Benachrichtigungen aus 4.6** entstehen in derselben Transaktion
  * (3.14): `LA` und `LD` beim Freischalten, Entsperren und Reaktivieren, `LA`
  * bei der Sperre — und dort zusätzlich die **Eskalation an `MA`**, die einzige
- * zweite Stufe, die Kapitel 4 aus einem Übergang kennt. Zugestellt wird nichts
- * (*offene Frage 56*).
+ * zweite Stufe, die Kapitel 4 aus einem Übergang kennt. Die Zustellaufträge
+ * dazu entstehen mit den Nachrichten; versandt wird später aus dem Postausgang
+ * (3.14).
  */
 import { alsNachweiszeile, erlaubnisstand, nachweisstand } from '../aueg/anbindung'
 import { protokolliere, protokolliereGetrennt } from '../audit/record'

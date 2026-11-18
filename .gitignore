@@ -48,3 +48,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Dateiausgang der Zustellung in der Entwicklung (SPEC 3.14): Briefe mit
+# synthetischen Daten, nichts davon gehört ins Repository.
+.postausgang/

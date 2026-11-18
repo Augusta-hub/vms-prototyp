@@ -5,6 +5,123 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-18 — Zustellung und Lesevermerk (3.14, Frage 56)
+
+### Gemacht
+
+*Frage 56* ist beantwortet: **beide Wege, beide immer** — Postfach im System
+*und* E-Mail mit der Meldung. Die Benachrichtigung bleibt davon unberührt; alles
+Neue steht **neben** ihr.
+
+- **SPEC 3.14** hat drei neue Abschnitte: „Zustellweg", „Zustellung
+  (`notificationDelivery`)" und „Lesevermerk (`notificationRead`)". Glossar 1.5
+  trägt die sieben Bezeichner, 5.0 den Festwert `deliveryAttemptLimit` (3), und
+  Kapitel 6.8/6.9 nennen den Mailbetreiber als **Auftragsverarbeiter** samt
+  Transportverschlüsselung. Frage 56 steht als *entschieden* in Kapitel 7.
+- **Prisma**: `NotificationDelivery` (Zustand `pending`/`sent`/`failed`/
+  `suppressed`, Versuche, Zeitpunkte, Grund) und `NotificationRead`
+  (Benachrichtigung × Person × `readAt`), je eindeutig je Paar. Migration
+  `20261118090000_zustellung_und_lesevermerk`.
+- **`lib/notifications/brief.ts`** baut Betreff und Text — rein, ohne Datenbank
+  und ohne Versand. **`lib/notifications/versand.ts`** liest den Mailweg aus der
+  Umgebung: Relay über `https` oder Dateiausgang für die Entwicklung, sonst
+  keiner. **`lib/notifications/bezeichnungen.ts`** hält Art und Anlass in Worten
+  — aus `nightly.ts` herausgezogen, weil Anzeige *und* Brief sie brauchen und
+  dieselbe Nachricht in beiden gleich heißen muss.
+- **`lib/services/zustellung.ts`**: Empfänger bestimmen, Aufträge anlegen,
+  Postausgang abarbeiten, Lesevermerk setzen, eigenen Stand und Zahlen lesen.
+- **`schreibeBenachrichtigung`** in `lib/services/notifications.ts` ist jetzt
+  die **einzige** Stelle, die eine Benachrichtigung anlegt — alle drei Quellen
+  (Übergang, Warnung aus 4.7, nächtlicher Lauf) gehen durch sie und bekommen
+  damit ihre Zustellaufträge.
+- **`POST`/`GET /api/zustellung`** für den Planer; die Prüfung des geteilten
+  Geheimnisses steht jetzt in `lib/api/planer.ts` und wird von beiden Adressen
+  genutzt. Der nächtliche Lauf arbeitet den Postausgang am Ende selbst ab.
+- **Oberfläche**: Abschnitt „Postausgang" (Mailweg, Zahlen, Knopf) für `MA`,
+  Spalten „Zustellung" und „gelesen" an jeder Nachricht.
+
+### Entscheidungen
+
+1. **Das Postfach bekommt kein Objekt.** Es ist eine Sicht auf die
+   Benachrichtigungen selbst, geprüft nach [47]. Ein Eintrag je Person und
+   Nachricht wäre eine Kopie, die auseinanderlaufen kann.
+2. **„Gelesen" gehört der Person, nicht der Nachricht.** Deshalb ein eigenes
+   Objekt: die Zeile „Benachrichtigung" in 2.2 trägt nur `L`, und das bleibt
+   richtig. Je Person und nicht je Rolle — dass ein Koordinator gelesen hat,
+   sagt nichts über die Vertretung oder den zweiten Koordinator. Belegt: der
+   Lauf erzeugte sechs Aufträge zu fünf Nachrichten, weil `MD` zwei Träger hat,
+   und der Vermerk des einen ließ den des anderen offen.
+3. **Die Vertretung ist Adressat der ersten Stufe.** 2.4 Regel 2 überträgt ihr
+   die Rechte der Zuweisung; wäre der Rolleninhaber abwesend und sie nicht
+   adressiert, erreichte die Nachricht niemanden, der handeln kann. Die Stufe
+   „an deren Vertretung" aus der Stufenfolge ist etwas anderes — eine eigene
+   Erinnerung, weil nichts geschehen ist.
+4. **Wer nur kraft Aufsicht liest, erhält keine E-Mail.** `MA` sieht das
+   Aufkommen des Betriebs ([47], letzter Satz); ein Leserecht macht niemanden
+   zum Adressaten.
+5. **Geprüft wird zweimal** — beim Anlegen und unmittelbar vor dem Versand.
+   Zwischen beidem liegt Zeit, und ohne die zweite Prüfung überholt eine
+   wartende E-Mail die Rechtelage (2.3). Der Auftrag endet dann als
+   `suppressed`: unterblieben, nicht gescheitert.
+6. **Ohne Mailweg wird nichts angefasst.** Kein Versuch, kein Zustand: ein
+   Auftrag, der ohne Weg als erledigt gilt, wäre eine Zusage über eine E-Mail,
+   die niemand gesendet hat. Gemeldet wird es trotzdem, damit „nichts
+   zugestellt" nicht wie „alles zugestellt" aussieht.
+7. **Die Adresse ist die Anmeldekennung** (3.11) — sie *ist* eine
+   E-Mail-Adresse. Kein zweites Adressfeld: eine abweichende Zustelladresse
+   wäre eine zweite Wahrheit über die Person, die kein Kapitel verlangt.
+8. **Unverschlüsselt geht nichts hinaus.** `MAIL_RELAY_URL` wird nur über
+   `https` genutzt, Ausnahme ist der eigene Rechner (6.8).
+9. **Ein Geheimnis für beide Planeraufrufe.** Es ist derselbe Anrufer; ein
+   zweites wäre eine zweite Stelle, an der es fehlen kann, ohne einen Fall zu
+   trennen.
+10. **Kein Audit-Eintrag je E-Mail.** Die Zustellung *ist* die Spur des
+    Versands — Empfänger, Zeitpunkt, Zustand, Grund. Die Eskalationsstufe nach
+    2.4 Regel 4 ist beim Anlegen der Nachricht längst protokolliert.
+
+### Gefunden
+
+- **Der Seed kannte die neuen Tabellen nicht.** `prisma/seed.ts` löschte die
+  Benachrichtigungen „ganz zuerst", die Fremdschlüssel der Zustellung stehen
+  aber auf `RESTRICT` — das Aufsetzen brach ab. Behoben: Zustellung und
+  Lesevermerk gehen voran.
+
+### Geprüft
+
+- `npm test` **1156 grün** (+20), `npm run test:services` **330 grün** (+25),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **12 Mutationen, alle gefangen** — darunter „Vertretung erhält keinen
+  Auftrag", „zweite Prüfung entfällt", „ohne Mailweg gelten Aufträge als
+  unterblieben", „ein Versuch zu viel bis endgültig", „Lesevermerk ohne
+  Rechteprüfung", „Lesevermerk überschreibt den Zeitpunkt", „eigener Stand
+  nimmt eine fremde Zustellung", „Relay auch unverschlüsselt".
+- **Am laufenden Prototyp** mit Dateiausgang: der Lauf erzeugte 5
+  Benachrichtigungen und 6 Zustellungen, alle 6 Briefe wurden geschrieben
+  (Betreff mit Art voran, Meldung, Vorgang, Stufe, Prüfung, Lauftag, der Satz
+  aus 2.4 Regel 1 und der Weg ins Postfach). `POST /api/zustellung` ohne
+  Geheimnis 401, mit Geheimnis 200 und beim zweiten Mal `betrachtet: 0` — nichts
+  doppelt. Der Vermerk „gelesen" setzte sich für Holger Pietsch und ließ die
+  Nachricht an Mirjam Kaluza ungelesen.
+
+### Offen
+
+- **Welcher Mailbetreiber** den Transport leistet, hängt wie der Planer am
+  Hoster — *offene Frage 2*. Im Repository steht kein Anbietername; `.env`
+  entscheidet, `.env.example` trägt nur Platzhalter.
+- **Die Übergabe an ein Fremdsystem** bleibt *Frage 7*: ein dritter Weg, kein
+  Ersatz.
+- **`objectRef` ist beim Lieferanten die technische Kennung**, und sie steht
+  damit im Betreff der E-Mail. Fachlich richtig — 3.14 nimmt denselben Zuschnitt
+  wie der Audit-Eintrag (3.12) —, zu lesen ist sie nicht. Eine Änderung wäre
+  eine Änderung dieses Zuschnitts und gehört nicht in diese Einheit.
+- **P7** bleibt ohne Rechenweg (*Frage 30*), **Q02** ohne Adressatenliste, und
+  der Abstand der Eskalationsstufen für die Prozessfristen ist *Frage 57*.
+- Der Doppelpräfix in der Begründung eines Audit-Eintrags zu einer Warnung
+  („P11: P11: …") besteht weiter; er betrifft nur den Eintrag.
+
+---
+
 ## 2026-11-16 — Der ausgebliebene Lauf wird gemeldet (5.5.1, 2.4)
 
 ### Gemacht

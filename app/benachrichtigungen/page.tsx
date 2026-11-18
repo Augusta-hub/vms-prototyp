@@ -16,6 +16,11 @@
  *    Genehmigungsfiktion,
  *  - die **Läufe selbst**, damit „nichts gemeldet" von „nicht gelaufen" zu
  *    unterscheiden ist.
+ *
+ * Dazu kommt die **Zustellung** (3.14, Frage 56): dieselbe Nachricht geht als
+ * E-Mail hinaus, und was daraus geworden ist, steht an ihrer Zeile. „Gelesen"
+ * ist ein Vermerk **dieser Person** — er ändert die Nachricht nicht und hält
+ * keine Eskalation auf (2.4, Regel 2).
  */
 import { REGELWERK } from '../../lib/aueg/regelwerk'
 import {
@@ -27,9 +32,16 @@ import {
   NOTIFICATION_TRIGGER_LABELS,
   type NotificationView,
 } from '../../lib/services/nightly'
+import {
+  darfPostausgangAbarbeiten,
+  ladeEigenenStand,
+  ladePostausgangsstand,
+  ZUSTELLUNG_LABELS,
+  type EigenerStand,
+} from '../../lib/services/zustellung'
 import { currentIdentity } from '../identity'
 import { Meldung, Status, Wert } from '../ui'
-import { runNightlyAction } from './actions'
+import { alsGelesenAction, postausgangAction, runNightlyAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +67,15 @@ export default async function BenachrichtigungenPage({
     loadNightlyRuns(identity),
     mayRunNightly(identity),
   ])
+  // Der eigene Stand zu jeder sichtbaren Nachricht: gelesen, und wie es der
+  // **eigenen** Zustellung ergangen ist. Ein fremder Lesevermerk steht
+  // niemandem zu (3.14).
+  const eigener = await ladeEigenenStand(
+    identity,
+    notifications.map((nachricht) => nachricht.id),
+  )
+  const darfVersenden = darfPostausgangAbarbeiten(identity)
+  const ausgang = darfVersenden ? await ladePostausgangsstand() : null
   // Der Zeitplan ist Festwert des Regelwerks (5.5.1); der Stand sagt, ob ein
   // Lauf aussteht und welche Tage ausgefallen sind.
   const stand = darfLaufen ? await ladeLaufstand() : null
@@ -80,8 +101,14 @@ export default async function BenachrichtigungenPage({
         und 5.1.6 nennen Vorlaufwerte je Stufe, und die Adressaten sind kumulativ — die Warnung
         geht <em>zusätzlich</em> an <code>LD</code>, nicht statt an <code>LA</code>. Für die
         Prozessfristen aus 4.0 gibt es nur einen Termin; in welchem Abstand dort die nächste
-        Stufe folgt, ist <em>offene Frage 57</em>. Zugestellt wird nichts — ob per E-Mail, im
-        System oder beides, ist <em>offene Frage 56</em>.
+        Stufe folgt, ist <em>offene Frage 57</em>.
+      </p>
+      <p className="hint">
+        <strong>Zwei Zustellwege, beide immer</strong> (3.14, Frage 56): die Nachricht steht hier
+        im Postfach <em>und</em> geht als E-Mail mit der Meldung an die Träger der adressierten
+        Rollenzuweisung — eigen oder in Vertretung. Die Adresse ist die Anmeldekennung (3.11). Wer
+        die Nachricht nur kraft Aufsicht sieht, erhält keine E-Mail. Ohne konfigurierten Mailweg
+        geht nichts hinaus; die Aufträge bleiben offen, statt zu verfallen.
       </p>
 
       <Meldung ok={params.ok} fehler={params.fehler} />
@@ -206,6 +233,68 @@ export default async function BenachrichtigungenPage({
         </table>
       )}
 
+      {ausgang === null ? null : (
+        <>
+          <h2>Postausgang (3.14)</h2>
+          <p>
+            Jede Benachrichtigung bekommt je Empfänger einen{' '}
+            <strong>Zustellauftrag</strong>. Gesendet wird außerhalb der Transaktion, in der die
+            Nachricht entstanden ist — eine gesendete E-Mail holt kein Rollback zurück. Vor dem
+            Versand wird <strong>erneut</strong> geprüft, ob der Empfänger die Nachricht noch
+            sehen darf (2.3); wer die Rollenzuweisung verloren hat, erhält nichts mehr, und der
+            Auftrag gilt als <em>unterblieben</em>, nicht als gescheitert.
+          </p>
+          <table>
+            <tbody>
+              <tr>
+                <th>Mailweg</th>
+                <td>
+                  {ausgang.weg === null ? (
+                    <>
+                      <Status value="keiner" />{' '}
+                      <span className="hint">{ausgang.grund}</span>
+                    </>
+                  ) : (
+                    <Wert value={ausgang.weg} />
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <th>offen</th>
+                <td>{ausgang.offen}</td>
+              </tr>
+              <tr>
+                <th>zugestellt</th>
+                <td>{ausgang.zugestellt}</td>
+              </tr>
+              <tr>
+                <th>unterblieben (2.3)</th>
+                <td>{ausgang.unterblieben}</td>
+              </tr>
+              <tr>
+                <th>gescheitert</th>
+                <td>
+                  {ausgang.gescheitert}{' '}
+                  <span className="hint">
+                    nach {REGELWERK.zustellung.versuche} Versuchen endgültig (Festwert, 5.0)
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <form action={postausgangAction}>
+            <p>
+              <button type="submit">Postausgang abarbeiten (3.14)</button>{' '}
+              <span className="hint">
+                Im Betrieb ruft der Planer <code>POST /api/zustellung</code>; der Knopf macht
+                denselben Vorgang sichtbar. Zweimal gedrückt sendet nichts doppelt — ein
+                zugestellter Auftrag wird nicht erneut betrachtet.
+              </span>
+            </p>
+          </form>
+        </>
+      )}
+
       <h2>Nachrichten (3.14)</h2>
       {notifications.length === 0 ? (
         <p className="hint">
@@ -224,11 +313,17 @@ export default async function BenachrichtigungenPage({
               <th>Vorgang</th>
               <th>Lauf</th>
               <th>Meldung</th>
+              <th>Zustellung</th>
+              <th>gelesen</th>
             </tr>
           </thead>
           <tbody>
             {notifications.map((nachricht) => (
-              <Nachricht key={nachricht.id} nachricht={nachricht} />
+              <Nachricht
+                key={nachricht.id}
+                nachricht={nachricht}
+                stand={eigener.get(nachricht.id) ?? null}
+              />
             ))}
           </tbody>
         </table>
@@ -237,7 +332,13 @@ export default async function BenachrichtigungenPage({
   )
 }
 
-function Nachricht({ nachricht }: { readonly nachricht: NotificationView }) {
+function Nachricht({
+  nachricht,
+  stand,
+}: {
+  readonly nachricht: NotificationView
+  readonly stand: EigenerStand | null
+}) {
   return (
     <tr>
       <td>
@@ -277,6 +378,33 @@ function Nachricht({ nachricht }: { readonly nachricht: NotificationView }) {
             <span className="hint">Zugriff über die Mandantengrenze (2.3) — protokolliert</span>
           </>
         ) : null}
+      </td>
+      <td>
+        {stand === null || stand.zustellung === null ? (
+          // Keine eigene Zustellung: die Nachricht ist nicht an diese Person
+          // adressiert, sie wird nur kraft Aufsicht gesehen ([47]).
+          <span className="hint">—</span>
+        ) : (
+          <>
+            <Status value={ZUSTELLUNG_LABELS[stand.zustellung] ?? stand.zustellung} />
+            {stand.zustellgrund === null ? null : (
+              <>
+                <br />
+                <span className="hint">{stand.zustellgrund}</span>
+              </>
+            )}
+          </>
+        )}
+      </td>
+      <td>
+        {stand !== null && stand.gelesen ? (
+          <Status value="gelesen" />
+        ) : (
+          <form action={alsGelesenAction}>
+            <input type="hidden" name="id" value={nachricht.id} />
+            <button type="submit">gelesen</button>
+          </form>
+        )}
       </td>
     </tr>
   )

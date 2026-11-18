@@ -469,7 +469,8 @@ export async function submitDocument(
   }
 
   // Die Zuständigkeit steht zusätzlich im Ergebnis, damit sie nicht
-  // verschwindet; zugestellt wird nichts (*offene Frage 56*).
+  // verschwindet. Zugestellt wird die Nachricht vom Postausgang, später und
+  // außerhalb dieser Transaktion (3.14).
   return success(
     `${outcome.label}: ${documentNumber} steht auf „eingereicht" und wartet auf die ` +
       `Anerkennung durch MD (${outcome.specReference}). ` +

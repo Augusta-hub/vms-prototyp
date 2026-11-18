@@ -120,6 +120,18 @@ export interface Laufkonfiguration {
   readonly ausfallWarnungTage: number
 }
 
+/**
+ * Die Zustellung einer Benachrichtigung (SPEC 3.14, „Zustellung").
+ *
+ * `versuche` ist `deliveryAttemptLimit`: nach so vielen Versuchen gilt eine
+ * Zustellung als **endgültig** gescheitert. Ein Festwert und keine Zahl im
+ * Dienst — wie oft ein Versand wiederholt wird, ist Systemverhalten und steht
+ * in 5.0.
+ */
+export interface Zustellkonfiguration {
+  readonly versuche: number
+}
+
 export interface Dauerkonfiguration {
   readonly regelgrenzeMonate: number
   readonly unterbrechungMonate: number
@@ -155,6 +167,8 @@ export interface Regelwerkkonfiguration {
   readonly equalPay: EqualPaykonfiguration
   /** Fälligkeitszeit und Zeitzone des nächtlichen Laufs (5.5.1). */
   readonly lauf: Laufkonfiguration
+  /** Versuche je Zustellung (3.14). */
+  readonly zustellung: Zustellkonfiguration
   /** Fehlende Tarifzuordnung der Verleiherseite (5.2.2, Fall 1). */
   readonly adressatenVerleihertarifFehlt: readonly Rollenkuerzel[]
   /** Unzulässige Fristkonfiguration (5.2.2, Fälle 5 und 6). */
@@ -253,6 +267,8 @@ export const REGELWERK: Regelwerkkonfiguration = {
   // `nightlyRunTimeZone`. Die Zeitzone ist die des Betreibers — in ihr werden
   // auch die Kalendertage dieses Kapitels gelesen.
   lauf: { uhrzeit: '03:00', zeitzone: 'Europe/Berlin', ausfallWarnungTage: 3 },
+  // SPEC 3.14, Festwert `deliveryAttemptLimit` in 5.0.
+  zustellung: { versuche: 3 },
   dauer: {
     // § 1 Abs. 1b Satz 1 AÜG, SPEC 5.1.2 Rang 3.
     regelgrenzeMonate: 18,

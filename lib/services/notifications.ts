@@ -24,10 +24,12 @@
  * Statuswerten. Ein zweiter Eintrag je Adressat würde das Protokoll
  * vervielfachen, ohne eine Frage zu beantworten, die es nicht schon beantwortet.
  */
+import type { Prisma } from '@prisma/client'
 import { systemlauf } from '../audit/entry'
 import { protokolliere, type Transaktion } from '../audit/record'
 import { ROLE_CATALOG, type RoleCode } from '../authz/roles'
 import type { Rollenkuerzel } from '../aueg/typen'
+import { legeZustellungenAn } from './zustellung'
 import {
   adressaten,
   katalogzeile,
@@ -36,6 +38,35 @@ import {
   type Meldungsart,
   type Vorgangslage,
 } from '../notifications/uebergaenge'
+
+/**
+ * Schreibt eine Benachrichtigung **und ihre Zustellaufträge** (3.14).
+ *
+ * Alle drei Quellen von Nachrichten gehen hier durch — die Übergänge, die
+ * Warnungen aus 4.7 und der nächtliche Lauf. Das ist der Grund für die
+ * Funktion: der Zustellweg ist eine Entscheidung über *jede* Benachrichtigung
+ * (Frage 56), und eine Quelle, die ihn vergisst, wäre eine Nachricht, die
+ * niemand erreicht.
+ *
+ * Die Aufträge entstehen in **derselben Transaktion** wie die Nachricht.
+ * Gesendet wird hier nichts: das tut der Postausgang, später und außerhalb
+ * jeder Transaktion (`lib/services/zustellung.ts`).
+ */
+export async function schreibeBenachrichtigung(
+  tx: Transaktion,
+  data: Prisma.NotificationUncheckedCreateInput,
+): Promise<void> {
+  const nachricht = await tx.notification.create({ data })
+  await legeZustellungenAn(
+    tx,
+    nachricht.id,
+    {
+      recipientRoleCode: nachricht.recipientRoleCode,
+      recipientTenantId: nachricht.recipientTenantId,
+    },
+    nachricht.raisedAt,
+  )
+}
 
 /** Kürzel aus 2.2 → Rollenbezeichner aus 2.1 (3.11). */
 export const ROLLE_JE_KUERZEL: Readonly<Record<Rollenkuerzel, RoleCode | null>> = {
@@ -113,23 +144,21 @@ export async function benachrichtigeUebergang(
     const roleCode = ROLLE_JE_KUERZEL[adressat.rolle]
     if (roleCode === null) continue
 
-    await tx.notification.create({
-      data: {
-        tenantId: args.tenantId,
-        trigger: 'statusTransition',
-        kind: adressat.art,
-        objectType: args.objectType,
-        objectRef: args.objectRef,
-        statusFrom: args.statusFrom,
-        statusTo: args.statusTo,
-        recipientRoleCode: roleCode,
-        recipientTenantId: adressat.mandant,
-        escalationLevel: adressat.stufe,
-        ruleRef: null,
-        message: text,
-        raisedAt: args.raisedAt,
-        runDate: null,
-      },
+    await schreibeBenachrichtigung(tx, {
+      tenantId: args.tenantId,
+      trigger: 'statusTransition',
+      kind: adressat.art,
+      objectType: args.objectType,
+      objectRef: args.objectRef,
+      statusFrom: args.statusFrom,
+      statusTo: args.statusTo,
+      recipientRoleCode: roleCode,
+      recipientTenantId: adressat.mandant,
+      escalationLevel: adressat.stufe,
+      ruleRef: null,
+      message: text,
+      raisedAt: args.raisedAt,
+      runDate: null,
     })
     geschrieben += 1
 
@@ -195,23 +224,21 @@ export async function benachrichtigeWarnung(
     const roleCode = ROLLE_JE_KUERZEL[kuerzel]
     if (roleCode === null) continue
     for (const mandant of mandantenDerRolle(kuerzel, lage)) {
-      await tx.notification.create({
-        data: {
-          tenantId: args.tenantId,
-          trigger: 'ruleWarning',
-          kind: 'warning' satisfies Meldungsart,
-          objectType: args.objectType,
-          objectRef: args.objectRef,
-          statusFrom: args.statusFrom,
-          statusTo: args.statusTo,
-          recipientRoleCode: roleCode,
-          recipientTenantId: mandant,
-          escalationLevel: 1,
-          ruleRef: args.ruleRef,
-          message: args.meldung,
-          raisedAt: args.raisedAt,
-          runDate: null,
-        },
+      await schreibeBenachrichtigung(tx, {
+        tenantId: args.tenantId,
+        trigger: 'ruleWarning',
+        kind: 'warning' satisfies Meldungsart,
+        objectType: args.objectType,
+        objectRef: args.objectRef,
+        statusFrom: args.statusFrom,
+        statusTo: args.statusTo,
+        recipientRoleCode: roleCode,
+        recipientTenantId: mandant,
+        escalationLevel: 1,
+        ruleRef: args.ruleRef,
+        message: args.meldung,
+        raisedAt: args.raisedAt,
+        runDate: null,
       })
       geschrieben += 1
     }

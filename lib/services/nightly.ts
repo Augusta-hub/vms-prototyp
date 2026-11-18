@@ -40,9 +40,11 @@ import {
   type Befundart,
   type Nachtbefund,
 } from '../nightly/befunde'
+import { NOTIFICATION_KIND_LABELS } from '../notifications/bezeichnungen'
 import { prisma } from '../prisma'
 import { asFailure, failure, notificationRef, success, type ActionResult } from './common'
-import { KUERZEL_JE_ROLLE, ROLLE_JE_KUERZEL } from './notifications'
+import { KUERZEL_JE_ROLLE, ROLLE_JE_KUERZEL, schreibeBenachrichtigung } from './notifications'
+import { postausgangAbarbeiten } from './zustellung'
 
 /** Vorbelegung aus 4.0: 3 Kalendertage nach `periodTo`. */
 const TIMESHEET_SUBMISSION_DEADLINE_DAYS = 3
@@ -186,12 +188,25 @@ async function laufDurchfuehren(
     return asFailure(error, 'Der nächtliche Lauf konnte nicht abgeschlossen werden')
   }
 
+  // Der Lauf stellt zu, was er erzeugt hat (3.14). Er tut es **nach** der
+  // Transaktion: ein Netzaufruf darf keine Datenbanksperre halten, und eine
+  // gesendete E-Mail holt kein Rollback zurück. Ohne konfigurierten Mailweg
+  // bleiben die Aufträge offen — gemeldet wird das trotzdem, damit „nichts
+  // zugestellt" nicht wie „alles zugestellt" aussieht.
+  const ausgang = await postausgangAbarbeiten({ jetzt: runDate })
+  const zustellung =
+    ausgang.grund === ''
+      ? ` Zustellung: ${ausgang.zugestellt} zugestellt, ${ausgang.unterblieben} unterblieben, ` +
+        `${ausgang.gescheitert} gescheitert, ${ausgang.offen} weiter offen.`
+      : ` Zustellung: nichts versandt — ${ausgang.grund} ${ausgang.offen} Auftrag/Aufträge offen.`
+
   return success(
     `Nächtlicher Lauf zum ${tag.toISOString().slice(0, 10)}: ${lagen.geprueft} Vorgänge geprüft, ` +
       `${befunde.length} Befund(e) — ${zaehle(befunde, 'information')} Information, ` +
       `${zaehle(befunde, 'warning')} Warnung, ${zaehle(befunde, 'escalation')} mit Eskalation. ` +
       `${geschrieben} Benachrichtigung(en) erzeugt (5.5.1, 3.14). Der Lauf erzeugt **keinen** ` +
-      'Statuswechsel und keine Sperre.',
+      'Statuswechsel und keine Sperre.' +
+      zustellung,
   )
 }
 
@@ -263,21 +278,19 @@ async function schreibeBenachrichtigungen(
     })
     if (vorhanden !== null) continue
 
-    await tx.notification.create({
-      data: {
-        tenantId: befund.tenantId,
-        trigger: befund.anlass,
-        kind: befund.art,
-        objectType: befund.objectType,
-        objectRef: befund.objectRef,
-        recipientRoleCode: roleCode,
-        recipientTenantId,
-        escalationLevel: index + 1,
-        ruleRef: befund.pruefung,
-        message: befund.meldung,
-        raisedAt,
-        runDate: tag,
-      },
+    await schreibeBenachrichtigung(tx, {
+      tenantId: befund.tenantId,
+      trigger: befund.anlass,
+      kind: befund.art,
+      objectType: befund.objectType,
+      objectRef: befund.objectRef,
+      recipientRoleCode: roleCode,
+      recipientTenantId,
+      escalationLevel: index + 1,
+      ruleRef: befund.pruefung,
+      message: befund.meldung,
+      raisedAt,
+      runDate: tag,
     })
     geschrieben += 1
   }
@@ -526,26 +539,7 @@ export interface NotificationView {
   readonly crossTenant: boolean
 }
 
-export const NOTIFICATION_KIND_LABELS: Readonly<Record<Befundart, string>> = {
-  information: 'Information',
-  warning: 'Warnung',
-  escalation: 'Warnung mit Eskalation',
-}
-
-/** Anlässe in Worten (3.14, 5.5.1 und 2.4). */
-export const NOTIFICATION_TRIGGER_LABELS: Readonly<Record<string, string>> = {
-  permitExpiry: 'N1 — AÜG-Erlaubnis läuft ab (5.4)',
-  maxDurationThreshold: 'N2 — Höchstüberlassungsdauer (5.1)',
-  equalPayThreshold: 'N3 — Equal-Pay-Fälligkeit (5.2)',
-  documentExpiry: 'N5 — Nachweis läuft ab (5.4)',
-  interruptionThreshold: 'N6 — Unterbrechung über drei Monate (5.1.4)',
-  timesheetNotSubmitted: 'Stundenzettel nicht eingereicht (2.4)',
-  timesheetNotApproved: 'Stundenzettel nicht genehmigt vor Periodenschluss (2.4)',
-  billingDocumentDisputed: 'Abrechnungsbeleg beanstandet und nicht geklärt (2.4)',
-  statusTransition: 'Statuswechsel (Kapitel 4)',
-  ruleWarning: 'Warnung aus der Prüfung zum Übergang (4.7)',
-  nightlyRunMissed: 'Nächtlicher Lauf ausgeblieben (5.5.1)',
-}
+export { NOTIFICATION_KIND_LABELS, NOTIFICATION_TRIGGER_LABELS } from '../notifications/bezeichnungen'
 
 /**
  * Die Benachrichtigungen, die diese Identität lesen darf ([47]).

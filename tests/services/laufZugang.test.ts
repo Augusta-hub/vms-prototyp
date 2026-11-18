@@ -1,6 +1,10 @@
 /**
  * Der Zugang für den Planer außerhalb des Systems — SPEC **5.5.1**, „Wer den
- * Lauf auslöst".
+ * Lauf auslöst", und **3.14**, „Zustellweg".
+ *
+ * Zwei Adressen, **ein** Geheimnis: es ist derselbe Anrufer, der den Lauf
+ * anstößt und den Postausgang abarbeiten lässt (`lib/api/planer.ts`). Deshalb
+ * steht beides hier.
  *
  * Was hier geprüft wird und **nirgends sonst**:
  *
@@ -17,12 +21,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../../lib/prisma'
 import { GET, POST } from '../../app/api/naechtlicher-lauf/route'
+import {
+  GET as ZUSTELLUNG_GET,
+  POST as ZUSTELLUNG_POST,
+} from '../../app/api/zustellung/route'
 import { baueWelt, leereDatenbank } from './fixture'
 
 const GEHEIMNIS = 'test-token-ohne-bedeutung'
 
-function anfrage(token?: string): Request {
-  return new Request('http://localhost/api/naechtlicher-lauf', {
+function anfrage(token?: string, pfad = 'naechtlicher-lauf'): Request {
+  return new Request(`http://localhost/api/${pfad}`, {
     method: 'POST',
     headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
   })
@@ -124,5 +132,46 @@ describe('Zugang zum Lauf (5.5.1)', () => {
 
   it('gibt den Stand nicht ohne Geheimnis aus', async () => {
     expect((await GET(anfrage('falsch'))).status).toBe(401)
+  })
+})
+
+describe('Zugang zum Postausgang (3.14)', () => {
+  // Diese Tests prüfen den **geschlossenen** Zustand: kein Mailweg, also geht
+  // nichts hinaus. Sie dürfen deshalb nicht an der `.env` des Entwicklers
+  // hängen — eine gesetzte Absenderadresse würde sie sonst rot machen.
+  beforeEach(() => {
+    delete process.env.MAIL_FROM
+    delete process.env.MAIL_RELAY_URL
+    delete process.env.MAIL_OUTBOX_DIR
+  })
+
+  it('weist ohne gesetztes Geheimnis ab — derselbe Zugang wie beim Lauf', async () => {
+    delete process.env.NIGHTLY_RUN_TOKEN
+    expect((await ZUSTELLUNG_POST(anfrage(GEHEIMNIS, 'zustellung'))).status).toBe(401)
+    expect((await ZUSTELLUNG_GET(anfrage(GEHEIMNIS, 'zustellung'))).status).toBe(401)
+  })
+
+  it('weist ein falsches Geheimnis ab', async () => {
+    expect((await ZUSTELLUNG_POST(anfrage('falsch', 'zustellung'))).status).toBe(401)
+  })
+
+  it('antwortet mit dem Grund, solange kein Mailweg besteht — und mit 200', async () => {
+    // Ohne MAIL_FROM geht nichts hinaus (3.14). Der Status bleibt 200: die
+    // Anwendung antwortet, die Umgebung ist unvollständig.
+    const antwort = await ZUSTELLUNG_POST(anfrage(GEHEIMNIS, 'zustellung'))
+    expect(antwort.status).toBe(200)
+    const ergebnis = await antwort.json()
+    expect(ergebnis.ok).toBe(true)
+    expect(ergebnis.weg).toBe(null)
+    expect(ergebnis.grund).toContain('MAIL_FROM')
+    expect(ergebnis.zugestellt).toBe(0)
+  })
+
+  it('gibt den Stand aus, ohne etwas zu versenden', async () => {
+    const stand = await (await ZUSTELLUNG_GET(anfrage(GEHEIMNIS, 'zustellung'))).json()
+    expect(stand.ok).toBe(true)
+    expect(stand.offen).toBe(0)
+    expect(stand.zugestellt).toBe(0)
+    expect(stand.grund).toContain('MAIL_FROM')
   })
 })

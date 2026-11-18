@@ -334,7 +334,9 @@ model User {
   createdBillingItems         BillingDocumentItem[] @relation("BillingItemCreatedBy")
 
   // Fachmodul 3.14 und der nächtliche Lauf (5.5.1).
-  startedNightlyRuns NightlyRuleRun[] @relation("NightlyRunStartedBy")
+  startedNightlyRuns     NightlyRuleRun[]       @relation("NightlyRunStartedBy")
+  notificationDeliveries NotificationDelivery[] @relation("NotificationDeliveryRecipient")
+  notificationReads      NotificationRead[]     @relation("NotificationReadUser")
 
   // Fachliche Kennungen sind je Mandant eindeutig (3.0).
   @@unique([tenantId, userNumber])
@@ -3033,10 +3035,78 @@ model Notification {
   /// partieller Index auf den Fall `runDate IS NULL` würde genau die zweite
   /// Nachricht verschlucken; er ist in der Migration zu 3.14 deshalb
   /// aufgehoben.
+  /// Zustellaufträge und Lesevermerke (3.14). Beide treten **neben** die
+  /// Benachrichtigung; sie ändern sie nicht.
+  deliveries NotificationDelivery[]
+  reads      NotificationRead[]
+
   @@unique([trigger, objectRef, recipientRoleCode, recipientTenantId, escalationLevel, runDate])
   @@index([recipientTenantId, recipientRoleCode])
   @@index([tenantId])
   @@index([runDate])
+}
+
+/// Zustand einer Zustellung (3.14, „Zustellung").
+///
+/// `suppressed` ist **nicht** `failed`: die E-Mail ist unterblieben, weil der
+/// Empfänger die Nachricht im Zeitpunkt des Versands nicht mehr sehen durfte
+/// (2.3) — kein Fehler, sondern das Ergebnis der zweiten Prüfung.
+enum DeliveryStatus {
+  pending
+  sent
+  failed
+  suppressed
+}
+
+/// Zustellung einer Benachrichtigung an **eine Person** (`notificationDelivery`,
+/// SPEC 3.14).
+///
+/// Der Auftrag ist die Spur des Versands: ohne ihn könnte niemand sagen, ob die
+/// E-Mail hinausgegangen ist, und der nächste Durchgang würde sie erneut
+/// senden. Über eine Zustellung entscheidet niemand — sie wird versucht;
+/// deshalb ist dies kein Statusmodell im Sinne von Kapitel 4.
+model NotificationDelivery {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id])
+
+  /// Die **Person**; die adressierte Rolle steht an der Benachrichtigung.
+  recipientUserId String
+  recipientUser   User   @relation("NotificationDeliveryRecipient", fields: [recipientUserId], references: [id])
+
+  status        DeliveryStatus @default(pending)
+  attempts      Int            @default(0)
+  lastAttemptAt DateTime?
+  /// Gesetzt bei `sent`.
+  sentAt        DateTime?
+  /// Bei `failed` der Fehler, bei `suppressed` der Grund nach 2.3.
+  statusReason  String?
+
+  createdAt DateTime @default(now())
+
+  /// Je Benachrichtigung und Person **eine** Zustellung (3.14).
+  @@unique([notificationId, recipientUserId])
+  @@index([status])
+  @@index([recipientUserId])
+}
+
+/// Lesevermerk einer Person zu einer Benachrichtigung (`notificationRead`,
+/// SPEC 3.14).
+///
+/// Je **Person**, nicht je Rolle: dass ein Koordinator gelesen hat, sagt nichts
+/// über die Vertretung oder den zweiten Koordinator. Der Vermerk wird nicht
+/// zurückgenommen — er sagt nicht „erledigt", sondern „gesehen".
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id])
+  /// Immer der Handelnde; ein fremder Lesevermerk ist nicht ausdrückbar (3.14).
+  userId         String
+  user           User         @relation("NotificationReadUser", fields: [userId], references: [id])
+  readAt         DateTime
+
+  @@unique([notificationId, userId])
+  @@index([userId])
 }
 
 /// Protokoll eines nächtlichen Laufs (`nightlyRuleRun`, SPEC 5.5.1 c).

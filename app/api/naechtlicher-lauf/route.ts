@@ -16,11 +16,12 @@
  * Regel 10).
  *
  * Ohne gesetztes Geheimnis ist der Zugang **zu**. Ein offener Auslöser wäre
- * im Prototyp so wenig vertretbar wie im Betrieb.
+ * im Prototyp so wenig vertretbar wie im Betrieb. Die Prüfung selbst steht in
+ * `lib/api/planer.ts`, weil derselbe Planer auch den Postausgang ruft (3.14).
  */
 
-import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { planerGeprueft } from '../../../lib/api/planer'
 import {
   ladeLaufstand,
   laufAusfallstufe,
@@ -29,28 +30,13 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-/** Vergleicht ohne Laufzeitunterschied; ungleich lange Werte sind ungleich. */
-function gleich(a: string, b: string): boolean {
-  const links = Buffer.from(a)
-  const rechts = Buffer.from(b)
-  return links.length === rechts.length && timingSafeEqual(links, rechts)
-}
-
 function abgewiesen(): NextResponse {
   return NextResponse.json({ ok: false, error: 'Nicht berechtigt.' }, { status: 401 })
 }
 
-function geprueft(request: Request): boolean {
-  const geheimnis = process.env.NIGHTLY_RUN_TOKEN
-  if (geheimnis === undefined || geheimnis === '') return false
-  const kopf = request.headers.get('authorization') ?? ''
-  const vorgelegt = kopf.startsWith('Bearer ') ? kopf.slice('Bearer '.length) : ''
-  return vorgelegt !== '' && gleich(vorgelegt, geheimnis)
-}
-
 /** Der Lauf selbst — ausgeführt wird nur, was nach 5.5.1 fällig ist. */
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!geprueft(request)) return abgewiesen()
+  if (!planerGeprueft(request)) return abgewiesen()
   const ergebnis = await runNightlyScheduled()
   return NextResponse.json(
     { ok: ergebnis.ok, message: ergebnis.ok ? ergebnis.message : ergebnis.error },
@@ -72,7 +58,7 @@ export async function POST(request: Request): Promise<NextResponse> {
  * Planer ist das Problem. Das Urteil steht im Inhalt, nicht im Statuscode.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  if (!geprueft(request)) return abgewiesen()
+  if (!planerGeprueft(request)) return abgewiesen()
   const stand = await ladeLaufstand()
   return NextResponse.json({
     ok: true,

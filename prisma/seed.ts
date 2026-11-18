@@ -224,7 +224,10 @@ async function main(): Promise<void> {
     'INSERT INTO "AuditSequence" ("id", "lastEntryNumber") VALUES (1, 0) ON CONFLICT ("id") DO NOTHING',
   )
   // 3.14 ganz zuerst: eine Benachrichtigung verweist auf einen Mandanten und
-  // auf einen Vorgang, aber nichts verweist auf sie.
+  // auf einen Vorgang, aber nichts verweist auf sie — außer dem Zustellauftrag
+  // und dem Lesevermerk, die neben ihr stehen und deshalb vorangehen.
+  await prisma.notificationDelivery.deleteMany()
+  await prisma.notificationRead.deleteMany()
   await prisma.notification.deleteMany()
   await prisma.nightlyRuleRun.deleteMany()
   // 3.8 und 3.9 danach: der Zuschlag hängt an der Zeitposition, diese am
