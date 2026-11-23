@@ -5,6 +5,102 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-23 — Stufenabstand der Eskalation (2.4 Regel 6, 4.0, Frage 57)
+
+### Gemacht
+
+*Frage 57* ist beantwortet: **je Anlass ein eigener Stufenabstand**, als
+Vorbelegung in 4.0 und je Kunde übersteuerbar. Damit erreichen die Anlässe aus
+den Prozessfristen endlich ihre zweite und dritte Stufe — bisher blieb es bei
+der zuständigen Rolle.
+
+- **SPEC 2.4** hat die neue **Regel 6** „Stufenabstand": Stufe 1 mit dem
+  Befund, jede weitere nach einem vollen Abstand, kumulativ, und nie mehr
+  Stufen, als die Stufenfolge nennt. Regel 2 und die Anlässe-Tabelle sagen nun
+  ausdrücklich, dass die **Vertretung keine eigene Stufe** ist.
+- **SPEC 4.0** hat eine Spalte „Stufenabstand" mit einem Schlüssel je Zeile
+  (`…EscalationStepDays`, 1 bis 7 Tage) und eine neue Zeile „Klärung einer
+  Beanstandung" — der einzige Anlass aus 2.4, der ohne Frist entsteht. Dazu ein
+  Absatz, wie der Abstand gelesen wird. Glossar 1.5 trägt den Bezeichner.
+- **`lib/process/fristen.ts`** (neu) hält die Vorbelegungen aus 4.0 an *einer*
+  Stelle und liest den Wert des Kunden: `prozessfristTage`, `eskalationsstufe`,
+  `stufenkreis`. Zwei gleichnamige lokale Leser in `nightly.ts` und
+  `billing.ts` sind dadurch verschwunden.
+- **`lib/nightly/befunde.ts`**: die drei Anlässe aus 2.4 bauen ihre Adressaten
+  jetzt über `stufenkreis` — `LD` → `LA` → `MD` beim nicht eingereichten
+  Zettel, die offene Freigabestufe → `KE` → `MD` (bei einer Betreiberstufe
+  → `MA`) beim nicht genehmigten, `MD` → `MA` beim beanstandeten Beleg.
+
+### Entscheidungen
+
+1. **Je Anlass, nicht ein Takt für alle.** Ein Stundenzettel kurz vor
+   Periodenschluss drängt anders als die Prüfung eines Abrechnungsbelegs: dort
+   ein Kalendertag, hier sieben.
+2. **Je Kunde übersteuerbar** (2.4, Regel 5) — über `processDeadlineConfig`,
+   denselben Weg, den die übrigen Prozessfristen schon gehen. Ein Festwert wie
+   in 5.0 hätte 2.4 Regel 5 widersprochen.
+3. **Die Vertretung ist keine eigene Stufe.** Eine Benachrichtigung ist an eine
+   Rolle in einer Organisation adressiert (3.14); „die Vertretung von `KG`" ist
+   darin nicht ausdrückbar — und nötig ist es nicht, weil die Vertretung die
+   Nachricht ihrer Stufe über den Zustellweg erhält (Frage 56). Die Stufen sind
+   die Rollen der Spalte „Eskalation an" ohne sie.
+4. **Kumulativ**, wie in Kapitel 5: die höhere Stelle tritt hinzu, die
+   zuständige bleibt adressiert — sie ist es, die entscheiden muss.
+5. **Tag 0 ist der Tag des Befundes**, nicht der des Fristablaufs: am Tag des
+   Ablaufs ist die Frist noch gewahrt. Wo es keine Frist gibt, ist es der Tag
+   des Ereignisses — bei der Beanstandung der Tag, an dem sie erhoben wurde.
+6. **Eine Rolle steht nie zweimal in der Stufenfolge.** Trägt die offene
+   Freigabestufe selbst `KE`, `MD` oder `MA`, entfällt sie als weitere Stufe:
+   eine Eskalation an sich selbst wäre keine.
+7. **Ein unbrauchbarer Konfigurationswert fällt auf die Vorbelegung zurück**
+   und hält das Verfahren nicht auf. Null und negative Werte sind unbrauchbar —
+   eine Frist von null Tagen wäre keine, ein negativer Abstand eine Eskalation
+   vor dem Befund.
+
+### Gefunden
+
+- **Prettier gehört nicht zu diesem Projekt.** Ein `npx prettier --write` auf
+  sechs Dateien hat sie nach Prettier-Vorgaben umformatiert (doppelte
+  Anführungszeichen, Semikolons) — es gibt weder eine Konfiguration noch die
+  Abhängigkeit. Die vier betroffenen Bestandsdateien sind auf den Stand aus
+  `HEAD` zurückgesetzt und die Änderungen von Hand erneut angewandt; die
+  Formatierung bleibt handgepflegt (einfache Anführungszeichen, keine
+  Semikolons, Zeilen um 100).
+
+### Geprüft
+
+- `npm test` **1177 grün** (+21), `npm run test:services` **332 grün** (+2),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **9 Mutationen, alle gefangen** — darunter „Stufe schon am Tag des Befundes
+  zwei", „Stufenfolge ist keine Obergrenze", „nicht kumulativ, nur die
+  erreichte Stufe", „Kundenwert wird ignoriert", „Null als Stufenabstand
+  durchgelassen", „Tag des Fristablaufs schon Tag 1", „Betreiberstufe
+  eskaliert über den Kunden", „Rolle zweimal in der Stufenfolge".
+- Die drei Stufen am echten Vorgang stehen in `tests/services/nightly.test.ts`:
+  ein nicht eingereichter Zettel erreicht am ersten Tag nach Fristablauf nur
+  `LD`, später `LD`/`LA`/`MD` mit `MD` im Betreibermandanten, und ein
+  Stufenabstand von 30 Tagen beim Kunden hält es bei `LD`.
+- Die Oberfläche erklärt den Stufenabstand; am laufenden Prototyp geprüft.
+  Ein Durchlauf mit echten Stufen braucht Stundenzettel, die der Seed nicht
+  anlegt — den Weg deckt der Diensttest ab.
+
+### Offen
+
+- **Vier Anlässe aus 2.4 haben noch keinen Befund im nächtlichen Lauf**:
+  Bedarfsanfrage zur Freigabe, Ausschreibung ohne Angebot, Profil ohne
+  Rückmeldung, Entscheidung über eine Verlängerung. Ihre Stufenabstände stehen
+  in 4.0, gelesen werden sie noch nicht — und ihr Takt läuft in
+  **Arbeitstagen**, wofür der Lauf den Kalender aus `lib/aueg/kalender.ts`
+  braucht.
+- **`AN` bleibt ohne Zugang** (*Frage 4*): beim nicht eingereichten Zettel
+  beginnt die Stufenfolge deshalb bei `LD`.
+- Unverändert offen: Mailbetreiber und Planer am Hoster (*Frage 2*),
+  Fremdsystem (*Frage 7*), **P7** ohne Rechenweg (*Frage 30*), **Q02** ohne
+  Adressatenliste, der Doppelpräfix „P11: P11: …" im Audit-Eintrag.
+
+---
+
 ## 2026-11-18 — Zustellung und Lesevermerk (3.14, Frage 56)
 
 ### Gemacht

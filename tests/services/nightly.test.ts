@@ -232,14 +232,80 @@ describe('Prozessfristen aus 2.4', () => {
       positionen: [{ tag: tag('2026-10-05'), stunden: '8.0000' }],
       status: 'recorded',
     })
+    // Die Frist lief am 2026-11-03 ab (`periodTo` + 3 Kalendertage); der erste
+    // Tag danach ist Tag 0 des Befundes und trägt die **erste** Stufe
+    // (2.4, Regel 6).
+    ok(await runNightly(administrator, tag('2026-11-04')))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'timesheetNotSubmitted' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual(['supplierCoordinator'])
+    expect(nachrichten[0]?.escalationLevel).toBe(1)
+    expect(nachrichten[0]?.recipientTenantId).toBe(welt.lieferantMandant)
+    // Eine Prozessfrist trägt keine Prüfung aus Kapitel 5.
+    expect(nachrichten[0]?.ruleRef).toBeNull()
+  })
+
+  it('nimmt `LA` und `MD` nach je einem Stufenabstand hinzu (2.4, Regel 6)', async () => {
+    const periode = await legeAbrechnungsperiodeAn(welt, {
+      nummer: '2026-10',
+      von: tag('2026-10-01'),
+      bis: tag('2026-10-31'),
+      schlusstermin: tag('2026-11-10'),
+    })
+    await legeGenehmigtenZettelAn(welt, {
+      nummer: 'SZ-1',
+      einsatz,
+      periode,
+      von: tag('2026-10-01'),
+      bis: tag('2026-10-31'),
+      positionen: [{ tag: tag('2026-10-05'), stunden: '8.0000' }],
+      status: 'recorded',
+    })
+    // Ein Kalendertag Stufenabstand (4.0): am 2026-11-05 tritt `LA` hinzu, am
+    // 2026-11-06 `MD` — und danach bleibt es dabei, auch am 2026-11-12.
     ok(await runNightly(administrator, HEUTE))
-    const nachricht = await prisma.notification.findFirstOrThrow({
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'timesheetNotSubmitted' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'supplierCoordinator',
+      'supplierAdmin',
+      'operatorCoordinator',
+    ])
+    expect(nachrichten.map((n) => n.escalationLevel)).toEqual([1, 2, 3])
+    // `MD` wirkt beim Betreiber: die letzte Stufe überschreitet die
+    // Organisationsgrenze (2.4, Regel 2).
+    expect(nachrichten[2]?.recipientTenantId).toBe(welt.betreiberMandant)
+  })
+
+  it('achtet den Stufenabstand des Kunden aus `processDeadlineConfig` (2.4, Regel 5)', async () => {
+    await prisma.customer.update({
+      where: { id: welt.kunde },
+      data: { processDeadlineConfig: { timesheetSubmissionEscalationStepDays: 30 } },
+    })
+    const periode = await legeAbrechnungsperiodeAn(welt, {
+      nummer: '2026-10',
+      von: tag('2026-10-01'),
+      bis: tag('2026-10-31'),
+      schlusstermin: tag('2026-11-10'),
+    })
+    await legeGenehmigtenZettelAn(welt, {
+      nummer: 'SZ-1',
+      einsatz,
+      periode,
+      von: tag('2026-10-01'),
+      bis: tag('2026-10-31'),
+      positionen: [{ tag: tag('2026-10-05'), stunden: '8.0000' }],
+      status: 'recorded',
+    })
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
       where: { trigger: 'timesheetNotSubmitted' },
     })
-    expect(nachricht.recipientRoleCode).toBe('supplierCoordinator')
-    expect(nachricht.recipientTenantId).toBe(welt.lieferantMandant)
-    // Eine Prozessfrist trägt keine Prüfung aus Kapitel 5.
-    expect(nachricht.ruleRef).toBeNull()
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual(['supplierCoordinator'])
   })
 
   it('meldet einen nicht genehmigten Zettel an die Rolle der offenen Stufe', async () => {

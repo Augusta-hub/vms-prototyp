@@ -2,9 +2,11 @@
  * Tests des nächtlichen Laufs gegen SPEC 5.5.1 c.
  *
  * Geprüft wird je Zeile: dass sie anschlägt, wann sie **nicht** anschlägt, und
- * dass die **Stufe** aus der Restzeit folgt — mit den kumulativen Adressaten
- * aus 5.4.4 und 5.1.6. Dazu die drei Dinge, die der Lauf nicht tut: kein
- * Statuswechsel, keine Sperre, keine Genehmigungsfiktion. Die ersten beiden
+ * woher die **Stufe** kommt — bei den Anlässen aus Kapitel 5 aus der Restzeit
+ * (5.4.4, 5.1.6), bei den Prozessfristen aus dem **Stufenabstand** je Anlass
+ * (2.4 Regel 6, Werte in 4.0). In beiden Fällen sind die Adressaten kumulativ.
+ * Dazu die drei Dinge, die der Lauf nicht tut: kein Statuswechsel, keine
+ * Sperre, keine Genehmigungsfiktion. Die ersten beiden
  * sind Eigenschaften des Ergebnistyps — er kennt `sperre` nicht —, die dritte
  * zeigt die Zeile „Stundenzettel nicht genehmigt".
  *
@@ -24,6 +26,7 @@ import {
   befundeZettelNichtEingereicht,
   befundeZettelNichtGenehmigt,
   restTage,
+  type Beleglage,
   type Einsatzlage,
   type Lieferantenzeile,
   type Zettellage,
@@ -92,6 +95,24 @@ function zettel(overrides: Partial<Zettellage> = {}): Zettellage {
     closingDate: DAY('2026-11-10'),
     openStageRole: null,
     submissionDeadlineDays: 3,
+    submissionEscalationStepDays: 1,
+    approvalEscalationStepDays: 1,
+    ...overrides,
+  }
+}
+
+/** Ein beanstandeter Beleg (4.5.2) mit dem Stufenabstand aus 4.0. */
+function beleg(overrides: Partial<Beleglage> = {}): Beleglage {
+  return {
+    id: 'beleg-1',
+    documentNumber: 'RE-000001',
+    tenantId: OPERATOR_TENANT,
+    customerTenantId: CUSTOMER_TENANT,
+    supplierTenantId: null,
+    status: 'disputed',
+    disputedAt: DAY('2026-11-05'),
+    disputeResolutionNote: null,
+    disputeEscalationStepDays: 7,
     ...overrides,
   }
 }
@@ -316,16 +337,40 @@ describe('N6 — offene Unterbrechung (P2, SPEC 5.1.4)', () => {
 })
 
 describe('Prozessfristen aus 2.4 und 4.0', () => {
-  it('meldet einen nicht eingereichten Zettel nach Fristablauf an `LD`', () => {
-    const befunde = befundeZettelNichtEingereicht([zettel()], STICHTAG)
+  // Frist des Zettels: `periodTo` (2026-10-31) + 3 Kalendertage = 2026-11-03.
+  // Tag 0 des Befundes ist der erste Tag **danach** (2.4, Regel 6).
+  const stufeEinreichung = (stichtag: Date) =>
+    befundeZettelNichtEingereicht([zettel()], stichtag)[0]?.adressaten
+
+  it('meldet einen nicht eingereichten Zettel am ersten Tag nach Fristablauf an `LD`', () => {
+    const befunde = befundeZettelNichtEingereicht([zettel()], DAY('2026-11-04'))
     expect(befunde).toHaveLength(1)
     expect(befunde[0]?.adressaten).toEqual(['LD'])
     expect(befunde[0]?.pruefung).toBeNull()
     expect(befunde[0]?.meldung).toContain('reicht ihn **nicht** ein')
   })
 
-  it('meldet nichts vor Fristablauf', () => {
+  it('meldet nichts vor Fristablauf — auch nicht am Tag des Ablaufs selbst', () => {
     expect(befundeZettelNichtEingereicht([zettel()], DAY('2026-11-01'))).toEqual([])
+    expect(befundeZettelNichtEingereicht([zettel()], DAY('2026-11-03'))).toEqual([])
+  })
+
+  it('nimmt nach je einem Stufenabstand die nächste Stelle **hinzu** (2.4, Regel 6)', () => {
+    expect(stufeEinreichung(DAY('2026-11-04'))).toEqual(['LD'])
+    expect(stufeEinreichung(DAY('2026-11-05'))).toEqual(['LD', 'LA'])
+    expect(stufeEinreichung(DAY('2026-11-06'))).toEqual(['LD', 'LA', 'MD'])
+  })
+
+  it('bleibt bei der letzten Stelle — der Takt erzeugt keine Stufe, die 2.4 nicht nennt', () => {
+    expect(stufeEinreichung(DAY('2026-12-31'))).toEqual(['LD', 'LA', 'MD'])
+  })
+
+  it('achtet den Stufenabstand des Kunden (4.0, 2.4 Regel 5)', () => {
+    const langsam = zettel({ submissionEscalationStepDays: 5 })
+    const stufe = (stichtag: Date) =>
+      befundeZettelNichtEingereicht([langsam], stichtag)[0]?.adressaten
+    expect(stufe(DAY('2026-11-05'))).toEqual(['LD'])
+    expect(stufe(DAY('2026-11-09'))).toEqual(['LD', 'LA'])
   })
 
   it('achtet die Frist des Kunden aus `processDeadlineConfig` (4.0, 2.4 Regel 5)', () => {
@@ -339,10 +384,33 @@ describe('Prozessfristen aus 2.4 und 4.0', () => {
 
   it('meldet einen nicht genehmigten Zettel an die Rolle der **offenen Stufe**', () => {
     const offen = zettel({ status: 'inApproval', openStageRole: 'KB' })
-    const befunde = befundeZettelNichtGenehmigt([offen], STICHTAG)
+    const befunde = befundeZettelNichtGenehmigt([offen], DAY('2026-11-11'))
     expect(befunde[0]?.adressaten).toEqual(['KB'])
     // Keine Genehmigungsfiktion (2.4, Regel 1).
     expect(befunde[0]?.meldung).toContain('keine** Genehmigungsfiktion')
+  })
+
+  it('eskaliert die Kundenstufe über `KE` an `MD` (2.4)', () => {
+    const offen = zettel({ status: 'inApproval', openStageRole: 'KB' })
+    const stufe = (stichtag: Date) => befundeZettelNichtGenehmigt([offen], stichtag)[0]?.adressaten
+    expect(stufe(DAY('2026-11-12'))).toEqual(['KB', 'KE'])
+    expect(stufe(DAY('2026-11-13'))).toEqual(['KB', 'KE', 'MD'])
+  })
+
+  it('eskaliert eine **Betreiberstufe** an `MA` und nicht über den Kunden (2.4)', () => {
+    const offen = zettel({ status: 'inApproval', openStageRole: 'MD' })
+    const stufe = (stichtag: Date) => befundeZettelNichtGenehmigt([offen], stichtag)[0]?.adressaten
+    expect(stufe(DAY('2026-11-11'))).toEqual(['MD'])
+    expect(stufe(DAY('2026-11-12'))).toEqual(['MD', 'MA'])
+    expect(stufe(DAY('2026-12-31'))).toEqual(['MD', 'MA'])
+  })
+
+  it('nennt eine Rolle nicht zweimal — `KE` als offene Stufe eskaliert an `MD`', () => {
+    const offen = zettel({ status: 'inApproval', openStageRole: 'KE' })
+    const stufe = (stichtag: Date) => befundeZettelNichtGenehmigt([offen], stichtag)[0]?.adressaten
+    expect(stufe(DAY('2026-11-11'))).toEqual(['KE'])
+    expect(stufe(DAY('2026-11-12'))).toEqual(['KE', 'MD'])
+    expect(stufe(DAY('2026-12-31'))).toEqual(['KE', 'MD'])
   })
 
   it('meldet ihn nicht ohne offene Stufe — es gäbe niemanden zu adressieren', () => {
@@ -350,42 +418,32 @@ describe('Prozessfristen aus 2.4 und 4.0', () => {
     expect(befundeZettelNichtGenehmigt([ohneStufe], STICHTAG)).toEqual([])
   })
 
-  it('meldet einen beanstandeten Beleg an `MD`', () => {
-    const befunde = befundeBelegBeanstandet(
-      [
-        {
-          id: 'beleg-1',
-          documentNumber: 'RE-000001',
-          tenantId: OPERATOR_TENANT,
-          customerTenantId: CUSTOMER_TENANT,
-          supplierTenantId: null,
-          status: 'disputed',
-          disputedAt: DAY('2026-11-05'),
-          disputeResolutionNote: null,
-        },
-      ],
-      STICHTAG,
-    )
+  it('meldet einen beanstandeten Beleg am Tag der Beanstandung an `MD`', () => {
+    const befunde = befundeBelegBeanstandet([beleg()], DAY('2026-11-05'))
     expect(befunde).toHaveLength(1)
     expect(befunde[0]?.adressaten).toEqual(['MD'])
-    expect(befunde[0]?.meldung).toContain('7 Tag(en)')
+    expect(befunde[0]?.meldung).toContain('0 Tag(en)')
+  })
+
+  it('nimmt `MA` nach einem Stufenabstand hinzu (2.4)', () => {
+    const stufe = (stichtag: Date) => befundeBelegBeanstandet([beleg()], stichtag)[0]?.adressaten
+    expect(stufe(DAY('2026-11-11'))).toEqual(['MD'])
+    expect(stufe(DAY('2026-11-12'))).toEqual(['MD', 'MA'])
+    expect(stufe(DAY('2026-12-31'))).toEqual(['MD', 'MA'])
+  })
+
+  it('achtet den Stufenabstand des Kunden auch am Beleg', () => {
+    const schnell = beleg({ disputeEscalationStepDays: 2 })
+    expect(befundeBelegBeanstandet([schnell], DAY('2026-11-07'))[0]?.adressaten).toEqual([
+      'MD',
+      'MA',
+    ])
   })
 
   it('meldet einen geklärten Beleg nicht — er steht nicht mehr auf `disputed`', () => {
     expect(
       befundeBelegBeanstandet(
-        [
-          {
-            id: 'beleg-1',
-            documentNumber: 'RE-000001',
-            tenantId: OPERATOR_TENANT,
-            customerTenantId: CUSTOMER_TENANT,
-            supplierTenantId: null,
-            status: 'inReview',
-            disputedAt: DAY('2026-11-05'),
-            disputeResolutionNote: 'geklärt',
-          },
-        ],
+        [beleg({ status: 'inReview', disputeResolutionNote: 'geklärt' })],
         STICHTAG,
       ),
     ).toEqual([])

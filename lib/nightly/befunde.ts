@@ -20,12 +20,14 @@
  *  - **Keine Genehmigungsfiktion** (2.4, Regel 1). Ein nicht genehmigter
  *    Stundenzettel bleibt nicht genehmigt — er wird eskaliert.
  *
- * **Die Stufe kommt aus der Restzeit, nicht aus einem Takt.** Für die Anlässe
- * aus Kapitel 5 nennen 5.4.4, 5.1.6 und 5.0 Vorlaufwerte je Stufe, und die
- * Adressaten sind **kumulativ**: die Warnung geht zusätzlich an `LD`, nicht
- * statt an `LA`. Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin;
- * in welchem Abstand dort die nächste Stufe folgt, ist *offene Frage 57* —
- * bis zur Antwort erzeugt der Lauf dort nur die Stufe der zuständigen Rolle.
+ * **Zwei Quellen der Stufe, eine Form.** Für die Anlässe aus Kapitel 5 nennen
+ * 5.4.4, 5.1.6 und 5.0 Vorlaufwerte je Stufe: die Stufe steht in der
+ * **Restzeit** und wird abgelesen. Für die **Prozessfristen** aus 4.0 gibt es
+ * nur einen Termin; dort zählt der **Stufenabstand** je Anlass (2.4, Regel 6;
+ * Werte in 4.0, je Kunde konfigurierbar) — Stufe 1 mit dem Befund, jede
+ * weitere nach einem vollen Abstand. In beiden Fällen sind die Adressaten
+ * **kumulativ**: die Warnung geht zusätzlich an `LD`, nicht statt an `LA`.
+ * Mehr Stufen, als die Stufenfolge in 2.4 nennt, gibt es nicht.
  *
  * **N4 fehlt.** Die Zeile verlangt P7, und für die Arbeitskampfanzeige führt
  * Kapitel 3 kein Feld (*offene Frage 30*); 5.3.2 sagt dazu selbst, die Regel
@@ -42,6 +44,7 @@ import {
 } from '../aueg/anbindung'
 import { REGELWERK, type Regelwerkkonfiguration } from '../aueg/regelwerk'
 import type { Rollenkuerzel } from '../aueg/typen'
+import { stufenkreis } from '../process/fristen'
 import { ausfallstufe, type Laufstand } from './zeitplan'
 
 /** Die Anlässe, die dieser Lauf erzeugt — die Zeilen aus 5.5.1 und 2.4. */
@@ -451,6 +454,10 @@ export interface Zettellage {
   readonly openStageRole: Rollenkuerzel | null
   /** `timesheetSubmissionDeadlineDays` des Kunden (3.1), sonst Vorbelegung. */
   readonly submissionDeadlineDays: number
+  /** `timesheetSubmissionEscalationStepDays` (4.0, 2.4 Regel 6), Kalendertage. */
+  readonly submissionEscalationStepDays: number
+  /** `timesheetApprovalEscalationStepDays` (4.0, 2.4 Regel 6), Kalendertage. */
+  readonly approvalEscalationStepDays: number
 }
 
 /**
@@ -459,9 +466,12 @@ export interface Zettellage {
  * `periodTo`).
  *
  * Zuständig ist `LD` — der Leiharbeitnehmer hat keinen eigenen Zugang
- * (*offene Frage 4*). Die weiteren Stufen `LA` → `MD` folgen erst, wenn
- * *Frage 57* den Abstand nennt.
+ * (*offene Frage 4*). Die weiteren Stufen `LA` und `MD` treten nach je einem
+ * `timesheetSubmissionEscalationStepDays` **hinzu** (2.4, Regel 6).
  */
+/** Stufenfolge aus 2.4: `LD` → `LA` → `MD`, ohne die Vertretung (Regel 6). */
+const STUFEN_ZETTEL_EINREICHUNG: readonly Rollenkuerzel[] = ['LD', 'LA', 'MD']
+
 export function befundeZettelNichtEingereicht(
   zettel: readonly Zettellage[],
   stichtag: Date,
@@ -472,6 +482,9 @@ export function befundeZettelNichtEingereicht(
     const frist = new Date(lage.periodTo)
     frist.setUTCDate(frist.getUTCDate() + lage.submissionDeadlineDays)
     if (restTage(stichtag, frist) >= 0) continue
+    // Tag 0 des Befundes ist der erste Tag **nach** dem Fristablauf (2.4,
+    // Regel 6): am Tag des Ablaufs selbst ist die Frist noch gewahrt.
+    const tageSeitBefund = -restTage(stichtag, frist) - 1
     befunde.push({
       zeile: '2.4',
       anlass: 'timesheetNotSubmitted',
@@ -480,7 +493,11 @@ export function befundeZettelNichtEingereicht(
       objectType: 'timesheet',
       objectRef: lage.id,
       tenantId: lage.tenantId,
-      adressaten: ['LD'],
+      adressaten: stufenkreis(
+        STUFEN_ZETTEL_EINREICHUNG,
+        tageSeitBefund,
+        lage.submissionEscalationStepDays,
+      ),
       mandantJeRolle: mandantJeRolle({
         operator: lage.tenantId,
         customer: lage.customerTenantId,
@@ -502,7 +519,27 @@ export function befundeZettelNichtEingereicht(
  * Zuständig ist die Rolle der **offenen** Stufe (3.1, 4.4) — nicht eine feste
  * Rolle: welche es ist, steht in der Konfiguration des Kunden und ist beim
  * Einreichen in den Freigabeschritt kopiert worden.
+ *
+ * Die Stufenfolge hängt daran: 2.4 führt „Vertretung → `KE` → `MD`", „bei
+ * einer Betreiberstufe Vertretung → `MA`". Ohne die Vertretung (Regel 6)
+ * bleibt `KE` → `MD` bei einer Kundenstufe und `MA` bei einer Betreiberstufe.
+ * Trägt die offene Stufe selbst schon eine dieser Rollen, entfällt sie als
+ * weitere Stufe — eine Eskalation an sich selbst wäre keine.
  */
+/**
+ * Die Stufenfolge zur offenen Freigabestufe (2.4, Zeile „Stundenzettel nicht
+ * genehmigt vor Periodenschluss").
+ *
+ * `MD` und `MA` wirken beim Betreiber (2.1) — eine offene Stufe mit einer
+ * dieser Rollen ist eine **Betreiberstufe**, und 2.4 führt dafür `MA` als
+ * weitere Stelle. Sonst ist es eine Kundenstufe mit `KE` und danach `MD`.
+ */
+function stufenZettelGenehmigung(zustaendig: Rollenkuerzel): readonly Rollenkuerzel[] {
+  const folge: Rollenkuerzel[] =
+    zustaendig === 'MD' || zustaendig === 'MA' ? [zustaendig, 'MA'] : [zustaendig, 'KE', 'MD']
+  return folge.filter((rolle, index) => folge.indexOf(rolle) === index)
+}
+
 export function befundeZettelNichtGenehmigt(
   zettel: readonly Zettellage[],
   stichtag: Date,
@@ -513,6 +550,7 @@ export function befundeZettelNichtGenehmigt(
     if (restTage(stichtag, lage.closingDate) >= 0) continue
     const zustaendig = lage.openStageRole
     if (zustaendig === null) continue
+    const tageSeitBefund = -restTage(stichtag, lage.closingDate) - 1
     befunde.push({
       zeile: '2.4',
       anlass: 'timesheetNotApproved',
@@ -521,7 +559,11 @@ export function befundeZettelNichtGenehmigt(
       objectType: 'timesheet',
       objectRef: lage.id,
       tenantId: lage.tenantId,
-      adressaten: [zustaendig],
+      adressaten: stufenkreis(
+        stufenZettelGenehmigung(zustaendig),
+        tageSeitBefund,
+        lage.approvalEscalationStepDays,
+      ),
       mandantJeRolle: mandantJeRolle({
         operator: lage.tenantId,
         customer: lage.customerTenantId,
@@ -546,15 +588,22 @@ export interface Beleglage {
   readonly status: string
   readonly disputedAt: Date | null
   readonly disputeResolutionNote: string | null
+  /** `billingDisputeEscalationStepDays` (4.0, 2.4 Regel 6), Kalendertage. */
+  readonly disputeEscalationStepDays: number
 }
+
+/** Stufenfolge aus 2.4: `MD` → `MA`, ohne die Vertretung (Regel 6). */
+const STUFEN_BELEG_BEANSTANDET: readonly Rollenkuerzel[] = ['MD', 'MA']
 
 /**
  * **Abrechnungsbeleg beanstandet und nicht geklärt** (2.4). Zuständig ist
- * `MD`, Eskalation an `MA` — die zweite Stufe wartet auf *Frage 57*.
+ * `MD`, nach einem `billingDisputeEscalationStepDays` tritt `MA` hinzu
+ * (2.4, Regel 6).
  *
  * Es gibt dafür **keine Frist in 4.0**: der Anlass entsteht mit der
  * Beanstandung und besteht, solange der Beleg beanstandet ist. Gemeldet wird
- * deshalb ab dem Tag der Beanstandung, nicht nach einem Vorlauf.
+ * deshalb ab dem Tag der Beanstandung, nicht nach einem Vorlauf — und dieser
+ * Tag ist zugleich Tag 0 des Stufenabstands.
  */
 export function befundeBelegBeanstandet(
   belege: readonly Beleglage[],
@@ -573,7 +622,7 @@ export function befundeBelegBeanstandet(
       objectType: 'billingDocument',
       objectRef: lage.id,
       tenantId: lage.tenantId,
-      adressaten: ['MD'],
+      adressaten: stufenkreis(STUFEN_BELEG_BEANSTANDET, tageOffen, lage.disputeEscalationStepDays),
       mandantJeRolle: mandantJeRolle({
         operator: lage.tenantId,
         customer: lage.customerTenantId,

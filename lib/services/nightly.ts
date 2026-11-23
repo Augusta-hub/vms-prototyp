@@ -41,14 +41,11 @@ import {
   type Nachtbefund,
 } from '../nightly/befunde'
 import { NOTIFICATION_KIND_LABELS } from '../notifications/bezeichnungen'
+import { prozessfristTage, type Prozessfristschluessel } from '../process/fristen'
 import { prisma } from '../prisma'
 import { asFailure, failure, notificationRef, success, type ActionResult } from './common'
 import { KUERZEL_JE_ROLLE, ROLLE_JE_KUERZEL, schreibeBenachrichtigung } from './notifications'
 import { postausgangAbarbeiten } from './zustellung'
-
-/** Vorbelegung aus 4.0: 3 Kalendertage nach `periodTo`. */
-const TIMESHEET_SUBMISSION_DEADLINE_DAYS = 3
-const TIMESHEET_SUBMISSION_DEADLINE_KEY = 'timesheetSubmissionDeadlineDays'
 
 export interface NightlyRunResult {
   readonly runDate: string
@@ -387,7 +384,7 @@ async function ladeLagen(operatorTenantId: string) {
   const belege = await prisma.billingDocument.findMany({
     where: { status: 'disputed' },
     include: {
-      customer: { select: { tenantId: true } },
+      customer: { select: { tenantId: true, processDeadlineConfig: true } },
       supplier: { select: { tenantId: true } },
     },
   })
@@ -458,7 +455,9 @@ async function ladeLagen(operatorTenantId: string) {
       periodTo: zeile.periodTo,
       closingDate: zeile.billingPeriod.closingDate,
       openStageRole: alsKuerzel(zeile.approvals[0]?.assignedRoleCode ?? null),
-      submissionDeadlineDays: fristTage(zeile.assignment.customer.processDeadlineConfig),
+      submissionDeadlineDays: frist(zeile, 'timesheetSubmissionDeadlineDays'),
+      submissionEscalationStepDays: frist(zeile, 'timesheetSubmissionEscalationStepDays'),
+      approvalEscalationStepDays: frist(zeile, 'timesheetApprovalEscalationStepDays'),
     })),
     belege: belege.map((beleg) => ({
       id: beleg.id,
@@ -469,6 +468,10 @@ async function ladeLagen(operatorTenantId: string) {
       status: beleg.status,
       disputedAt: beleg.disputedAt,
       disputeResolutionNote: beleg.disputeResolutionNote,
+      disputeEscalationStepDays: prozessfristTage(
+        beleg.customer?.processDeadlineConfig,
+        'billingDisputeEscalationStepDays',
+      ),
     })),
   }
 }
@@ -504,16 +507,21 @@ function alsZeile(dokument: {
   }
 }
 
-function alsKuerzel(roleCode: RoleCode | null): Rollenkuerzel | null {
-  return roleCode === null ? null : (KUERZEL_JE_ROLLE[roleCode] ?? null)
+/**
+ * Ein Fristwert dieses Kunden (4.0, 2.4 Regel 5) — Vorbelegung, wo er keinen
+ * führt. Die Zeile nimmt den Zettel, weil der Kunde am Einsatz hängt.
+ */
+function frist(
+  zeile: {
+    readonly assignment: { readonly customer: { readonly processDeadlineConfig: unknown } }
+  },
+  schluessel: Prozessfristschluessel,
+): number {
+  return prozessfristTage(zeile.assignment.customer.processDeadlineConfig, schluessel)
 }
 
-function fristTage(config: unknown): number {
-  if (config === null || typeof config !== 'object') return TIMESHEET_SUBMISSION_DEADLINE_DAYS
-  const wert = (config as Record<string, unknown>)[TIMESHEET_SUBMISSION_DEADLINE_KEY]
-  return typeof wert === 'number' && Number.isFinite(wert) && wert > 0
-    ? wert
-    : TIMESHEET_SUBMISSION_DEADLINE_DAYS
+function alsKuerzel(roleCode: RoleCode | null): Rollenkuerzel | null {
+  return roleCode === null ? null : (KUERZEL_JE_ROLLE[roleCode] ?? null)
 }
 
 /* ------------------------------------------------------------------ */

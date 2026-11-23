@@ -50,6 +50,7 @@ import type { LoadedIdentity } from '../identity/loadSubject'
 import { pruefeAbrechnungsbeleg } from '../masterdata/invariants'
 import type { Rollenkuerzel } from '../aueg/typen'
 import { warnungsbefunde } from '../notifications/uebergaenge'
+import { prozessfristTage } from '../process/fristen'
 import { prisma } from '../prisma'
 import {
   benachrichtigeUebergang,
@@ -103,18 +104,6 @@ const NUMBER_PREFIX = {
   supplierCreditNote: 'GS',
   supplierInvoice: 'ER',
 } as const
-
-/**
- * Vorbelegung der Prüffrist eines Belegs: **14 Kalendertage ab `released`**
- * (4.0, Tabelle „Prozessfristen"). Je Kunde über `processDeadlineConfig` (3.1)
- * überschreibbar — ein Fristwert ist Konfiguration, kein Festwert im Code.
- *
- * Nur diese eine Zeile der Tabelle steht hier, weil nur sie gebraucht wird.
- * Die übrigen kommen mit ihrer Verwendung; eine abgeschriebene Zeile ohne
- * Verwendung wäre eine Zusicherung, die nichts einlöst.
- */
-const BILLING_REVIEW_DEADLINE_DAYS = 14
-const BILLING_REVIEW_DEADLINE_KEY = 'billingReviewDeadlineDays'
 
 /* ------------------------------------------------------------------ */
 /* Laden                                                              */
@@ -427,18 +416,15 @@ function pruefFrist(row: {
   readonly customer: { readonly processDeadlineConfig: unknown } | null
 }): Date | null {
   if (row.releasedAt === null) return null
-  const tage = fristTage(row.customer?.processDeadlineConfig)
+  const tage = prozessfrist(row.customer?.processDeadlineConfig)
   const ende = new Date(row.releasedAt)
   ende.setUTCDate(ende.getUTCDate() + tage)
   return ende
 }
 
-function fristTage(config: unknown): number {
-  if (config === null || typeof config !== 'object') return BILLING_REVIEW_DEADLINE_DAYS
-  const wert = (config as Record<string, unknown>)[BILLING_REVIEW_DEADLINE_KEY]
-  return typeof wert === 'number' && Number.isFinite(wert) && wert > 0
-    ? wert
-    : BILLING_REVIEW_DEADLINE_DAYS
+/** Die Prüffrist dieses Kunden — Vorbelegung aus 4.0, sonst sein Wert (2.4, Regel 5). */
+function prozessfrist(config: unknown): number {
+  return prozessfristTage(config, 'billingReviewDeadlineDays')
 }
 
 /* ------------------------------------------------------------------ */
@@ -1548,7 +1534,7 @@ export async function transitionBillingDocument(
     `${outcome.label}: ${row.documentNumber} steht jetzt auf ` +
       `„${BILLING_DOCUMENT_STATE_LABELS[outcome.to]}" (${outcome.specReference}).` +
       (input.transition === 'release'
-        ? ` Die Prüffrist läuft ${fristTage(row.customer?.processDeadlineConfig)} Kalendertage (4.0).`
+        ? ` Die Prüffrist läuft ${prozessfrist(row.customer?.processDeadlineConfig)} Kalendertage (4.0).`
         : ''),
   )
 }

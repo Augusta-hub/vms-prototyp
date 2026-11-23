@@ -171,6 +171,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Systemübergang | `systemTransition` | Übergang ohne Benutzerhandlung, zeitgesteuert oder abgeleitet (4.0, Regel 10) |
 | Prozessfrist | `processDeadline` | Frist des Verfahrens ohne rechtliche Wirkung; Vorbelegungen in 4.0 |
 | Fristvorbelegung | `…DeadlineDays` | Konfigurationsschlüssel einer Prozessfrist in `processDeadlineConfig` (3.1), Werte in 4.0 |
+| Stufenabstand | `…EscalationStepDays` | Tage, nach denen eine Eskalation aus einer Prozessfrist auf die nächste Stufe rückt (2.4, Regel 6; Werte in 4.0) |
 | Fristenlauf | `deadlineClock` | Beginn und Fortlauf einer Frist, die ein Übergang in Gang setzt |
 | Prüfergebnis | `ruleCheckResult` | Ergebnis einer AÜG-Prüfung (Kapitel 4.7, 5.5) |
 | Information (Ergebnisart) | `info` | Übergang findet statt, Ergebnis wird vermerkt (4.7) |
@@ -740,7 +741,9 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
    Vertretung, dann an die nächste Rolle derselben Organisation, erst zuletzt
    an den Betreiber. Die Organisationsgrenze wird nur in der letzten Stufe
    überschritten — und auch dann erhält der Betreiber die Information, nicht
-   die Entscheidungsbefugnis.
+   die Entscheidungsbefugnis. Die **Vertretung** ist dabei keine eigene Stufe
+   (Regel 6): sie trägt die Rechte der vertretenen Rollenzuweisung und erhält
+   deren Nachricht, sobald es eine gibt.
 3. **Sichtbarkeit gilt auch für Eskalationen.** Eine Eskalationsnachricht
    enthält nur Daten, die der Empfänger nach Kapitel 2.3 sehen darf. Die
    Eskalation eines Lieferantenvorgangs an den Betreiber offenbart dem
@@ -751,6 +754,17 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
    konfigurierbar (Pflege durch den Betreiber). Die Vorbelegungen werden in
    Kapitel 4 für die Prozessfristen und in Kapitel 5 für die AÜG-Fristen
    festgelegt, nicht hier.
+6. **Stufenabstand.** Die **erste** Stufe entsteht mit dem Befund. Jede
+   weitere folgt, wenn seit dem Befund ein **Stufenabstand** verstrichen ist.
+   Er gilt **je Anlass** — eine Rückmeldung zu einem Profil drängt anders als
+   die Prüfung eines Abrechnungsbelegs — und ist wie jeder Fristwert je Kunde
+   konfigurierbar (Regel 5); die Vorbelegungen stehen in 4.0. Die Stufen sind
+   **kumulativ**: die höhere Stelle tritt hinzu, die zuständige bleibt
+   adressiert, denn sie ist es, die entscheiden muss. Mehr Stufen als die
+   Stufenfolge nennt, gibt es nicht — ist die letzte erreicht, bleibt es bei
+   ihr. Für die Anlässe aus **Kapitel 5** gilt dieser Takt nicht: dort
+   bestimmt die **Restzeit** die Stufe (5.4.4, 5.1.6, 5.0), und der nächtliche
+   Lauf liest sie ab.
 
 **Eskalationsanlässe**
 
@@ -767,6 +781,14 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
 | Abrechnungsbeleg beanstandet und nicht geklärt | MD | MA | 4.5 |
 | AÜG-Sperre blockiert einen Vorgang | MD | MA | 5.5, offene Frage 10 |
 | Nächtlicher Lauf ausgeblieben | MD | MA | 5.5.1 |
+
+**Die Vertretung in der Spalte „Eskalation an".** Sie ist keine eigene Stufe
+(Regel 6). Die Stufen der Benachrichtigung sind die Rollen dieser Spalte
+**ohne** sie: „Vertretung → `KB` → `MD`" heißt Stufe 1 = die zuständige Rolle,
+Stufe 2 = `KB`, Stufe 3 = `MD`. Eine Benachrichtigung ist an eine Rolle in
+einer Organisation adressiert (3.14); „die Vertretung von `KG`" ist darin nicht
+ausdrückbar — und nötig ist es auch nicht, weil die Vertretung die Nachricht
+der Stufe erhält, die sie vertritt (3.14, „Zustellweg").
 
 ## 3. Objekte / Datenmodell
 
@@ -2647,16 +2669,15 @@ ungelesener löst sie nicht aus. Der Lesevermerk erleichtert dem Empfänger die
 **Rücknahme.** Ein Lesevermerk wird nicht zurückgenommen. Er sagt nicht „diese
 Nachricht ist erledigt", sondern „ich habe sie gesehen", und das bleibt wahr.
 
-> *(offene Frage 57)* **In welchem Abstand rückt eine Eskalation auf die
-> nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die
-> **Restzeit** bestimmt: 5.4.4 und 5.1.6 nennen Vorlaufwerte je Stufe, und der
-> nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 — Freigabe
-> einer Bedarfsanfrage, Rückmeldung zu einem Profil, Einreichung eines
-> Stundenzettels — gibt es nur **einen** Termin und danach eine Stufenfolge
-> ohne Abstand. Zu entscheiden ist, nach wie vielen Tagen die nächste Stufe
-> folgt und ob der Wert je Anlass oder je Kunde gilt (2.4, Regel 5). Bis zur
-> Antwort erzeugt der nächtliche Lauf für diese Anlässe **keine** Stufe über
-> die zuständige Rolle hinaus.
+**Stufen aus einer Prozessfrist.** Bei den Anlässen aus **Kapitel 5** steht die
+Stufe in der Restzeit: 5.4.4 und 5.1.6 nennen Vorlaufwerte je Stufe, und der
+nächtliche Lauf liest sie ab. Bei den **Prozessfristen** aus 4.0 gibt es nur
+einen Termin — dort zählt der **Stufenabstand** (2.4, Regel 6): Stufe 1
+entsteht mit dem Befund, jede weitere nach einem vollen Abstand, je Anlass
+festgelegt und je Kunde konfigurierbar. Kumulativ, wie in Kapitel 5: die
+höhere Stelle tritt hinzu, die zuständige bleibt adressiert. Die **Vertretung**
+ist keine eigene Stufe — adressiert wird eine Rolle in einer Organisation, und
+wer sie vertritt, erhält deren Nachricht über den Zustellweg.
 
 ## 4. Statusmodelle
 
@@ -2735,18 +2756,28 @@ Prozessfristen ohne rechtliche Wirkung; die AÜG-Fristen stehen ausschließlich 
 Kapitel 5. Fristablauf löst Erinnerung und Eskalation aus, nie einen Übergang
 (Regel 4).
 
-| Anlass | Konfigurationsschlüssel | Vorbelegung | Wirkung bei Ablauf |
-|---|---|---|---|
-| Entscheidung über eine eingereichte Bedarfsanfrage | `demandApprovalDeadlineDays` | 3 Arbeitstage ab `submitted` | Eskalation KG → Vertretung → KB → MD (2.4) |
-| Kenntnisnahme einer Einladung | `invitationViewDeadlineDays` | 1 Arbeitstag ab `invitedAt` | Erinnerung an LD, dann LA |
-| Angebotsfrist | Objektfeld `offerDeadline` (3.4, 3.5) | keine Vorbelegung — je Anfrage bzw. Runde | Einladung ohne Angebot auf `expired`; Eskalation (2.4) |
-| Bindefrist eines Angebots | Objektfeld `offerValidUntil` (3.5) | keine Vorbelegung — je Angebot, optional | Angebot auf `expired`, offene Profilvorschläge werden abgelehnt (4.2) |
-| Rückmeldung des Kunden auf ein vorgelegtes Profil | `submissionFeedbackDeadlineDays` | 3 Arbeitstage ab `releasedToCustomer` | Eskalation KB → Vertretung → KG → MD (2.4) |
-| Entscheidung über eine Verlängerung | `extensionApprovalDeadlineDays` | 5 Arbeitstage ab `requested`, spätestens 10 Kalendertage vor Einsatzende | Eskalation KG → Vertretung → KE → MD |
-| Einreichung eines Stundenzettels | `timesheetSubmissionDeadlineDays` | 3 Kalendertage nach `periodTo` | Eskalation LD → LA → MD (2.4) |
-| Genehmigung eines Stundenzettels | `timesheetApprovalDeadlineDays` | bis `closingDate` der Abrechnungsperiode, Erinnerung 3 Kalendertage vorher | Eskalation; **keine** Genehmigungsfiktion |
-| Prüfung eines Abrechnungsbelegs | `billingReviewDeadlineDays` | 14 Kalendertage ab `released` | Erinnerung, dann Eskalation; **keine** Bestätigungsfiktion |
-| Vorlauf vor Ablauf eines Nachweises | → Kapitel 5.4 | **festgelegt in 5.4.4**, je Nachweisart gestuft; keine Prozessfrist, sondern Festwert des Regelwerks (5.0) | Information, Warnung, Eskalation nach Stufenfolge (5.4.4); **kein** Übergang |
+| Anlass | Konfigurationsschlüssel | Vorbelegung | Stufenabstand (2.4, Regel 6) | Wirkung bei Ablauf |
+|---|---|---|---|---|
+| Entscheidung über eine eingereichte Bedarfsanfrage | `demandApprovalDeadlineDays` | 3 Arbeitstage ab `submitted` | `demandApprovalEscalationStepDays` — 2 Arbeitstage | Eskalation KG → Vertretung → KB → MD (2.4) |
+| Kenntnisnahme einer Einladung | `invitationViewDeadlineDays` | 1 Arbeitstag ab `invitedAt` | `invitationViewEscalationStepDays` — 1 Arbeitstag | Erinnerung an LD, dann LA |
+| Angebotsfrist | Objektfeld `offerDeadline` (3.4, 3.5) | keine Vorbelegung — je Anfrage bzw. Runde | `offerDeadlineEscalationStepDays` — 1 Arbeitstag | Einladung ohne Angebot auf `expired`; Eskalation (2.4) |
+| Bindefrist eines Angebots | Objektfeld `offerValidUntil` (3.5) | keine Vorbelegung — je Angebot, optional | — (2.4 nennt keinen Anlass) | Angebot auf `expired`, offene Profilvorschläge werden abgelehnt (4.2) |
+| Rückmeldung des Kunden auf ein vorgelegtes Profil | `submissionFeedbackDeadlineDays` | 3 Arbeitstage ab `releasedToCustomer` | `submissionFeedbackEscalationStepDays` — 2 Arbeitstage | Eskalation KB → Vertretung → KG → MD (2.4) |
+| Entscheidung über eine Verlängerung | `extensionApprovalDeadlineDays` | 5 Arbeitstage ab `requested`, spätestens 10 Kalendertage vor Einsatzende | `extensionApprovalEscalationStepDays` — 2 Arbeitstage | Eskalation KG → Vertretung → KE → MD |
+| Einreichung eines Stundenzettels | `timesheetSubmissionDeadlineDays` | 3 Kalendertage nach `periodTo` | `timesheetSubmissionEscalationStepDays` — 1 Kalendertag | Eskalation LD → LA → MD (2.4) |
+| Genehmigung eines Stundenzettels | `timesheetApprovalDeadlineDays` | bis `closingDate` der Abrechnungsperiode, Erinnerung 3 Kalendertage vorher | `timesheetApprovalEscalationStepDays` — 1 Kalendertag | Eskalation; **keine** Genehmigungsfiktion |
+| Prüfung eines Abrechnungsbelegs | `billingReviewDeadlineDays` | 14 Kalendertage ab `released` | `billingReviewEscalationStepDays` — 7 Kalendertage | Erinnerung, dann Eskalation; **keine** Bestätigungsfiktion |
+| Klärung einer Beanstandung | — keine Frist: der Befund entsteht mit der Beanstandung (4.5.2) | — | `billingDisputeEscalationStepDays` — 7 Kalendertage | Eskalation MD → MA (2.4); **keine** Bestätigungsfiktion |
+| Vorlauf vor Ablauf eines Nachweises | → Kapitel 5.4 | **festgelegt in 5.4.4**, je Nachweisart gestuft; keine Prozessfrist, sondern Festwert des Regelwerks (5.0) | — (Stufe aus der Restzeit, 5.4.4) | Information, Warnung, Eskalation nach Stufenfolge (5.4.4); **kein** Übergang |
+
+**Wie der Stufenabstand gelesen wird.** Die erste Stufe entsteht mit dem
+Befund, jede weitere nach einem vollen Stufenabstand (2.4, Regel 6). Bei einer
+Frist ist der Tag des Befundes der erste Tag **nach** ihrem Ablauf; wo es keine
+Frist gibt, der Tag des Ereignisses selbst — bei der Beanstandung also der Tag,
+an dem sie erhoben wurde. Die Einheit ist die der Frist derselben Zeile:
+Arbeitstage, wo die Frist in Arbeitstagen läuft, sonst Kalendertage. Erreicht
+die Stufenfolge ihre letzte Stelle, bleibt es bei ihr — der Takt erzeugt keine
+Stufe, die 2.4 nicht nennt.
 
 **Statusmodelle, die dieses Kapitel nicht führt.** Kapitel 3 verweist für jedes
 Objekt auf sein Statusmodell. Sieben Objekte haben einen Lebenszyklus, für den
@@ -5379,7 +5410,7 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 55 | **Wie sieht ein Lieferant die Abrechnungsperiode, deren Schlusstermin seine Frist ist?** 2.2 gibt `LD` und `LA` an der Zeile „Abrechnungsperiode (3.9)" ein `L[7]`, und [7] lautet „nur die eigene Lieferantenorganisation". Die Periode gehört aber dem **Betreiber** und nennt **keinen** Lieferanten — mehrere liefern in dieselbe Periode, und 3.9 führt für sie kein Feld, nur das optionale `customerRef`. Damit ist [7] an dieser Zeile nicht erfüllbar, obwohl 2.4 gerade den `closingDate` zum Eskalationsanlass gegenüber `LD` macht: er soll die Frist kennen, die ihn trifft. Denkbar: die Sicht über die **Beauftragung** führen (wie [3] es für Kunden und Standorte tut), oder die Periode je Lieferant führen (dann wird aus einer Periode je Kunde eine je Vertragsverhältnis). Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt die Periode damit dem Betreiber und — bei einer kundenbezogenen Periode — dem `KE` über [2]. Dieselbe Bauart wie *Frage 42* und *Frage 49*. | Kapitel 2.2, 2.4, 3.9 | offen |
 
 | 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg. Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. | Kapitel 2.4, 3.14, 6 | **entschieden:** beide Wege, beide immer — **Postfach** im System *und* **E-Mail mit der Meldung** an die Träger der adressierten Rollenzuweisung; Adresse ist die Anmeldekennung (3.11). Der Mailbetreiber ist Auftragsverarbeiter (6.8, 6.9); ohne konfigurierten Mailweg geht nichts hinaus. „Gelesen" entsteht **je Person** im Postfach, als eigener Lesevermerk — die Benachrichtigung bleibt unverändert, und die Eskalation läuft weiter nach Zeit (2.4, Regel 2). Zustellweg, Zustellung und Lesevermerk stehen in 3.14. Die Übergabe an ein Fremdsystem bleibt *Frage 7*. |
-| 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0) — der nächtliche Lauf liest sie ab. Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. Zu entscheiden sind der Abstand und die Ebene, auf der er gilt (je Anlass oder je Kunde, 2.4 Regel 5). Bis zur Antwort erzeugt der nächtliche Lauf für diese Anlässe die Stufe der **zuständigen Rolle** und keine weitere — eine geratene Taktzahl wäre eine Entscheidung über die Belastung des Betreibers. | Kapitel 2.4, 3.14, 4.0 | offen |
+| 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0). Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. | Kapitel 2.4, 3.14, 4.0 | **entschieden:** **Stufenabstand je Anlass** (2.4, Regel 6), Vorbelegungen in der Tabelle 4.0, je Kunde über `processDeadlineConfig` übersteuerbar (2.4, Regel 5). Stufe 1 entsteht mit dem Befund, jede weitere nach einem vollen Abstand; die Stufen sind **kumulativ**, und mehr als die Stufenfolge nennt, gibt es nicht. Die **Vertretung** ist keine eigene Stufe — adressiert wird eine Rolle (3.14), und wer sie vertritt, erhält deren Nachricht über den Zustellweg (Frage 56). |
 | 58 | **Welche Rolle ist „der Antragsteller", wenn eine Person mehrere Rollen in derselben Organisation trägt?** Kapitel 4 adressiert mehrere Nachrichten relativ: „an den Antragsteller" (4.3), „an die erfassende Seite" (4.4), „an den Einsteller" (5.4). 3.14 adressiert aber eine **Rolle in einer Organisation**, nicht eine Person — und 3.11 erlaubt einer Person mehrere Rollenzuweisungen im selben Mandanten. Trägt der Antragsteller `KB` **und** `KG`, ist offen, welche Rolle die Nachricht erhält: beide, die höhere, oder die, in der gehandelt wurde (dann wäre die Rollenzuweisung der Handlung festzuhalten, über den Audit-Eintrag hinaus). Die Umsetzung nimmt bis zur Antwort die **erste** Rolle nach der Reihenfolge in 2.1; die Nachricht bleibt damit in der Organisation, in der gehandelt wurde, und offenbart nichts über 2.3 hinaus. | Kapitel 2.1, 3.11, 3.14, 4.3, 4.4 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

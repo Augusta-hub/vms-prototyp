@@ -98,10 +98,14 @@ export default async function BenachrichtigungenPage({
       </p>
       <p className="hint">
         Die <strong>Stufe</strong> kommt bei den Anlässen aus Kapitel 5 aus der Restzeit: 5.4.4
-        und 5.1.6 nennen Vorlaufwerte je Stufe, und die Adressaten sind kumulativ — die Warnung
-        geht <em>zusätzlich</em> an <code>LD</code>, nicht statt an <code>LA</code>. Für die
-        Prozessfristen aus 4.0 gibt es nur einen Termin; in welchem Abstand dort die nächste
-        Stufe folgt, ist <em>offene Frage 57</em>.
+        und 5.1.6 nennen Vorlaufwerte je Stufe. Bei den <strong>Prozessfristen</strong> aus 4.0
+        gibt es nur einen Termin — dort zählt der <strong>Stufenabstand</strong> je Anlass (2.4,
+        Regel 6; Werte in 4.0, je Kunde konfigurierbar): Stufe 1 entsteht mit dem Befund, jede
+        weitere nach einem vollen Abstand. In beiden Fällen sind die Adressaten{' '}
+        <strong>kumulativ</strong> — die Warnung geht <em>zusätzlich</em> an <code>LD</code>,
+        nicht statt an <code>LA</code>, und mehr Stufen, als die Stufenfolge in 2.4 nennt, gibt
+        es nicht. Die <strong>Vertretung</strong> ist keine eigene Stufe: adressiert wird eine
+        Rolle, und wer sie vertritt, erhält deren Nachricht über den Zustellweg.
       </p>
       <p className="hint">
         <strong>Zwei Zustellwege, beide immer</strong> (3.14, Frage 56): die Nachricht steht hier
