@@ -1066,6 +1066,8 @@ async function main(): Promise<void> {
     readonly maxHourlyRate: number | null
     readonly internalNote: string | null
     readonly offerDeadline: Date | null
+    /** Beginn der Freigabefrist (3.4, 4.0); Pflicht ab Status `submitted`. */
+    readonly submittedAt: Date | null
     readonly approvedById: string | null
     readonly approvedAt: Date | null
     readonly cancellationReason: string | null
@@ -1091,6 +1093,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 26,
       internalNote: 'Budget steht nur bis Q3 bereit',
       offerDeadline: null,
+      submittedAt: null,
       approvedById: null,
       approvedAt: null,
       cancellationReason: null,
@@ -1114,6 +1117,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 34,
       internalNote: null,
       offerDeadline: null,
+      submittedAt: day('2026-11-16'),
       approvedById: null,
       approvedAt: null,
       cancellationReason: null,
@@ -1139,6 +1143,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 36,
       internalNote: 'Nachtzuschlag ist eingeplant',
       offerDeadline: null,
+      submittedAt: day('2026-09-15'),
       approvedById: userId('approver1'),
       approvedAt: day('2026-02-05'),
       cancellationReason: null,
@@ -1162,6 +1167,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 28,
       internalNote: 'Zwei Lieferanten eingeladen',
       offerDeadline: hour('2026-12-15T12:00'),
+      submittedAt: day('2026-09-15'),
       approvedById: userId('approver1'),
       approvedAt: day('2026-10-01'),
       cancellationReason: null,
@@ -1185,6 +1191,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 25,
       internalNote: null,
       offerDeadline: hour('2026-12-01T12:00'),
+      submittedAt: day('2026-09-15'),
       approvedById: userId('approver2'),
       approvedAt: day('2026-09-15'),
       cancellationReason: null,
@@ -1208,6 +1215,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 26,
       internalNote: null,
       offerDeadline: hour('2026-08-01T12:00'),
+      submittedAt: day('2026-09-15'),
       approvedById: userId('approver2'),
       approvedAt: day('2026-07-01'),
       cancellationReason: null,
@@ -1231,6 +1239,7 @@ async function main(): Promise<void> {
       maxHourlyRate: null,
       internalNote: null,
       offerDeadline: null,
+      submittedAt: day('2026-09-15'),
       approvedById: null,
       approvedAt: null,
       cancellationReason: 'Bedarf durch internen Übergang entfallen',
@@ -1254,6 +1263,7 @@ async function main(): Promise<void> {
       maxHourlyRate: 30,
       internalNote: 'Bedarfsbeginn verstrichen, keine Besetzung zustande gekommen',
       offerDeadline: hour('2026-05-15T12:00'),
+      submittedAt: day('2026-09-15'),
       approvedById: userId('approver1'),
       approvedAt: day('2026-04-02'),
       cancellationReason: null,
@@ -1281,6 +1291,7 @@ async function main(): Promise<void> {
         maxHourlyRate: demand.maxHourlyRate,
         currency: demand.maxHourlyRate === null ? null : 'EUR',
         internalNote: demand.internalNote,
+        submittedAt: demand.submittedAt,
         approvedAt: demand.approvedAt,
         approvedById: demand.approvedById,
         cancellationReason: demand.cancellationReason,

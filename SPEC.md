@@ -1251,6 +1251,7 @@ mehrere Köpfe (`headcount > 1`) kann zu mehreren Einsätzen führen.
 | Angebotsfrist | `offerDeadline` | Zeitpunkt | Pflicht ab Status „ausgeschrieben" | Eskalationsanlass (2.4, 4.2) |
 | Kostenrahmen | `maxHourlyRate` | Betrag je Stunde | optional | sichtbar nur für `KG` ([8]) und `KE` ([2]) |
 | Interner Vermerk | `internalNote` | Text | optional | für Lieferanten **nicht** sichtbar ([14]) |
+| Eingereicht am | `submittedAt` | Zeitpunkt | Pflicht ab Status „zur Freigabe eingereicht" | Beginn der Freigabefrist (4.0); ohne ihn wäre der Eskalationsanlass aus 2.4 nicht zu rechnen |
 | Freigegeben am / von | `approvedAt` / `approvedBy` | Zeitpunkt / Verweis | Pflicht ab Status „freigegeben" | Vier-Augen-Prinzip (2.4, Regel 5) |
 | Stornogrund | `cancellationReason` | Text | Pflicht bei Storno | |
 | Rückweisungsgrund | `rejectionReason` | Text | Pflicht bei Rückweisung | Begründung der Rückweisung `submitted` → `draft` durch `KG` (4.1); für den Bedarfsträger sichtbar, damit er weiß, was zu ändern ist |
@@ -2767,7 +2768,7 @@ Kapitel 5. Fristablauf löst Erinnerung und Eskalation aus, nie einen Übergang
 | Angebotsfrist | Objektfeld `offerDeadline` (3.4, 3.5) | keine Vorbelegung — je Anfrage bzw. Runde | `offerDeadlineEscalationStepDays` — 1 Arbeitstag | Einladung ohne Angebot auf `expired`; Eskalation (2.4) |
 | Bindefrist eines Angebots | Objektfeld `offerValidUntil` (3.5) | keine Vorbelegung — je Angebot, optional | — (2.4 nennt keinen Anlass) | Angebot auf `expired`, offene Profilvorschläge werden abgelehnt (4.2) |
 | Rückmeldung des Kunden auf ein vorgelegtes Profil | `submissionFeedbackDeadlineDays` | 3 Arbeitstage ab `releasedToCustomer` | `submissionFeedbackEscalationStepDays` — 2 Arbeitstage | Eskalation KB → Vertretung → KG → MD (2.4) |
-| Entscheidung über eine Verlängerung | `extensionApprovalDeadlineDays` | 5 Arbeitstage ab `requested`, spätestens 10 Kalendertage vor Einsatzende | `extensionApprovalEscalationStepDays` — 2 Arbeitstage | Eskalation KG → Vertretung → KE → MD |
+| Entscheidung über eine Verlängerung | `extensionApprovalDeadlineDays`, `extensionApprovalLatestDaysBeforeEnd` | 5 Arbeitstage ab `requested`, spätestens 10 Kalendertage vor Einsatzende — es gilt der **frühere** der beiden Termine | `extensionApprovalEscalationStepDays` — 2 Arbeitstage | Eskalation KG → Vertretung → KE → MD |
 | Einreichung eines Stundenzettels | `timesheetSubmissionDeadlineDays` | 3 Kalendertage nach `periodTo` | `timesheetSubmissionEscalationStepDays` — 1 Kalendertag | Eskalation LD → LA → MD (2.4) |
 | Genehmigung eines Stundenzettels | `timesheetApprovalDeadlineDays` | bis `closingDate` der Abrechnungsperiode, Erinnerung 3 Kalendertage vorher | `timesheetApprovalEscalationStepDays` — 1 Kalendertag | Eskalation; **keine** Genehmigungsfiktion |
 | Prüfung eines Abrechnungsbelegs | `billingReviewDeadlineDays` | 14 Kalendertage ab `released` | `billingReviewEscalationStepDays` — 7 Kalendertage | Erinnerung, dann Eskalation; **keine** Bestätigungsfiktion |
@@ -2801,6 +2802,13 @@ geratener Wert.
 | Reformationstag | 31. Oktober | BB, HB, HH, MV, NI, SH, SN, ST, TH |
 | Allerheiligen | 1. November | BW, BY, NW, RP, SL |
 | Buß- und Bettag | Mittwoch vor dem 23. November | SN |
+
+**Befund und Stufe zählen verschieden.** Der **Befund** entsteht mit dem
+Kalendertag nach dem Fristablauf — „die Frist ist überschritten" ist am Samstag
+so wahr wie am Montag. Die **Stufe** dagegen zählt in Arbeitstagen (2.4,
+Regel 6): die Eskalationsuhr einer Arbeitstagfrist läuft am Wochenende und am
+Feiertag nicht weiter. Am Samstag nach dem Fristablauf gibt es also eine
+Nachricht, aber noch keine zweite Stufe.
 
 Ostersonntag wird aus dem Jahr **gerechnet** (gregorianische Osterformel) und
 nicht in einer Tabelle gepflegt: eine Tabelle müsste jedes Jahr erweitert
@@ -5032,6 +5040,26 @@ sie verhindert.
 | N4 | Einsätze in `active`, `interrupted` | P7 | Arbeitskampfanzeige deckt den Tag des Laufs | Warnung mit Pflicht-Eskalation; Unterbrechung wird vorgeschlagen (5.3.2) |
 | N5 | Nachweise mit `validTo`, deren Bezugsobjekt aktiv ist | P10 | Ablauf oder Vorlauf erreicht | nach Katalog 5.4.4 |
 | N6 | Einsätze in `interrupted` mit offener Unterbrechung | P2 | Unterbrechung überschreitet die Drei-Monats-Schwelle | Information: die Zählung wird mit der Wiederaufnahme zurückgesetzt (5.1.4) |
+
+**Die Fristanlässe aus 2.4.** Derselbe Lauf prüft die **Prozessfristen** aus
+4.0. Sie tragen keine Prüfung aus Kapitel 5 — sie sind Fristen des Verfahrens,
+nicht des AÜG — und deshalb keine `N`-Nummer; ihre Stufe kommt aus dem
+Stufenabstand (2.4, Regel 6) und nicht aus einer Restzeit.
+
+| Anlass | Gegenstand | Frist | Stufenfolge (ohne Vertretung) |
+|---|---|---|---|
+| Bedarfsanfrage nicht freigegeben | Anfragen in `submitted` | `demandApprovalDeadlineDays` ab `submittedAt`, Arbeitstage | `KG` → `KB` → `MD` |
+| Ausschreibung ohne Angebot | Einladungen offener Ausschreibungen ohne Angebot | Objektfeld `offerDeadline` | `LD` → `LA` → `MD` |
+| Profil ohne Rückmeldung | Vorschläge in `releasedToCustomer` | `submissionFeedbackDeadlineDays` ab `releasedToCustomerAt`, Arbeitstage | `KB` → `KG` → `MD` |
+| Verlängerung nicht entschieden | Verlängerungen in `requested` | `extensionApprovalDeadlineDays` ab `requestedAt`, spätestens `extensionApprovalLatestDaysBeforeEnd` vor Einsatzende | `KG` → `KE` → `MD` |
+| Stundenzettel nicht eingereicht | Zettel in `recorded`, `rejected` | `timesheetSubmissionDeadlineDays` nach `periodTo`, Kalendertage | `LD` → `LA` → `MD` |
+| Stundenzettel nicht genehmigt | Zettel in `submitted`, `inApproval` | `closingDate` der Abrechnungsperiode | offene Stufe → `KE` → `MD`; bei einer Betreiberstufe → `MA` |
+| Beanstandung nicht geklärt | Belege in `disputed` | keine Frist — der Befund entsteht mit der Beanstandung | `MD` → `MA` |
+
+Eine **abgelehnte** Einladung erzeugt keinen Befund: der Lieferant hat
+geantwortet, nur nicht mit einem Angebot. Eine **geschlossene** Ausschreibung
+ebenfalls nicht — dann ist der Bedarf entschieden. Und eine Bedarfsanfrage ohne
+`submittedAt` erzeugt keinen: eine Frist ohne Beginn ist keine.
 
 **Zeitplan des Laufs** (`nightlyRunSchedule`). Der Lauf eines Kalendertages ist
 zur **Fälligkeitszeit** `nightlyRunTime` fällig, gelesen in der Zeitzone

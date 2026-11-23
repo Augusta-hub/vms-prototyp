@@ -26,8 +26,16 @@ import {
   befundeZettelNichtEingereicht,
   befundeZettelNichtGenehmigt,
   restTage,
+  befundeAnfrageOhneFreigabe,
+  befundeAusschreibungOhneAngebot,
+  befundeProfilOhneRueckmeldung,
+  befundeVerlaengerungOhneEntscheidung,
+  type Anfragelage,
   type Beleglage,
+  type Einladungslage,
   type Einsatzlage,
+  type Verlaengerungslage,
+  type Vorschlagslage,
   type Lieferantenzeile,
   type Zettellage,
 } from './befunde'
@@ -447,6 +455,264 @@ describe('Prozessfristen aus 2.4 und 4.0', () => {
         STICHTAG,
       ),
     ).toEqual([])
+  })
+})
+
+describe('Vier Fristanlässe mit Arbeitstagfristen (2.4, 4.0)', () => {
+  // 2026-11-23 ist ein Montag. Ohne Bundesland gelten nur die
+  // bundeseinheitlichen Feiertage; in dieser Woche gibt es keinen.
+  const MONTAG = DAY('2026-11-23')
+
+  function anfrage(overrides: Partial<Anfragelage> = {}): Anfragelage {
+    return {
+      id: 'anfrage-1',
+      requestNumber: 'BA-2026-0001',
+      tenantId: CUSTOMER_TENANT,
+      customerTenantId: CUSTOMER_TENANT,
+      status: 'submitted',
+      submittedAt: MONTAG,
+      land: null,
+      fristArbeitstage: 3,
+      stufenabstandArbeitstage: 2,
+      ...overrides,
+    }
+  }
+
+  function einladung(overrides: Partial<Einladungslage> = {}): Einladungslage {
+    return {
+      id: 'einladung-1',
+      tenderNumber: 'AS-2026-0001',
+      supplierName: 'Rheinpersonal GmbH',
+      tenantId: OPERATOR_TENANT,
+      supplierTenantId: SUPPLIER_TENANT,
+      customerTenantId: CUSTOMER_TENANT,
+      invitationStatus: 'viewed',
+      offerDeadline: DAY('2026-11-24'),
+      hatAngebot: false,
+      ausschreibungOffen: true,
+      land: null,
+      stufenabstandArbeitstage: 1,
+      ...overrides,
+    }
+  }
+
+  function vorschlag(overrides: Partial<Vorschlagslage> = {}): Vorschlagslage {
+    return {
+      id: 'vorschlag-1',
+      submissionNumber: 'PV-2026-0001',
+      tenantId: OPERATOR_TENANT,
+      customerTenantId: CUSTOMER_TENANT,
+      status: 'releasedToCustomer',
+      releasedToCustomerAt: MONTAG,
+      land: null,
+      fristArbeitstage: 3,
+      stufenabstandArbeitstage: 2,
+      ...overrides,
+    }
+  }
+
+  function verlaengerung(overrides: Partial<Verlaengerungslage> = {}): Verlaengerungslage {
+    return {
+      id: 'verlaengerung-1',
+      assignmentNumber: 'E-2026-0001',
+      tenantId: OPERATOR_TENANT,
+      customerTenantId: CUSTOMER_TENANT,
+      status: 'requested',
+      requestedAt: MONTAG,
+      plannedEndDate: DAY('2026-12-20'),
+      land: null,
+      fristArbeitstage: 5,
+      spaetestensTageVorEnde: 10,
+      stufenabstandArbeitstage: 2,
+      ...overrides,
+    }
+  }
+
+  describe('Bedarfsanfrage ohne Freigabe (4.1)', () => {
+    // Montag + 3 Arbeitstage = Donnerstag, 2026-11-26.
+    it('meldet erst nach Fristablauf — und dann an `KG`', () => {
+      expect(befundeAnfrageOhneFreigabe([anfrage()], DAY('2026-11-26'), OPERATOR_TENANT)).toEqual([])
+      const befunde = befundeAnfrageOhneFreigabe([anfrage()], DAY('2026-11-27'), OPERATOR_TENANT)
+      expect(befunde).toHaveLength(1)
+      expect(befunde[0]?.adressaten).toEqual(['KG'])
+      expect(befunde[0]?.anlass).toBe('demandApprovalOverdue')
+      expect(befunde[0]?.meldung).toContain('**nicht** frei')
+    })
+
+    it('besteht am Wochenende, ohne die Stufe zu erhöhen (4.0)', () => {
+      // Samstag, 2026-11-28: ein Arbeitstag liegt seit der Frist, aber der
+      // Stufenabstand von zwei ist nicht verstrichen.
+      const befunde = befundeAnfrageOhneFreigabe([anfrage()], DAY('2026-11-28'), OPERATOR_TENANT)
+      expect(befunde[0]?.adressaten).toEqual(['KG'])
+    })
+
+    it('nimmt `KB` und `MD` nach je zwei Arbeitstagen hinzu (2.4, Regel 6)', () => {
+      const stufe = (stichtag: Date) =>
+        befundeAnfrageOhneFreigabe([anfrage()], stichtag, OPERATOR_TENANT)[0]?.adressaten
+      expect(stufe(DAY('2026-12-01'))).toEqual(['KG', 'KB'])
+      expect(stufe(DAY('2026-12-03'))).toEqual(['KG', 'KB', 'MD'])
+      expect(stufe(DAY('2026-12-31'))).toEqual(['KG', 'KB', 'MD'])
+    })
+
+    it('adressiert `KG` und `KB` beim Kunden, `MD` beim Betreiber (2.3)', () => {
+      const befund = befundeAnfrageOhneFreigabe([anfrage()], DAY('2026-12-03'), OPERATOR_TENANT)[0]
+      expect(befund?.mandantJeRolle.KG).toBe(CUSTOMER_TENANT)
+      expect(befund?.mandantJeRolle.KB).toBe(CUSTOMER_TENANT)
+      expect(befund?.mandantJeRolle.MD).toBe(OPERATOR_TENANT)
+    })
+
+    it('rechnet die Feiertage des Landes mit (4.0)', () => {
+      // Buß- und Bettag 2026 ist Mittwoch, der 18. November — in Sachsen
+      // Feiertag. Ab Montag, dem 16., sind drei Arbeitstage dort erst am
+      // Freitag, dem 20., verstrichen, in Thüringen schon am Donnerstag.
+      const ab16 = { submittedAt: DAY('2026-11-16') }
+      expect(
+        befundeAnfrageOhneFreigabe(
+          [anfrage({ ...ab16, land: 'SN' })],
+          DAY('2026-11-20'),
+          OPERATOR_TENANT,
+        ),
+      ).toEqual([])
+      expect(
+        befundeAnfrageOhneFreigabe(
+          [anfrage({ ...ab16, land: 'TH' })],
+          DAY('2026-11-20'),
+          OPERATOR_TENANT,
+        ),
+      ).toHaveLength(1)
+    })
+
+    it('meldet nichts ohne Einreichungszeitpunkt — eine Frist ohne Beginn ist keine', () => {
+      expect(
+        befundeAnfrageOhneFreigabe([anfrage({ submittedAt: null })], DAY('2026-12-31'), OPERATOR_TENANT),
+      ).toEqual([])
+    })
+
+    it('meldet nichts zu einer freigegebenen Anfrage', () => {
+      expect(
+        befundeAnfrageOhneFreigabe([anfrage({ status: 'approved' })], DAY('2026-12-31'), OPERATOR_TENANT),
+      ).toEqual([])
+    })
+  })
+
+  describe('Ausschreibung ohne Angebot (4.2)', () => {
+    it('meldet je Einladung an `LD`, dann `LA` und `MD`', () => {
+      const stufe = (stichtag: Date) =>
+        befundeAusschreibungOhneAngebot([einladung()], stichtag, OPERATOR_TENANT)[0]?.adressaten
+      expect(befundeAusschreibungOhneAngebot([einladung()], DAY('2026-11-24'), OPERATOR_TENANT)).toEqual([])
+      expect(stufe(DAY('2026-11-25'))).toEqual(['LD'])
+      expect(stufe(DAY('2026-11-26'))).toEqual(['LD', 'LA'])
+      expect(stufe(DAY('2026-11-27'))).toEqual(['LD', 'LA', 'MD'])
+    })
+
+    it('meldet nichts, wo ein Angebot vorliegt', () => {
+      expect(
+        befundeAusschreibungOhneAngebot([einladung({ hatAngebot: true })], DAY('2026-12-01'), OPERATOR_TENANT),
+      ).toEqual([])
+    })
+
+    it('meldet nichts zu einer abgelehnten Einladung — der Lieferant hat geantwortet', () => {
+      expect(
+        befundeAusschreibungOhneAngebot(
+          [einladung({ invitationStatus: 'declined' })],
+          DAY('2026-12-01'),
+          OPERATOR_TENANT,
+        ),
+      ).toEqual([])
+    })
+
+    it('meldet nichts zu einer geschlossenen Ausschreibung', () => {
+      expect(
+        befundeAusschreibungOhneAngebot(
+          [einladung({ ausschreibungOffen: false })],
+          DAY('2026-12-01'),
+          OPERATOR_TENANT,
+        ),
+      ).toEqual([])
+    })
+
+    it('adressiert `LD` und `LA` beim Lieferanten (2.3)', () => {
+      const befund = befundeAusschreibungOhneAngebot([einladung()], DAY('2026-11-27'), OPERATOR_TENANT)[0]
+      expect(befund?.mandantJeRolle.LD).toBe(SUPPLIER_TENANT)
+      expect(befund?.mandantJeRolle.LA).toBe(SUPPLIER_TENANT)
+      expect(befund?.mandantJeRolle.MD).toBe(OPERATOR_TENANT)
+    })
+  })
+
+  describe('Profil ohne Rückmeldung (4.2)', () => {
+    it('meldet nach Fristablauf an `KB`, dann `KG` und `MD`', () => {
+      const stufe = (stichtag: Date) =>
+        befundeProfilOhneRueckmeldung([vorschlag()], stichtag, OPERATOR_TENANT)[0]?.adressaten
+      expect(befundeProfilOhneRueckmeldung([vorschlag()], DAY('2026-11-26'), OPERATOR_TENANT)).toEqual([])
+      expect(stufe(DAY('2026-11-27'))).toEqual(['KB'])
+      expect(stufe(DAY('2026-12-01'))).toEqual(['KB', 'KG'])
+      expect(stufe(DAY('2026-12-03'))).toEqual(['KB', 'KG', 'MD'])
+    })
+
+    it('nennt den Vorschlag und nicht den Kandidaten (2.3)', () => {
+      const befund = befundeProfilOhneRueckmeldung([vorschlag()], DAY('2026-11-27'), OPERATOR_TENANT)[0]
+      expect(befund?.meldung).toContain('PV-2026-0001')
+      expect(befund?.objectType).toBe('candidateSubmission')
+    })
+
+    it('meldet nichts zu einem entschiedenen Vorschlag', () => {
+      expect(
+        befundeProfilOhneRueckmeldung([vorschlag({ status: 'accepted' })], DAY('2026-12-31'), OPERATOR_TENANT),
+      ).toEqual([])
+    })
+  })
+
+  describe('Verlängerung ohne Entscheidung (4.3.2)', () => {
+    it('meldet nach fünf Arbeitstagen an `KG`, dann `KE` und `MD`', () => {
+      // Montag + 5 Arbeitstage = Montag, 2026-11-30.
+      const stufe = (stichtag: Date) =>
+        befundeVerlaengerungOhneEntscheidung([verlaengerung()], stichtag, OPERATOR_TENANT)[0]
+          ?.adressaten
+      expect(
+        befundeVerlaengerungOhneEntscheidung([verlaengerung()], DAY('2026-11-30'), OPERATOR_TENANT),
+      ).toEqual([])
+      expect(stufe(DAY('2026-12-01'))).toEqual(['KG'])
+      expect(stufe(DAY('2026-12-03'))).toEqual(['KG', 'KE'])
+      expect(stufe(DAY('2026-12-07'))).toEqual(['KG', 'KE', 'MD'])
+    })
+
+    it('zieht die Frist vor, wenn das Einsatzende näher liegt (4.0)', () => {
+      // Ende 2026-12-05 minus 10 Kalendertage = 2026-11-25; das ist früher als
+      // der fünfte Arbeitstag (2026-11-30) und gilt deshalb.
+      const nah = verlaengerung({ plannedEndDate: DAY('2026-12-05') })
+      const befunde = befundeVerlaengerungOhneEntscheidung([nah], DAY('2026-11-26'), OPERATOR_TENANT)
+      expect(befunde).toHaveLength(1)
+      expect(befunde[0]?.meldung).toContain('2026-11-25')
+    })
+
+    it('nimmt ohne geplantes Ende allein die Arbeitstagfrist', () => {
+      const ohneEnde = verlaengerung({ plannedEndDate: null })
+      expect(
+        befundeVerlaengerungOhneEntscheidung([ohneEnde], DAY('2026-11-30'), OPERATOR_TENANT),
+      ).toEqual([])
+      expect(
+        befundeVerlaengerungOhneEntscheidung([ohneEnde], DAY('2026-12-01'), OPERATOR_TENANT),
+      ).toHaveLength(1)
+    })
+
+    it('meldet nichts zu einer entschiedenen Verlängerung', () => {
+      expect(
+        befundeVerlaengerungOhneEntscheidung(
+          [verlaengerung({ status: 'approved' })],
+          DAY('2026-12-31'),
+          OPERATOR_TENANT,
+        ),
+      ).toEqual([])
+    })
+
+    it('sagt, dass der Fristablauf nicht verlängert (2.4, Regel 1)', () => {
+      const befund = befundeVerlaengerungOhneEntscheidung(
+        [verlaengerung()],
+        DAY('2026-12-01'),
+        OPERATOR_TENANT,
+      )[0]
+      expect(befund?.meldung).toContain('verlängert **nicht**')
+    })
   })
 })
 

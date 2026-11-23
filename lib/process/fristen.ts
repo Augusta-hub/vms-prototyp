@@ -37,6 +37,7 @@ export const PROZESSFRIST_VORBELEGUNG = {
   submissionFeedbackEscalationStepDays: 2,
   extensionApprovalDeadlineDays: 5,
   extensionApprovalEscalationStepDays: 2,
+  extensionApprovalLatestDaysBeforeEnd: 10,
   timesheetSubmissionDeadlineDays: 3,
   timesheetSubmissionEscalationStepDays: 1,
   timesheetApprovalEscalationStepDays: 1,

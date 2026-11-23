@@ -698,6 +698,9 @@ export async function transitionDemandRequest(
   }
 
   const data: Record<string, unknown> = { status: outcome.to, updatedById: identity.user.id }
+  // 4.0: die Freigabefrist läuft ab der **Einreichung**, nicht ab dem Entwurf.
+  // Ohne diesen Zeitpunkt wäre der Eskalationsanlass aus 2.4 nicht zu rechnen.
+  if (input.transition === 'submit') data.submittedAt = evaluationDate
   if (input.transition === 'approve') {
     // 4.1: `approvedAt` / `approvedBy` werden gesetzt.
     data.approvedAt = evaluationDate

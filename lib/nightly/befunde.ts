@@ -43,7 +43,9 @@ import {
   type Nachweiszeile,
 } from '../aueg/anbindung'
 import { REGELWERK, type Regelwerkkonfiguration } from '../aueg/regelwerk'
+import { istVorOderGleich } from '../aueg/kalender'
 import type { Rollenkuerzel } from '../aueg/typen'
+import { arbeitstageSpaeter, arbeitstageZwischen, type Bundesland } from '../process/arbeitstage'
 import { stufenkreis } from '../process/fristen'
 import { ausfallstufe, type Laufstand } from './zeitplan'
 
@@ -58,6 +60,10 @@ export type Anlass =
   | 'timesheetNotApproved'
   | 'billingDocumentDisputed'
   | 'nightlyRunMissed'
+  | 'demandApprovalOverdue'
+  | 'tenderNoOffer'
+  | 'submissionFeedbackOverdue'
+  | 'extensionApprovalOverdue'
 
 /** Art des Befunds — sie folgt der Ergebnisart aus 5.5.2. */
 export type Befundart = 'information' | 'warning' | 'escalation'
@@ -639,6 +645,307 @@ export function befundeBelegBeanstandet(
 
 function tag(wert: Date): string {
   return wert.toISOString().slice(0, 10)
+}
+
+/* ------------------------------------------------------------------ */
+/* Die vier Fristanlässe aus 2.4 mit Arbeitstagfristen (4.0)           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Gemeinsam für alle vier: der **Befund** entsteht mit dem Kalendertag nach
+ * dem Fristablauf, die **Stufe** zählt in **Arbeitstagen** (4.0, 2.4 Regel 6).
+ *
+ * Beides auseinanderzuhalten ist nötig: „die Frist ist überschritten" ist am
+ * Samstag so wahr wie am Montag, aber die Eskalationsuhr einer Arbeitstagfrist
+ * darf am Wochenende nicht weiterlaufen. Ergebnis `null` heißt: keine
+ * Überschreitung, also kein Befund.
+ */
+function arbeitstageSeitFrist(
+  frist: string,
+  stichtag: Date,
+  land: Bundesland | null,
+): number | null {
+  if (istVorOderGleich(tag(stichtag), frist)) return null
+  return Math.max(0, arbeitstageZwischen(frist, tag(stichtag), land) - 1)
+}
+
+/** Stufenfolge aus 2.4 ohne die Vertretung (Regel 6). */
+const STUFEN_ANFRAGE_FREIGABE: readonly Rollenkuerzel[] = ['KG', 'KB', 'MD']
+const STUFEN_AUSSCHREIBUNG_OHNE_ANGEBOT: readonly Rollenkuerzel[] = ['LD', 'LA', 'MD']
+const STUFEN_PROFIL_OHNE_RUECKMELDUNG: readonly Rollenkuerzel[] = ['KB', 'KG', 'MD']
+const STUFEN_VERLAENGERUNG: readonly Rollenkuerzel[] = ['KG', 'KE', 'MD']
+
+/** Eine Bedarfsanfrage, die zur Freigabe liegt (3.4, 4.1). */
+export interface Anfragelage {
+  readonly id: string
+  readonly requestNumber: string
+  /** Mandant des Objekts (3.12) — bei der Bedarfsanfrage der Kundenmandant. */
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly status: string
+  /** `submittedAt` (3.4); ohne ihn ist die Frist nicht zu rechnen. */
+  readonly submittedAt: Date | null
+  /** Bundesland des Standorts (3.1) für die Arbeitstage (4.0). */
+  readonly land: Bundesland | null
+  /** `demandApprovalDeadlineDays` in Arbeitstagen (4.0). */
+  readonly fristArbeitstage: number
+  /** `demandApprovalEscalationStepDays` in Arbeitstagen (4.0, 2.4 Regel 6). */
+  readonly stufenabstandArbeitstage: number
+}
+
+/**
+ * **Bedarfsanfrage liegt zur Freigabe und wird nicht entschieden** (2.4; Frist
+ * aus 4.0: `demandApprovalDeadlineDays`, Vorbelegung 3 Arbeitstage ab
+ * `submitted`).
+ *
+ * Zuständig ist `KG`, danach treten `KB` und `MD` hinzu. Ohne
+ * `submittedAt` entsteht **kein** Befund: eine Frist ohne Beginn ist keine —
+ * und ein geratener Beginn (etwa `createdAt`) würde den Entwurf mitzählen.
+ */
+export function befundeAnfrageOhneFreigabe(
+  anfragen: readonly Anfragelage[],
+  stichtag: Date,
+  operatorTenantId: string,
+): readonly Nachtbefund[] {
+  const befunde: Nachtbefund[] = []
+  for (const lage of anfragen) {
+    if (lage.status !== 'submitted') continue
+    if (lage.submittedAt === null) continue
+    const frist = arbeitstageSpaeter(tag(lage.submittedAt), lage.fristArbeitstage, lage.land)
+    const seit = arbeitstageSeitFrist(frist, stichtag, lage.land)
+    if (seit === null) continue
+    befunde.push({
+      zeile: '2.4',
+      anlass: 'demandApprovalOverdue',
+      art: 'warning',
+      pruefung: null,
+      objectType: 'demandRequest',
+      objectRef: lage.id,
+      tenantId: lage.tenantId,
+      adressaten: stufenkreis(STUFEN_ANFRAGE_FREIGABE, seit, lage.stufenabstandArbeitstage),
+      mandantJeRolle: mandantJeRolle({
+        operator: operatorTenantId,
+        customer: lage.customerTenantId,
+      }),
+      meldung:
+        `Die Bedarfsanfrage ${lage.requestNumber} liegt seit dem ${tag(lage.submittedAt)} zur ` +
+        `Freigabe; die Frist lief am ${frist} ab (SPEC 4.0, 2.4). Der Fristablauf gibt sie ` +
+        '**nicht** frei — er erzeugt Aufmerksamkeit, nie einen Statuswechsel (2.4, Regel 1).',
+    })
+  }
+  return befunde
+}
+
+/** Eine Einladung ohne Angebot nach Ablauf der Angebotsfrist (3.5, 4.2). */
+export interface Einladungslage {
+  readonly id: string
+  readonly tenderNumber: string
+  readonly supplierName: string
+  /** Mandant des Objekts (3.12) — die Einladung gehört dem Betreiber. */
+  readonly tenantId: string
+  readonly supplierTenantId: string
+  readonly customerTenantId: string | null
+  readonly invitationStatus: string
+  /** Angebotsfrist der Ausschreibung (3.4, 3.5). */
+  readonly offerDeadline: Date
+  /** Liegt ein Angebot dieses Lieferanten vor? */
+  readonly hatAngebot: boolean
+  /** Ist die Ausschreibung noch offen? */
+  readonly ausschreibungOffen: boolean
+  readonly land: Bundesland | null
+  /** `offerDeadlineEscalationStepDays` in Arbeitstagen (4.0). */
+  readonly stufenabstandArbeitstage: number
+}
+
+/**
+ * **Ausschreibung ohne Angebot bis zum Ende der Angebotsfrist** (2.4; Frist
+ * ist das Objektfeld `offerDeadline`, 3.4 und 3.5).
+ *
+ * Gemeldet wird je **Einladung**, nicht je Ausschreibung: zuständig ist `LD`
+ * des eingeladenen Lieferanten (2.4), und eine Nachricht an „die Lieferanten"
+ * gibt es nicht — jeder erfährt nur von seiner eigenen Einladung (2.3).
+ *
+ * Eine **abgelehnte** Einladung erzeugt keinen Befund: der Lieferant hat
+ * geantwortet, nur nicht mit einem Angebot. Eine geschlossene Ausschreibung
+ * ebenfalls nicht — dann ist der Bedarf entschieden.
+ */
+export function befundeAusschreibungOhneAngebot(
+  einladungen: readonly Einladungslage[],
+  stichtag: Date,
+  operatorTenantId: string,
+): readonly Nachtbefund[] {
+  const befunde: Nachtbefund[] = []
+  for (const lage of einladungen) {
+    if (!lage.ausschreibungOffen) continue
+    if (lage.hatAngebot) continue
+    if (lage.invitationStatus === 'declined' || lage.invitationStatus === 'offerSubmitted') continue
+    const frist = tag(lage.offerDeadline)
+    const seit = arbeitstageSeitFrist(frist, stichtag, lage.land)
+    if (seit === null) continue
+    befunde.push({
+      zeile: '2.4',
+      anlass: 'tenderNoOffer',
+      art: 'warning',
+      pruefung: null,
+      objectType: 'tenderInvitation',
+      objectRef: lage.id,
+      tenantId: lage.tenantId,
+      adressaten: stufenkreis(
+        STUFEN_AUSSCHREIBUNG_OHNE_ANGEBOT,
+        seit,
+        lage.stufenabstandArbeitstage,
+      ),
+      mandantJeRolle: mandantJeRolle({
+        operator: operatorTenantId,
+        customer: lage.customerTenantId,
+        supplier: lage.supplierTenantId,
+      }),
+      meldung:
+        `Zur Ausschreibung ${lage.tenderNumber} liegt von ${lage.supplierName} kein Angebot vor; ` +
+        `die Angebotsfrist lief am ${frist} ab (SPEC 4.2, 2.4). Der Fristablauf gibt den Bedarf ` +
+        '**nicht** frei und besetzt nichts (2.4, Regel 1).',
+    })
+  }
+  return befunde
+}
+
+/** Ein dem Kunden vorgelegtes Profil ohne Rückmeldung (3.6, 4.2). */
+export interface Vorschlagslage {
+  readonly id: string
+  readonly submissionNumber: string
+  /** Mandant des Objekts (3.12) — der Profilvorschlag gehört dem Betreiber. */
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly status: string
+  /** `releasedToCustomerAt` (3.6). */
+  readonly releasedToCustomerAt: Date | null
+  readonly land: Bundesland | null
+  /** `submissionFeedbackDeadlineDays` in Arbeitstagen (4.0). */
+  readonly fristArbeitstage: number
+  /** `submissionFeedbackEscalationStepDays` in Arbeitstagen (4.0). */
+  readonly stufenabstandArbeitstage: number
+}
+
+/**
+ * **Vorgelegtes Profil ohne Rückmeldung des Kunden** (2.4; Frist aus 4.0:
+ * `submissionFeedbackDeadlineDays`, Vorbelegung 3 Arbeitstage ab
+ * `releasedToCustomer`).
+ *
+ * Zuständig ist `KB` — er entscheidet über das Profil ([24]) —, danach `KG`
+ * und `MD`. Die Meldung nennt den Vorschlag und **nicht** den Kandidaten: der
+ * Name gehört nicht in eine Nachricht, die auch der Betreiber liest, solange
+ * 2.3 ihn nicht verlangt.
+ */
+export function befundeProfilOhneRueckmeldung(
+  vorschlaege: readonly Vorschlagslage[],
+  stichtag: Date,
+  operatorTenantId: string,
+): readonly Nachtbefund[] {
+  const befunde: Nachtbefund[] = []
+  for (const lage of vorschlaege) {
+    if (lage.status !== 'releasedToCustomer') continue
+    if (lage.releasedToCustomerAt === null) continue
+    const frist = arbeitstageSpaeter(
+      tag(lage.releasedToCustomerAt),
+      lage.fristArbeitstage,
+      lage.land,
+    )
+    const seit = arbeitstageSeitFrist(frist, stichtag, lage.land)
+    if (seit === null) continue
+    befunde.push({
+      zeile: '2.4',
+      anlass: 'submissionFeedbackOverdue',
+      art: 'warning',
+      pruefung: null,
+      objectType: 'candidateSubmission',
+      objectRef: lage.id,
+      tenantId: lage.tenantId,
+      adressaten: stufenkreis(STUFEN_PROFIL_OHNE_RUECKMELDUNG, seit, lage.stufenabstandArbeitstage),
+      mandantJeRolle: mandantJeRolle({
+        operator: operatorTenantId,
+        customer: lage.customerTenantId,
+      }),
+      meldung:
+        `Der Profilvorschlag ${lage.submissionNumber} liegt dem Kunden seit dem ` +
+        `${tag(lage.releasedToCustomerAt)} vor und ist nicht entschieden; die Frist lief am ` +
+        `${frist} ab (SPEC 4.2, 2.4). Der Fristablauf lehnt **nicht** ab und nimmt **nicht** an ` +
+        '(2.4, Regel 1).',
+    })
+  }
+  return befunde
+}
+
+/** Eine beantragte Verlängerung ohne Entscheidung (3.7, 4.3.2). */
+export interface Verlaengerungslage {
+  readonly id: string
+  readonly assignmentNumber: string
+  /** Mandant des Objekts (3.12) — die Verlängerung gehört dem Betreiber. */
+  readonly tenantId: string
+  readonly customerTenantId: string
+  readonly status: string
+  readonly requestedAt: Date
+  /** Geplantes Einsatzende (3.7) für die zweite Grenze aus 4.0. */
+  readonly plannedEndDate: Date | null
+  readonly land: Bundesland | null
+  /** `extensionApprovalDeadlineDays` in Arbeitstagen (4.0). */
+  readonly fristArbeitstage: number
+  /** `extensionApprovalLatestDaysBeforeEnd` in Kalendertagen (4.0). */
+  readonly spaetestensTageVorEnde: number
+  /** `extensionApprovalEscalationStepDays` in Arbeitstagen (4.0). */
+  readonly stufenabstandArbeitstage: number
+}
+
+/**
+ * **Entscheidung über eine Verlängerung** (2.4; Frist aus 4.0:
+ * `extensionApprovalDeadlineDays`, 5 Arbeitstage ab `requested`, **spätestens**
+ * `extensionApprovalLatestDaysBeforeEnd` Kalendertage vor Einsatzende).
+ *
+ * Es gilt der **frühere** der beiden Termine. Das ist der Sinn des „spätestens":
+ * eine Verlängerung, die erst nach dem Einsatzende entschieden wird, verlängert
+ * nichts mehr — der Einsatz ist dann beendet (4.3). Ohne geplantes Ende gilt
+ * allein die Arbeitstagfrist.
+ *
+ * Zuständig ist `KG` (4.3.2), danach `KE` und `MD`.
+ */
+export function befundeVerlaengerungOhneEntscheidung(
+  verlaengerungen: readonly Verlaengerungslage[],
+  stichtag: Date,
+  operatorTenantId: string,
+): readonly Nachtbefund[] {
+  const befunde: Nachtbefund[] = []
+  for (const lage of verlaengerungen) {
+    if (lage.status !== 'requested') continue
+    const ausAntrag = arbeitstageSpaeter(tag(lage.requestedAt), lage.fristArbeitstage, lage.land)
+    let frist = ausAntrag
+    if (lage.plannedEndDate !== null) {
+      const vorEnde = new Date(lage.plannedEndDate)
+      vorEnde.setUTCDate(vorEnde.getUTCDate() - lage.spaetestensTageVorEnde)
+      const grenze = tag(vorEnde)
+      if (istVorOderGleich(grenze, frist)) frist = grenze
+    }
+    const seit = arbeitstageSeitFrist(frist, stichtag, lage.land)
+    if (seit === null) continue
+    befunde.push({
+      zeile: '2.4',
+      anlass: 'extensionApprovalOverdue',
+      art: 'warning',
+      pruefung: null,
+      objectType: 'assignmentExtension',
+      objectRef: lage.id,
+      tenantId: lage.tenantId,
+      adressaten: stufenkreis(STUFEN_VERLAENGERUNG, seit, lage.stufenabstandArbeitstage),
+      mandantJeRolle: mandantJeRolle({
+        operator: operatorTenantId,
+        customer: lage.customerTenantId,
+      }),
+      meldung:
+        `Die Verlängerung zum Einsatz ${lage.assignmentNumber} ist seit dem ` +
+        `${tag(lage.requestedAt)} beantragt und nicht entschieden; die Frist lief am ${frist} ab ` +
+        '(SPEC 4.0, 4.3.2). Der Fristablauf verlängert **nicht** (2.4, Regel 1); ohne ' +
+        'Entscheidung endet der Einsatz zum geplanten Ende.',
+    })
+  }
+  return befunde
 }
 
 /* ------------------------------------------------------------------ */

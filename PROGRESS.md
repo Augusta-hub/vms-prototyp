@@ -5,6 +5,111 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-23 — Arbeitstage und die vier fehlenden Fristanlässe (4.0, 2.4)
+
+Zwei Commits, eine Arbeitseinheit: erst der Arbeitstagbegriff, dann die vier
+Anlässe, die ihn brauchen.
+
+### Gemacht — `ea205fb` Arbeitstage
+
+- **SPEC 4.0** sagt jetzt, **was ein Arbeitstag ist**: Montag bis Freitag ohne
+  Feiertag des Bundeslands am **Standort des Vorgangs** (3.1). Dazu die
+  Feiertagstabelle (neun bundeseinheitliche, acht landesgebundene) und der
+  Satz, dass **Befund und Stufe verschieden zählen** — der Befund entsteht mit
+  dem Kalendertag nach dem Fristablauf, die Stufe zählt Arbeitstage.
+- **`federalState`** am Standort (Prisma-Katalog `FederalState`, Migration
+  `20261123090000_bundesland_am_standort`), optional. Stammdatenseite und Seed
+  führen es; die Liste zeigt es.
+- **`lib/process/arbeitstage.ts`** rechnet Ostersonntag (gregorianische
+  Osterformel), die Feiertage je Land, Arbeitstage und Fristen darin.
+- **Neue offene Frage 59**: gemeindegebundene Feiertage — Augsburger
+  Friedensfest, Mariä Himmelfahrt in Teilen Bayerns, Fronleichnam in einzelnen
+  Gemeinden Sachsens und Thüringens. Das Bundesland trägt sie nicht.
+
+### Gemacht — die vier Anlässe
+
+- **`lib/nightly/befunde.ts`** hat vier neue Befunde, je mit Stufenfolge aus
+  2.4 (ohne die Vertretung, Regel 6):
+  **Bedarfsanfrage nicht freigegeben** (`KG` → `KB` → `MD`),
+  **Ausschreibung ohne Angebot** (`LD` → `LA` → `MD`, je Einladung),
+  **Profil ohne Rückmeldung** (`KB` → `KG` → `MD`),
+  **Verlängerung nicht entschieden** (`KG` → `KE` → `MD`).
+- **SPEC 5.5.1 c** führt die **sieben** Fristanlässe aus 2.4 in einer eigenen
+  Tabelle — sie tragen keine `N`-Nummer, weil sie keine Prüfung aus Kapitel 5
+  sind. 3.4 hat `submittedAt`, 4.0 den zweiten Schlüssel der Verlängerung
+  (`extensionApprovalLatestDaysBeforeEnd`).
+- **Prisma**: `DemandRequest.submittedAt` und vier Anlasswerte (Migration
+  `20261123100000_vier_fristanlaesse`); `transitionDemandRequest` setzt den
+  Zeitpunkt beim Einreichen.
+
+### Entscheidungen
+
+1. **Das Bundesland hängt am Standort des Vorgangs**, nicht am Sitz des
+   Lieferanten oder des Betreibers: der Vorgang hat einen Einsatzort, und der
+   ist für alle Beteiligten derselbe.
+2. **Optional, nicht Pflicht.** Ohne Land gelten nur die bundeseinheitlichen
+   Feiertage — ein geratener Wert wäre schlechter als keiner, und die Lücke ist
+   in der Liste sichtbar.
+3. **Ostersonntag wird gerechnet.** Eine Tabelle müsste jedes Jahr erweitert
+   werden; ein fehlendes Jahr wäre ein stillschweigend falscher Kalender.
+4. **Befund und Stufe zählen verschieden.** „Die Frist ist überschritten" ist
+   am Samstag so wahr wie am Montag; die Eskalationsuhr einer Arbeitstagfrist
+   läuft am Wochenende aber nicht weiter.
+5. **Keine Bedarfsanfrage ohne `submittedAt`.** Eine Frist ohne Beginn ist
+   keine, und `createdAt` wäre der Entwurf — der Lauf meldet sie nicht.
+6. **Die Ausschreibung wird je Einladung gemeldet.** Zuständig ist `LD` des
+   eingeladenen Lieferanten; eine Nachricht an „die Lieferanten" gibt es nicht,
+   jeder erfährt nur von seiner Einladung (2.3). Abgelehnte Einladungen und
+   geschlossene Ausschreibungen erzeugen keinen Befund.
+7. **Bei der Verlängerung gilt der frühere Termin.** Das ist der Sinn des
+   „spätestens 10 Kalendertage vor Einsatzende": eine Verlängerung nach dem
+   Einsatzende verlängert nichts mehr.
+8. **Die Meldung zum Profil nennt den Vorschlag, nicht den Kandidaten** — der
+   Name gehört nicht in eine Nachricht, die auch der Betreiber liest, solange
+   2.3 ihn nicht verlangt.
+
+### Gefunden
+
+- **Ein Entwurf hatte plötzlich ein Einreichungsdatum.** Ein Skriptlauf über
+  die Saatsätze der Bedarfsanfragen hat beim letzten Satz über die Liste hinaus
+  gegriffen und dem Profilvorschlag `PV-2026-0001` (Status `draft`) ein
+  `submittedAt` gesetzt. Gefunden durch eine vollständige Nachprüfung aller
+  Saatsätze (Status gegen Zeitpunkt); korrigiert. SPEC 3.6 sagt dazu: im
+  Entwurf bleibt der Zeitpunkt leer.
+
+### Geprüft
+
+- `npm test` **1215 grün** (+38), `npm run test:services` **337 grün** (+5),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **25 Mutationen, alle gefangen** — darunter „Samstag gilt als Arbeitstag",
+  „Feiertage zählen nicht", „Landesfeiertage gelten überall", „Ostern um einen
+  Tag verschoben", „Buß- und Bettag auf den 23. gelegt", „Ausgangstag zählt
+  mit", „Befund schon am Tag des Fristablaufs", „Anfrage ohne `submittedAt`
+  wird gemeldet", „abgelehnte Einladung wird gemeldet", „spätere Grenze gewinnt
+  bei der Verlängerung".
+- **Am laufenden Prototyp**: der Lauf zum 2026-11-23 prüfte 13 Vorgänge und
+  meldete unter anderem `demandApprovalOverdue` auf **Stufe 1** an `approver`
+  (eingereicht am 16. November, Frist am 19. abgelaufen, ein Arbeitstag
+  seither) und `submissionFeedbackOverdue` auf **allen drei Stufen** (dem
+  Kunden seit dem 7. Oktober vorgelegt). Zustellung: 13 Briefe.
+
+### Offen
+
+- **`tenderNoOffer` und `extensionApprovalOverdue` sind im Seed nicht zu
+  sehen**: alle Einladungen haben ein Angebot oder sind abgelehnt, und die
+  beantragte Verlängerung ist auf den 20. Dezember datiert — eine Frist, die
+  noch nicht begonnen hat, kann nicht überschritten sein. Beide Wege deckt
+  `tests/services/nightly.test.ts` gegen eine echte Datenbank ab.
+- **Arbeitstage gibt es nur bei den Prozessfristen** (4.0). Die AÜG-Fristen
+  bleiben in Kalendertagen (5.0) — das ist dort ausdrücklich so festgelegt.
+- Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Mailbetreiber
+  und Planer am Hoster (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne
+  Rechenweg (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix
+  „P11: P11: …" im Audit-Eintrag.
+
+---
+
 ## 2026-11-23 — Stufenabstand der Eskalation (2.4 Regel 6, 4.0, Frage 57)
 
 ### Gemacht

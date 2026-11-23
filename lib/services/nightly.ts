@@ -29,12 +29,16 @@ import type { Rollenkuerzel } from '../aueg/typen'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import {
   befundLaufAusgefallen,
+  befundeAnfrageOhneFreigabe,
+  befundeAusschreibungOhneAngebot,
   befundeBelegBeanstandet,
   befundeN1,
   befundeN2,
   befundeN3,
   befundeN5,
   befundeN6,
+  befundeProfilOhneRueckmeldung,
+  befundeVerlaengerungOhneEntscheidung,
   befundeZettelNichtEingereicht,
   befundeZettelNichtGenehmigt,
   type Befundart,
@@ -147,6 +151,11 @@ async function laufDurchfuehren(
     ...befundeZettelNichtEingereicht(lagen.zettel, tag),
     ...befundeZettelNichtGenehmigt(lagen.zettel, tag),
     ...befundeBelegBeanstandet(lagen.belege, tag),
+    // Die vier Anlässe aus 2.4 mit Arbeitstagfristen (4.0).
+    ...befundeAnfrageOhneFreigabe(lagen.anfragen, tag, operatorTenant.id),
+    ...befundeAusschreibungOhneAngebot(lagen.einladungen, tag, operatorTenant.id),
+    ...befundeProfilOhneRueckmeldung(lagen.vorschlaege, tag, operatorTenant.id),
+    ...befundeVerlaengerungOhneEntscheidung(lagen.verlaengerungen, tag, operatorTenant.id),
     // 5.5.1: die Lücke, die dieser Lauf schließt. Sie steht **im** Lauf, weil
     // es den einzigen Zeitpunkt gibt, zu dem das System sie bemerken kann.
     ...befundLaufAusgefallen(stand, operatorTenant.id),
@@ -388,9 +397,72 @@ async function ladeLagen(operatorTenantId: string) {
       supplier: { select: { tenantId: true } },
     },
   })
+  // Die vier Fristanlässe aus 2.4 mit Arbeitstagfristen (4.0). Jede Abfrage
+  // liest das **Bundesland des Standorts** mit: es bestimmt die Feiertage und
+  // damit die Frist (4.0).
+  const anfragen = await prisma.demandRequest.findMany({
+    where: { status: 'submitted' },
+    include: {
+      customer: { select: { tenantId: true, processDeadlineConfig: true } },
+      site: { select: { federalState: true } },
+    },
+  })
+  const einladungen = await prisma.tenderInvitation.findMany({
+    where: { tender: { closedAt: null } },
+    include: {
+      supplier: { select: { tenantId: true, legalName: true } },
+      offer: { select: { id: true } },
+      tender: {
+        select: {
+          tenderNumber: true,
+          offerDeadline: true,
+          closedAt: true,
+          demandRequest: {
+            select: {
+              customer: { select: { tenantId: true, processDeadlineConfig: true } },
+              site: { select: { federalState: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  const vorschlaege = await prisma.candidateSubmission.findMany({
+    where: { status: 'releasedToCustomer' },
+    include: {
+      demandRequest: {
+        select: {
+          customer: { select: { tenantId: true, processDeadlineConfig: true } },
+          site: { select: { federalState: true } },
+        },
+      },
+    },
+  })
+  const verlaengerungen = await prisma.assignmentExtension.findMany({
+    where: { status: 'requested' },
+    include: {
+      assignment: {
+        select: {
+          assignmentNumber: true,
+          tenantId: true,
+          plannedEndDate: true,
+          customer: { select: { tenantId: true, processDeadlineConfig: true } },
+          site: { select: { federalState: true } },
+        },
+      },
+    },
+  })
 
   return {
-    geprueft: lieferanten.length + einsaetze.length + zettel.length + belege.length,
+    geprueft:
+      lieferanten.length +
+      einsaetze.length +
+      zettel.length +
+      belege.length +
+      anfragen.length +
+      einladungen.length +
+      vorschlaege.length +
+      verlaengerungen.length,
     lieferanten: lieferanten.map((lieferant) => ({
       id: lieferant.id,
       legalName: lieferant.legalName,
@@ -471,6 +543,81 @@ async function ladeLagen(operatorTenantId: string) {
       disputeEscalationStepDays: prozessfristTage(
         beleg.customer?.processDeadlineConfig,
         'billingDisputeEscalationStepDays',
+      ),
+    })),
+    anfragen: anfragen.map((anfrage) => ({
+      id: anfrage.id,
+      requestNumber: anfrage.requestNumber,
+      tenantId: anfrage.tenantId,
+      customerTenantId: anfrage.customer.tenantId,
+      status: anfrage.status,
+      submittedAt: anfrage.submittedAt,
+      land: anfrage.site.federalState,
+      fristArbeitstage: prozessfristTage(
+        anfrage.customer.processDeadlineConfig,
+        'demandApprovalDeadlineDays',
+      ),
+      stufenabstandArbeitstage: prozessfristTage(
+        anfrage.customer.processDeadlineConfig,
+        'demandApprovalEscalationStepDays',
+      ),
+    })),
+    einladungen: einladungen.map((einladung) => ({
+      id: einladung.id,
+      tenderNumber: einladung.tender.tenderNumber,
+      supplierName: einladung.supplier.legalName,
+      tenantId: einladung.tenantId,
+      supplierTenantId: einladung.supplier.tenantId,
+      customerTenantId: einladung.tender.demandRequest.customer.tenantId,
+      invitationStatus: einladung.invitationStatus,
+      offerDeadline: einladung.tender.offerDeadline,
+      hatAngebot: einladung.offer !== null,
+      ausschreibungOffen: einladung.tender.closedAt === null,
+      land: einladung.tender.demandRequest.site.federalState,
+      stufenabstandArbeitstage: prozessfristTage(
+        einladung.tender.demandRequest.customer.processDeadlineConfig,
+        'offerDeadlineEscalationStepDays',
+      ),
+    })),
+    vorschlaege: vorschlaege.map((vorschlag) => ({
+      id: vorschlag.id,
+      submissionNumber: vorschlag.submissionNumber,
+      tenantId: vorschlag.tenantId,
+      customerTenantId: vorschlag.demandRequest.customer.tenantId,
+      status: vorschlag.status,
+      releasedToCustomerAt: vorschlag.releasedToCustomerAt,
+      land: vorschlag.demandRequest.site.federalState,
+      fristArbeitstage: prozessfristTage(
+        vorschlag.demandRequest.customer.processDeadlineConfig,
+        'submissionFeedbackDeadlineDays',
+      ),
+      stufenabstandArbeitstage: prozessfristTage(
+        vorschlag.demandRequest.customer.processDeadlineConfig,
+        'submissionFeedbackEscalationStepDays',
+      ),
+    })),
+    verlaengerungen: verlaengerungen.map((verlaengerung) => ({
+      id: verlaengerung.id,
+      assignmentNumber: verlaengerung.assignment.assignmentNumber,
+      // Die Verlängerung trägt keinen eigenen Mandanten (3.7): maßgeblich ist
+      // der des Einsatzes, zu dem sie gehört.
+      tenantId: verlaengerung.assignment.tenantId,
+      customerTenantId: verlaengerung.assignment.customer.tenantId,
+      status: verlaengerung.status,
+      requestedAt: verlaengerung.requestedAt,
+      plannedEndDate: verlaengerung.assignment.plannedEndDate,
+      land: verlaengerung.assignment.site.federalState,
+      fristArbeitstage: prozessfristTage(
+        verlaengerung.assignment.customer.processDeadlineConfig,
+        'extensionApprovalDeadlineDays',
+      ),
+      spaetestensTageVorEnde: prozessfristTage(
+        verlaengerung.assignment.customer.processDeadlineConfig,
+        'extensionApprovalLatestDaysBeforeEnd',
+      ),
+      stufenabstandArbeitstage: prozessfristTage(
+        verlaengerung.assignment.customer.processDeadlineConfig,
+        'extensionApprovalEscalationStepDays',
       ),
     })),
   }

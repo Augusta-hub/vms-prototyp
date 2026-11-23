@@ -1345,6 +1345,10 @@ model DemandRequest {
   currency            String?
   /// Für Lieferanten **nicht** sichtbar ([14]).
   internalNote        String?
+  /// Beginn der Freigabefrist aus 4.0 (3.4). Ohne diesen Zeitpunkt wäre der
+  /// Eskalationsanlass „Bedarfsanfrage liegt zur Freigabe" nicht zu rechnen:
+  /// `createdAt` ist der Entwurf, nicht die Einreichung.
+  submittedAt         DateTime?
   approvedAt          DateTime?
   approvedById        String?
   approvedBy          User?               @relation("DemandApprovedBy", fields: [approvedById], references: [id])
@@ -3009,6 +3013,10 @@ enum NotificationTrigger {
   /// Der Befund entsteht in dem Lauf, der die Lücke schließt — das System kann
   /// sein eigenes Schweigen nicht melden.
   nightlyRunMissed
+  demandApprovalOverdue
+  tenderNoOffer
+  submissionFeedbackOverdue
+  extensionApprovalOverdue
 }
 
 /// Benachrichtigung (`notification`, SPEC 3.14).

@@ -29,4 +29,8 @@ export const NOTIFICATION_TRIGGER_LABELS: Readonly<Record<string, string>> = {
   statusTransition: 'Statuswechsel (Kapitel 4)',
   ruleWarning: 'Warnung aus der Prüfung zum Übergang (4.7)',
   nightlyRunMissed: 'Nächtlicher Lauf ausgeblieben (5.5.1)',
+  demandApprovalOverdue: 'Bedarfsanfrage nicht freigegeben (2.4, 4.1)',
+  tenderNoOffer: 'Ausschreibung ohne Angebot (2.4, 4.2)',
+  submissionFeedbackOverdue: 'Profil ohne Rückmeldung des Kunden (2.4, 4.2)',
+  extensionApprovalOverdue: 'Verlängerung nicht entschieden (2.4, 4.3.2)',
 }

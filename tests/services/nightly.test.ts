@@ -34,6 +34,7 @@ import {
   legeAbrechnungsperiodeAn,
   legeEinsatzAn,
   legeGenehmigtenZettelAn,
+  legeProfilvorschlagAn,
   leereDatenbank,
   tag,
   type Welt,
@@ -98,6 +99,168 @@ describe('Wer den Lauf anstoßen darf (2.3, 3.14)', () => {
     const ergebnis = await runNightly(lieferantAdmin, HEUTE)
     expect(ergebnis.ok).toBe(false)
     expect(await prisma.notification.count()).toBe(0)
+  })
+})
+
+describe('Die vier Fristanlässe aus 2.4 mit Arbeitstagfristen (4.0)', () => {
+  it('meldet eine Bedarfsanfrage, die zur Freigabe liegt — an `KG` beim Kunden', async () => {
+    await prisma.demandRequest.create({
+      data: {
+        tenantId: welt.kundenMandant,
+        requestNumber: 'BA-2026-0900',
+        customerId: welt.kunde,
+        siteId: welt.standort,
+        costCenterId: welt.kostenstelle,
+        title: 'Montage Linie 9',
+        activityDescription: 'Montage (synthetisch)',
+        startDate: tag('2026-12-01'),
+        weeklyHours: '35.00',
+        headcount: 1,
+        status: 'submitted',
+        // Eingereicht am 2026-11-02 (Montag): die Frist von drei Arbeitstagen
+        // lief am 5. ab, der Stichtag ist der 12. — alle drei Stufen (4.0).
+        submittedAt: tag('2026-11-02'),
+        requestedById: welt.bedarfstraeger,
+      },
+    })
+
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'demandApprovalOverdue' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'approver',
+      'demandOwner',
+      'operatorCoordinator',
+    ])
+    expect(nachrichten[0]?.recipientTenantId).toBe(welt.kundenMandant)
+    expect(nachrichten[2]?.recipientTenantId).toBe(welt.betreiberMandant)
+    expect(nachrichten[0]?.ruleRef).toBeNull()
+  })
+
+  it('meldet nichts zu einer Anfrage ohne Einreichungszeitpunkt', async () => {
+    await prisma.demandRequest.create({
+      data: {
+        tenantId: welt.kundenMandant,
+        requestNumber: 'BA-2026-0901',
+        customerId: welt.kunde,
+        siteId: welt.standort,
+        costCenterId: welt.kostenstelle,
+        title: 'Montage Linie 9',
+        activityDescription: 'Montage (synthetisch)',
+        startDate: tag('2026-12-01'),
+        weeklyHours: '35.00',
+        headcount: 1,
+        status: 'submitted',
+        submittedAt: null,
+        requestedById: welt.bedarfstraeger,
+      },
+    })
+    ok(await runNightly(administrator, HEUTE))
+    expect(await prisma.notification.count({ where: { trigger: 'demandApprovalOverdue' } })).toBe(0)
+  })
+
+  it('meldet ein vorgelegtes Profil ohne Rückmeldung — an `KB` beim Kunden', async () => {
+    await legeProfilvorschlagAn(welt, {
+      nummer: 'PV-2026-0900',
+      status: 'releasedToCustomer',
+      verfuegbarAb: tag('2026-12-01'),
+    })
+
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'submissionFeedbackOverdue' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'demandOwner',
+      'approver',
+      'operatorCoordinator',
+    ])
+    // Die Meldung nennt den Vorschlag, nicht den Kandidaten (2.3).
+    expect(nachrichten[0]?.message).toContain('PV-2026-0900')
+  })
+
+  it('meldet eine Ausschreibung ohne Angebot — an `LD` beim Lieferanten', async () => {
+    const anfrage = await prisma.demandRequest.create({
+      data: {
+        tenantId: welt.kundenMandant,
+        requestNumber: 'BA-2026-0902',
+        customerId: welt.kunde,
+        siteId: welt.standort,
+        costCenterId: welt.kostenstelle,
+        title: 'Montage Linie 9',
+        activityDescription: 'Montage (synthetisch)',
+        startDate: tag('2026-12-01'),
+        weeklyHours: '35.00',
+        headcount: 1,
+        status: 'tendered',
+        requestedById: welt.bedarfstraeger,
+      },
+    })
+    const ausschreibung = await prisma.tender.create({
+      data: {
+        tenantId: welt.betreiberMandant,
+        tenderNumber: 'AS-2026-0902',
+        demandRequestId: anfrage.id,
+        tenderRound: 1,
+        distributionMode: 'simultaneous',
+        publishedAt: tag('2026-10-26'),
+        publishedById: welt.administrator,
+        offerDeadline: tag('2026-11-02'),
+      },
+    })
+    await prisma.tenderInvitation.create({
+      data: {
+        tenantId: welt.betreiberMandant,
+        tenderId: ausschreibung.id,
+        supplierId: welt.lieferant,
+        invitedAt: tag('2026-10-26'),
+        invitationStatus: 'viewed',
+      },
+    })
+
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'tenderNoOffer' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'supplierCoordinator',
+      'supplierAdmin',
+      'operatorCoordinator',
+    ])
+    expect(nachrichten[0]?.recipientTenantId).toBe(welt.lieferantMandant)
+    expect(nachrichten[0]?.message).toContain('AS-2026-0902')
+  })
+
+  it('meldet eine beantragte Verlängerung ohne Entscheidung — an `KG`', async () => {
+    await prisma.assignmentExtension.create({
+      data: {
+        assignmentId: einsatz,
+        requestedAt: tag('2026-11-02'),
+        requestedById: welt.bedarfstraeger,
+        newEndDate: tag('2027-03-31'),
+        reason: 'Projekt läuft länger (synthetisch)',
+        status: 'requested',
+      },
+    })
+
+    // Beantragt am 2026-11-02 (Montag), fünf Arbeitstage Frist: sie lief am
+    // 9. ab. Am Stichtag, dem 12., sind zwei Arbeitstage verstrichen — bei
+    // einem Stufenabstand von zwei ist damit genau die zweite Stufe erreicht.
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'extensionApprovalOverdue' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'approver',
+      'procurementController',
+    ])
+    expect(nachrichten[0]?.recipientTenantId).toBe(welt.kundenMandant)
+    expect(nachrichten[0]?.message).toContain('verlängert **nicht**')
   })
 })
 
