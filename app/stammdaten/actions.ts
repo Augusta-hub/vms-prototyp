@@ -8,6 +8,7 @@
  * Dienst über `checkPermission` (2.2, 2.3). Scheitert eine Handlung, trägt die
  * Meldung die Begründung mit SPEC-Verweis.
  */
+import { FederalState } from '@prisma/client'
 import { redirect } from 'next/navigation'
 import { currentIdentity } from '../identity'
 import type { ActionResult } from '../../lib/services/common'
@@ -76,6 +77,18 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
   )
 }
 
+/**
+ * Das Bundesland aus dem Formular (3.1) — leer bleibt leer.
+ *
+ * Geprüft wird gegen den Katalog: ein unbekanntes Kürzel wäre ein stilles
+ * „keine Landesfeiertage" (4.0), und das soll nicht aus einem Tippfehler
+ * entstehen.
+ */
+function bundesland(formData: FormData): FederalState | null {
+  const wert = text(formData, 'federalState')
+  return wert !== '' && wert in FederalState ? (wert as FederalState) : null
+}
+
 export async function createSiteAction(formData: FormData): Promise<void> {
   const { identity, hint } = await currentIdentity()
   if (identity === null) back({ ok: false, error: hint ?? 'Keine Identität.' })
@@ -87,6 +100,7 @@ export async function createSiteAction(formData: FormData): Promise<void> {
       addressStreet: text(formData, 'addressStreet'),
       addressPostalCode: text(formData, 'addressPostalCode'),
       addressCity: text(formData, 'addressCity'),
+      federalState: bundesland(formData),
       standardWeeklyHours: decimal(formData, 'standardWeeklyHours'),
       safetyBriefingRequired: text(formData, 'safetyBriefingRequired') === 'ja',
       validFrom: date(formData, 'validFrom') ?? new Date(),

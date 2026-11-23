@@ -34,6 +34,33 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Die 16 Länder für die Standortanlage (3.1).
+ *
+ * Der erste Eintrag ist leer und ausdrücklich benannt: ohne Bundesland gelten
+ * nur die bundeseinheitlichen Feiertage (4.0), und das soll man wählen können,
+ * ohne es zu raten.
+ */
+const BUNDESLAENDER: readonly { readonly id: string; readonly label: string }[] = [
+  { id: '', label: '— ohne Land (nur bundeseinheitliche Feiertage)' },
+  { id: 'BW', label: 'BW — Baden-Württemberg' },
+  { id: 'BY', label: 'BY — Bayern' },
+  { id: 'BE', label: 'BE — Berlin' },
+  { id: 'BB', label: 'BB — Brandenburg' },
+  { id: 'HB', label: 'HB — Bremen' },
+  { id: 'HH', label: 'HH — Hamburg' },
+  { id: 'HE', label: 'HE — Hessen' },
+  { id: 'MV', label: 'MV — Mecklenburg-Vorpommern' },
+  { id: 'NI', label: 'NI — Niedersachsen' },
+  { id: 'NW', label: 'NW — Nordrhein-Westfalen' },
+  { id: 'RP', label: 'RP — Rheinland-Pfalz' },
+  { id: 'SL', label: 'SL — Saarland' },
+  { id: 'SN', label: 'SN — Sachsen' },
+  { id: 'ST', label: 'ST — Sachsen-Anhalt' },
+  { id: 'SH', label: 'SH — Schleswig-Holstein' },
+  { id: 'TH', label: 'TH — Thüringen' },
+]
+
 export default async function StammdatenPage({
   searchParams,
 }: {
@@ -105,6 +132,7 @@ export default async function StammdatenPage({
           ['Bezeichnung', 'name'],
           ['Kunde', 'customer'],
           ['Ort', 'addressCity'],
+          ['Bundesland', 'federalState'],
           ['Regelarbeitszeit', 'standardWeeklyHours'],
           ['Unterweisung nötig', 'safetyBriefingRequired'],
           ['gültig ab', 'validFrom'],
@@ -121,6 +149,11 @@ export default async function StammdatenPage({
               <Feld name="addressStreet" label="Straße" />
               <Feld name="addressPostalCode" label="PLZ" />
               <Feld name="addressCity" label="Ort" />
+              <Auswahl
+                name="federalState"
+                label="Bundesland (Feiertage, 4.0)"
+                options={BUNDESLAENDER}
+              />
               <Feld name="standardWeeklyHours" label="Regelarbeitszeit (Std./Woche)" />
               <Auswahl
                 name="safetyBriefingRequired"

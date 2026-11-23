@@ -473,6 +473,9 @@ async function main(): Promise<void> {
       addressPostalCode: '21079',
       addressCity: 'Hamburg',
       addressCountry: 'DE',
+      // Bundesland des Einsatzorts (3.1): es bestimmt die Feiertage der
+      // Arbeitstagfristen aus 4.0 — in Hamburg etwa den Reformationstag.
+      federalState: 'HH',
       standardWeeklyHours: 38.5,
       safetyBriefingRequired: true,
       validFrom: day('2025-01-01'),
@@ -494,6 +497,7 @@ async function main(): Promise<void> {
       addressPostalCode: '21107',
       addressCity: 'Hamburg',
       addressCountry: 'DE',
+      federalState: 'HH',
       standardWeeklyHours: 35,
       safetyBriefingRequired: true,
       validFrom: day('2025-06-01'),
@@ -512,6 +516,7 @@ async function main(): Promise<void> {
       addressPostalCode: '37412',
       addressCity: 'Herzberg am Harz',
       addressCountry: 'DE',
+      federalState: 'NI',
       standardWeeklyHours: 40,
       safetyBriefingRequired: false,
       validFrom: day('2025-04-01'),

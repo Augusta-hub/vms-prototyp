@@ -18,6 +18,7 @@
  *     und nicht mitten in der Transaktion: ein verweigerter Versuch würde
  *     seinen eigenen Eintrag zurückrollen.
  */
+import type { FederalState } from '@prisma/client'
 import { schreibEintrag } from '../audit/entry'
 import { protokolliere, protokolliereGetrennt } from '../audit/record'
 import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
@@ -98,6 +99,8 @@ export interface SiteFields {
   readonly name: string
   readonly customer: string
   readonly addressCity: string
+  /** Bundesland (3.1) — es bestimmt die Feiertage der Arbeitstagfristen (4.0). */
+  readonly federalState: string | null
   readonly standardWeeklyHours: string | null
   readonly safetyBriefingRequired: string
   readonly validFrom: string
@@ -295,6 +298,7 @@ export async function loadMasterData(identity: LoadedIdentity): Promise<MasterDa
         name: site.name,
         customer: site.customer.legalName,
         addressCity: site.addressCity,
+        federalState: site.federalState,
         standardWeeklyHours: site.standardWeeklyHours?.toString() ?? null,
         safetyBriefingRequired: site.safetyBriefingRequired ? 'ja' : 'nein',
         validFrom: REQUIRED_DATE(site.validFrom),
@@ -680,6 +684,12 @@ export interface NewSiteInput {
   readonly addressStreet: string
   readonly addressPostalCode: string
   readonly addressCity: string
+  /**
+   * Bundesland des Einsatzorts (3.1). `null` bleibt zulässig: ohne Land gelten
+   * nur die bundeseinheitlichen Feiertage (4.0), und das ist besser als ein
+   * geratener Wert.
+   */
+  readonly federalState: FederalState | null
   readonly standardWeeklyHours: number | null
   readonly safetyBriefingRequired: boolean
   readonly validFrom: Date
@@ -718,6 +728,7 @@ export async function createSite(
           addressPostalCode: input.addressPostalCode.trim(),
           addressCity: input.addressCity.trim(),
           addressCountry: 'DE',
+          federalState: input.federalState,
           standardWeeklyHours: input.standardWeeklyHours,
           safetyBriefingRequired: input.safetyBriefingRequired,
           validFrom: input.validFrom,

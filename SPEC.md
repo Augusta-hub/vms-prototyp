@@ -172,6 +172,9 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Prozessfrist | `processDeadline` | Frist des Verfahrens ohne rechtliche Wirkung; Vorbelegungen in 4.0 |
 | Fristvorbelegung | `…DeadlineDays` | Konfigurationsschlüssel einer Prozessfrist in `processDeadlineConfig` (3.1), Werte in 4.0 |
 | Stufenabstand | `…EscalationStepDays` | Tage, nach denen eine Eskalation aus einer Prozessfrist auf die nächste Stufe rückt (2.4, Regel 6; Werte in 4.0) |
+| Arbeitstag | `workingDay` | Montag bis Freitag ohne Feiertag des maßgeblichen Bundeslands (4.0) |
+| Bundesland | `federalState` | Land, dessen Feiertage für einen Standort gelten (3.1) |
+| Feiertag | `publicHoliday` | gesetzlicher Feiertag; bundeseinheitlich oder je Bundesland (4.0) |
 | Fristenlauf | `deadlineClock` | Beginn und Fortlauf einer Frist, die ein Übergang in Gang setzt |
 | Prüfergebnis | `ruleCheckResult` | Ergebnis einer AÜG-Prüfung (Kapitel 4.7, 5.5) |
 | Information (Ergebnisart) | `info` | Übergang findet statt, Ergebnis wird vermerkt (4.7) |
@@ -924,6 +927,7 @@ Kennzeichnungs- und Konkretisierungspflicht des Überlassungsvertrags verlangt
 | Bezeichnung | `name` | Text | Pflicht | |
 | Kunde | `customerRef` | Verweis auf `customer` | Pflicht | |
 | Anschrift | `address` | strukturierte Anschrift | Pflicht | Einsatzort im Sinne von 5.3 |
+| Bundesland | `federalState` | Katalogwert der 16 Länder | optional | bestimmt die **Feiertage** der Arbeitstagfristen aus 4.0; fehlt es, gelten nur die bundeseinheitlichen |
 | Betriebsvereinbarung | `worksCouncilAgreement` | Verweis auf `document` (3.10) | optional | kann die Höchstüberlassungsdauer abweichend regeln (5.1) |
 | Tarifzuordnung | `collectiveAgreementRef` | Verweis (3.3) | optional | Branchenzuschlag je Einsatzbranche (5.2) |
 | Regelarbeitszeit | `standardWeeklyHours` | Dezimalzahl, Stunden | optional | Vorbelegung für Bedarfsanfrage und Einsatz |
@@ -2769,6 +2773,47 @@ Kapitel 5. Fristablauf löst Erinnerung und Eskalation aus, nie einen Übergang
 | Prüfung eines Abrechnungsbelegs | `billingReviewDeadlineDays` | 14 Kalendertage ab `released` | `billingReviewEscalationStepDays` — 7 Kalendertage | Erinnerung, dann Eskalation; **keine** Bestätigungsfiktion |
 | Klärung einer Beanstandung | — keine Frist: der Befund entsteht mit der Beanstandung (4.5.2) | — | `billingDisputeEscalationStepDays` — 7 Kalendertage | Eskalation MD → MA (2.4); **keine** Bestätigungsfiktion |
 | Vorlauf vor Ablauf eines Nachweises | → Kapitel 5.4 | **festgelegt in 5.4.4**, je Nachweisart gestuft; keine Prozessfrist, sondern Festwert des Regelwerks (5.0) | — (Stufe aus der Restzeit, 5.4.4) | Information, Warnung, Eskalation nach Stufenfolge (5.4.4); **kein** Übergang |
+
+**Was ein Arbeitstag ist.** Montag bis Freitag, ohne die gesetzlichen
+Feiertage des maßgeblichen **Bundeslands**. Maßgeblich ist das Bundesland des
+**Standorts des Vorgangs** (`federalState`, 3.1) — nicht der Sitz des
+Lieferanten und nicht der des Betreibers: der Vorgang hat einen Einsatzort, und
+der ist für alle Beteiligten derselbe. Führt der Standort kein Bundesland,
+gelten **nur die bundeseinheitlichen** Feiertage; das ist sichtbar und kein
+geratener Wert.
+
+| Feiertag | Datum | Gilt in |
+|---|---|---|
+| Neujahr | 1. Januar | bundeseinheitlich |
+| Karfreitag | Ostersonntag − 2 Tage | bundeseinheitlich |
+| Ostermontag | Ostersonntag + 1 Tag | bundeseinheitlich |
+| Tag der Arbeit | 1. Mai | bundeseinheitlich |
+| Christi Himmelfahrt | Ostersonntag + 39 Tage | bundeseinheitlich |
+| Pfingstmontag | Ostersonntag + 50 Tage | bundeseinheitlich |
+| Tag der Deutschen Einheit | 3. Oktober | bundeseinheitlich |
+| 1. Weihnachtstag | 25. Dezember | bundeseinheitlich |
+| 2. Weihnachtstag | 26. Dezember | bundeseinheitlich |
+| Heilige Drei Könige | 6. Januar | BW, BY, ST |
+| Internationaler Frauentag | 8. März | BE, MV |
+| Fronleichnam | Ostersonntag + 60 Tage | BW, BY, HE, NW, RP, SL |
+| Mariä Himmelfahrt | 15. August | SL |
+| Weltkindertag | 20. September | TH |
+| Reformationstag | 31. Oktober | BB, HB, HH, MV, NI, SH, SN, ST, TH |
+| Allerheiligen | 1. November | BW, BY, NW, RP, SL |
+| Buß- und Bettag | Mittwoch vor dem 23. November | SN |
+
+Ostersonntag wird aus dem Jahr **gerechnet** (gregorianische Osterformel) und
+nicht in einer Tabelle gepflegt: eine Tabelle müsste jedes Jahr erweitert
+werden, und ein fehlendes Jahr wäre ein stillschweigend falscher Kalender.
+
+> *(offene Frage 59)* **Gemeindegebundene Feiertage.** Drei Feiertage gelten
+> nicht im ganzen Land: das **Augsburger Friedensfest** (8. August) nur in der
+> Stadt Augsburg, **Mariä Himmelfahrt** zusätzlich in den überwiegend
+> katholischen Gemeinden Bayerns, **Fronleichnam** zusätzlich in einzelnen
+> Gemeinden Sachsens und Thüringens. Das Bundesland am Standort trägt diese
+> Unterscheidung nicht; nötig wäre ein Gemeindeschlüssel und eine Pflegeliste.
+> Bis zur Antwort rechnet das System sie **nicht** als Feiertag — eine Frist
+> endet dort also einen Arbeitstag früher als vor Ort.
 
 **Wie der Stufenabstand gelesen wird.** Die erste Stufe entsteht mit dem
 Befund, jede weitere nach einem vollen Stufenabstand (2.4, Regel 6). Bei einer
@@ -5412,5 +5457,6 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 56 | **Auf welchem Weg wird benachrichtigt — und gilt eine Benachrichtigung als gelesen?** 2.4 und Kapitel 4 verlangen Benachrichtigungen, nennen aber keinen Zustellweg. Daran hängt mehr als die Technik: eine E-Mail verlässt das System und unterliegt damit 2.3 und Kapitel 6 in anderer Weise als eine Anzeige, die nur sieht, wer ohnehin Zugriff hat. | Kapitel 2.4, 3.14, 6 | **entschieden:** beide Wege, beide immer — **Postfach** im System *und* **E-Mail mit der Meldung** an die Träger der adressierten Rollenzuweisung; Adresse ist die Anmeldekennung (3.11). Der Mailbetreiber ist Auftragsverarbeiter (6.8, 6.9); ohne konfigurierten Mailweg geht nichts hinaus. „Gelesen" entsteht **je Person** im Postfach, als eigener Lesevermerk — die Benachrichtigung bleibt unverändert, und die Eskalation läuft weiter nach Zeit (2.4, Regel 2). Zustellweg, Zustellung und Lesevermerk stehen in 3.14. Die Übergabe an ein Fremdsystem bleibt *Frage 7*. |
 | 57 | **In welchem Abstand rückt eine Eskalation auf die nächste Stufe?** Für die Anlässe aus Kapitel 5 ist die Stufe durch die **Restzeit** bestimmt (5.4.4, 5.1.6, 5.0). Für die **Prozessfristen** aus 4.0 gibt es nur einen Termin und danach eine Stufenfolge ohne Abstand: „Vertretung → KB → MD" sagt die Reihenfolge, nicht den Takt. | Kapitel 2.4, 3.14, 4.0 | **entschieden:** **Stufenabstand je Anlass** (2.4, Regel 6), Vorbelegungen in der Tabelle 4.0, je Kunde über `processDeadlineConfig` übersteuerbar (2.4, Regel 5). Stufe 1 entsteht mit dem Befund, jede weitere nach einem vollen Abstand; die Stufen sind **kumulativ**, und mehr als die Stufenfolge nennt, gibt es nicht. Die **Vertretung** ist keine eigene Stufe — adressiert wird eine Rolle (3.14), und wer sie vertritt, erhält deren Nachricht über den Zustellweg (Frage 56). |
 | 58 | **Welche Rolle ist „der Antragsteller", wenn eine Person mehrere Rollen in derselben Organisation trägt?** Kapitel 4 adressiert mehrere Nachrichten relativ: „an den Antragsteller" (4.3), „an die erfassende Seite" (4.4), „an den Einsteller" (5.4). 3.14 adressiert aber eine **Rolle in einer Organisation**, nicht eine Person — und 3.11 erlaubt einer Person mehrere Rollenzuweisungen im selben Mandanten. Trägt der Antragsteller `KB` **und** `KG`, ist offen, welche Rolle die Nachricht erhält: beide, die höhere, oder die, in der gehandelt wurde (dann wäre die Rollenzuweisung der Handlung festzuhalten, über den Audit-Eintrag hinaus). Die Umsetzung nimmt bis zur Antwort die **erste** Rolle nach der Reihenfolge in 2.1; die Nachricht bleibt damit in der Organisation, in der gehandelt wurde, und offenbart nichts über 2.3 hinaus. | Kapitel 2.1, 3.11, 3.14, 4.3, 4.4 | offen |
+| 59 | **Gelten gemeindegebundene Feiertage?** Das Bundesland am Standort (3.1) bestimmt die Feiertage der Arbeitstagfristen (4.0). Drei Feiertage gelten aber nur in Teilen eines Landes: das Augsburger Friedensfest (8. August) in der Stadt Augsburg, Mariä Himmelfahrt in den überwiegend katholischen Gemeinden Bayerns, Fronleichnam in einzelnen Gemeinden Sachsens und Thüringens. Nötig wären ein Gemeindeschlüssel am Standort und eine Pflegeliste. Bis zur Antwort rechnet das System sie nicht als Feiertag; eine Prozessfrist endet dort einen Arbeitstag früher als vor Ort. | Kapitel 3.1, 4.0 | offen |
 
 Neue Fragen werden hier ergänzt, nicht im Code beantwortet.

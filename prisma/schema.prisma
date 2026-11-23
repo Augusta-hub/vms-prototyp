@@ -823,6 +823,30 @@ model ContactPerson {
 /// Er trägt die Angaben, die die Kennzeichnungs- und Konkretisierungspflicht
 /// des Überlassungsvertrags verlangt (§ 1 Abs. 1 AÜG, 5.3), und die Grundlage
 /// der Unterweisungspflicht (`safetyBriefingRequired`, 3.10 und 5.4).
+/// Die 16 Länder (3.1, 4.0) in den üblichen Kürzeln.
+///
+/// Ein Katalog und keine freie Zeichenkette: die Feiertagsregeln in 4.0 hängen
+/// an genau diesen Werten, und ein Tippfehler wäre ein stilles „keine
+/// Landesfeiertage".
+enum FederalState {
+  BW
+  BY
+  BE
+  BB
+  HB
+  HH
+  HE
+  MV
+  NI
+  NW
+  RP
+  SL
+  SN
+  ST
+  SH
+  TH
+}
+
 model Site {
   /// Nachweise und Schriftstücke zu diesem Objekt (3.10).
   documents                       Document[]
@@ -837,6 +861,13 @@ model Site {
   addressPostalCode               String
   addressCity                     String
   addressCountry                  String
+  /// Bundesland des Einsatzorts (3.1). Es bestimmt die **Feiertage** der
+  /// Arbeitstagfristen aus 4.0 — und nur das; eine Anschrift trägt das Land
+  /// nicht verlässlich, und aus der Postleitzahl ist es nicht herzuleiten.
+  ///
+  /// Optional, weil ein geratener Wert schlechter wäre als keiner: fehlt es,
+  /// gelten nur die bundeseinheitlichen Feiertage (4.0), und das ist sichtbar.
+  federalState                    FederalState?
   /// Betriebsvereinbarung (3.1) — Verweis auf `document` (3.10). Das Objekt
   /// ist noch nicht modelliert; bis dahin ein benannter Skalar.
   worksCouncilAgreementRef        String?
