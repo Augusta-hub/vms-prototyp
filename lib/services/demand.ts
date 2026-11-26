@@ -19,9 +19,13 @@ import {
   erlaubnisstand,
   type Erlaubniszeile,
 } from '../aueg/anbindung'
-import { schreibEintrag, SYSTEM_ACTOR, type Protokollbezug } from '../audit/entry'
+import { schreibEintrag, type Protokollbezug } from '../audit/entry'
 import { protokolliere, protokolliereGetrennt } from '../audit/record'
-import { ablehnungsEintrag, uebergangsEintrag } from '../audit/transitions'
+import {
+  ablehnungsEintrag,
+  systemUebergangsEintrag,
+  uebergangsEintrag,
+} from '../audit/transitions'
 import { checkPermission, type Subject } from '../authz/check'
 import type { LoadedIdentity } from '../identity/loadSubject'
 import { prisma } from '../prisma'
@@ -32,6 +36,10 @@ import {
   transitionsFrom,
   type TransitionOutcome,
 } from '../status/machine'
+import {
+  CANDIDATE_SUBMISSION_MODEL,
+  type CandidateSubmissionState,
+} from '../status/candidateSubmission'
 import {
   DEMAND_REQUEST_MODEL,
   type DemandRequestFacts,
@@ -1181,10 +1189,9 @@ async function markInvitationViewed(
     // eine Benutzerhandlung (4.2.1, 4.0 Regel 10).
     await protokolliere(
       tx,
-      uebergangsEintrag({
+      systemUebergangsEintrag({
         outcome,
         bezug: protokollbezug('tenderInvitation', invitationId, invitation.tenantId),
-        userId: SYSTEM_ACTOR,
         occurredAt: evaluationDate,
       }),
     )
@@ -1649,17 +1656,36 @@ async function rejection(
 
 // ── Systemlauf (zeitgesteuerte Übergänge) ──────────────────────────────────
 
+/** Die Begründung der abgeleiteten Ablehnung (4.2.3: ohne Fremdbezug). */
+const FRISTBEGRUENDUNG =
+  'Die Bindefrist des Angebots ist abgelaufen, ohne dass eine Entscheidung ' +
+  'getroffen wurde (SPEC 4.2.2).'
+
 /**
- * Führt die zeitgesteuerten Übergänge aus 4.1 und 4.2 aus — die Übergänge, die
- * **entziehen**: `expired` bei Bedarfsanfrage, Einladung und Angebot (4.0,
- * Regel 4). Sie werden ohne Subjekt angefordert, weil kein Benutzer sie
- * auslöst; der Audit-Eintrag trüge ein Systemkennzeichen (4.0, Regel 10).
+ * Der **Übergangslauf** (`deadlineTransitionRun`, 4.0 Regel 10): die
+ * zeitgesteuerten Übergänge aus 4.1 und 4.2 — die, die **entziehen**
+ * (Regel 4). Kein Benutzer löst sie aus, deshalb werden sie ohne Subjekt
+ * angefordert und ihre Protokolleinträge tragen das Systemkennzeichen (3.12).
  *
- * Im Betrieb wäre das der nächtliche Lauf aus 5.5.1. Im Prototyp startet ihn
- * eine Schaltfläche, damit der Ablauf vorführbar ist — gestartet wird der Lauf,
- * nicht der einzelne Übergang.
+ * Vier Übergänge, in dieser Reihenfolge:
+ *
+ *  1. **Einladung** → `expired` (4.2.1): Angebotsfrist verstrichen oder
+ *     Ausschreibung geschlossen, kein Angebot.
+ *  2. **Angebot** → `expired` (4.2.2): Bindefrist `offerValidUntil`
+ *     verstrichen, ohne Entscheidung.
+ *  3. **Profilvorschlag** → `rejected` (4.2.3): **abgeleitet** aus 2. — die
+ *     offenen Vorschläge des abgelaufenen Angebots, mit Fristbegründung.
+ *  4. **Bedarfsanfrage** → `expired` (4.1).
+ *
+ * Die Reihenfolge trägt: Schritt 3 hat das abgelaufene Angebot zur
+ * Vorbedingung und muss deshalb nach Schritt 2 laufen.
+ *
+ * **Wann er läuft:** vor dem nächtlichen Prüflauf (5.5.1 c), vom selben
+ * Planer. Getrennt, weil der Prüflauf keinen Statuswechsel erzeugt und das so
+ * bleibt. Die Schaltfläche auf der Bedarfsseite stößt denselben Lauf an, damit
+ * er vorführbar ist.
  */
-export async function runSystemDeadlineRun(
+export async function runUebergangslauf(
   evaluationDate: Date = new Date(),
 ): Promise<readonly string[]> {
   const log: string[] = []
@@ -1697,14 +1723,11 @@ export async function runSystemDeadlineRun(
       })
       await protokolliere(
         tx,
-        uebergangsEintrag({
+        systemUebergangsEintrag({
           outcome,
           bezug: protokollbezug('tenderInvitation', invitation.id, invitation.tenantId),
-          // Systemlauf: `outcome.decision` ist `null`, der Eintrag trägt
-          // deshalb das Systemkennzeichen und keinen Benutzer (3.12, 4.0
-          // Regel 10). Die Kennung wird mitgegeben, aber nicht verwendet.
-          userId: SYSTEM_ACTOR,
           occurredAt: evaluationDate,
+          reason: `Angebotsfrist der Ausschreibung ${invitation.tender.tenderNumber} verstrichen.`,
         }),
       )
       // 4.2.1: „Benachrichtigung an `MD`; Eskalationsanlass ‚Ausschreibung
@@ -1752,11 +1775,11 @@ export async function runSystemDeadlineRun(
       await tx.supplierOffer.update({ where: { id: offer.id }, data: { status: 'expired' } })
       await protokolliere(
         tx,
-        uebergangsEintrag({
+        systemUebergangsEintrag({
           outcome,
           bezug: protokollbezug('supplierOffer', offer.id, offer.tenantId),
-          userId: SYSTEM_ACTOR,
           occurredAt: evaluationDate,
+          reason: FRISTBEGRUENDUNG,
         }),
       )
       // 4.2.2: „Benachrichtigung an `LD` und `MD`" (3.14).
@@ -1776,6 +1799,85 @@ export async function runSystemDeadlineRun(
       })
     })
     log.push(`Angebot ${offer.offerNumber}: ${outcome.label} (4.2.2)`)
+  }
+
+  // 4.2.2, Nebenwirkung: „offene Profilvorschläge auf `expired`-Wirkung
+  // (4.2.3: `rejected` mit Fristbegründung)". Der Vorschlag selbst hat keinen
+  // Zustand `expired` (4.2.3) — er wird abgelehnt, und zwar **abgeleitet** aus
+  // dem Angebot und nicht auf seiner eigenen Uhr: eine ausbleibende Rückmeldung
+  // des Kunden wird eskaliert, nicht entschieden.
+  const submissions = await prisma.candidateSubmission.findMany({
+    where: {
+      status: { in: ['submitted', 'reviewed', 'releasedToCustomer', 'interviewScheduled'] },
+      supplierOffer: { status: 'expired' },
+    },
+    include: {
+      candidate: { select: { pseudonym: true } },
+      supplierOffer: { select: { status: true, supplierId: true, tenantId: true } },
+      demandRequest: { select: { tenantId: true } },
+    },
+  })
+  for (const submission of submissions) {
+    const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'expireWithOffer', {
+      currentStatus: submission.status as CandidateSubmissionState,
+      resource: { ...systemResource, type: 'candidate' },
+      facts: {
+        offerStatus: submission.supplierOffer.status,
+        candidatePresent: true,
+        pseudonym: submission.candidate.pseudonym,
+        availableFrom: submission.availableFrom,
+        disclosureLevel: submission.disclosureLevel,
+        decision: 'rejected',
+        decidedAt: evaluationDate,
+        decidedById: null,
+        decisionReason: FRISTBEGRUENDUNG,
+        hasBlockingRuleCheck: false,
+        maxDurationExceeded: false,
+        hasPreviousEmploymentDeclaration: true,
+        mandatoryDocumentsChecked: true,
+        evaluationDate,
+      },
+    })
+    if (!outcome.applied) continue
+    await prisma.$transaction(async (tx) => {
+      await tx.candidateSubmission.update({
+        where: { id: submission.id },
+        data: {
+          status: 'rejected',
+          decision: 'rejected',
+          decidedAt: evaluationDate,
+          // Kein Benutzer: den Übergang trägt das System (4.0, Regel 10).
+          decidedById: null,
+          decisionReason: FRISTBEGRUENDUNG,
+        },
+      })
+      await protokolliere(
+        tx,
+        systemUebergangsEintrag({
+          outcome,
+          bezug: protokollbezug('candidateSubmission', submission.id, submission.tenantId),
+          occurredAt: evaluationDate,
+          reason: FRISTBEGRUENDUNG,
+        }),
+      )
+      // 4.2.3: „Benachrichtigung an `LD` über `MD`" — beide erhalten sie, jede
+      // auf Stufe 1 in ihrer Organisation (3.14).
+      await benachrichtigeUebergang(tx, {
+        objectType: 'candidateSubmission',
+        objectRef: submission.id,
+        tenantId: submission.tenantId,
+        uebergang: 'expireWithOffer',
+        statusFrom: outcome.from,
+        statusTo: outcome.to,
+        bezeichnung: `Profilvorschlag ${submission.submissionNumber}`,
+        lage: {
+          customer: submission.demandRequest.tenantId,
+          supplier: submission.supplierOffer.tenantId,
+        },
+        raisedAt: evaluationDate,
+      })
+    })
+    log.push(`Profilvorschlag ${submission.submissionNumber}: ${outcome.label} (4.2.3)`)
   }
 
   const requests = await prisma.demandRequest.findMany({
@@ -1810,11 +1912,11 @@ export async function runSystemDeadlineRun(
       await tx.demandRequest.update({ where: { id: request.id }, data: { status: 'expired' } })
       await protokolliere(
         tx,
-        uebergangsEintrag({
+        systemUebergangsEintrag({
           outcome,
           bezug: protokollbezug('demandRequest', request.id, request.tenantId),
-          userId: SYSTEM_ACTOR,
           occurredAt: evaluationDate,
+          reason: 'Bedarfsbeginn verstrichen, ohne dass der Bedarf besetzt wurde (SPEC 4.1).',
         }),
       )
       // 4.1: „Benachrichtigung an `KB` und `MD`" (3.14). Der Ablauf entzieht

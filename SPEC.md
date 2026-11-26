@@ -171,6 +171,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Systemübergang | `systemTransition` | Übergang ohne Benutzerhandlung, zeitgesteuert oder abgeleitet (4.0, Regel 10) |
 | Prozessfrist | `processDeadline` | Frist des Verfahrens ohne rechtliche Wirkung; Vorbelegungen in 4.0 |
 | Fristvorbelegung | `…DeadlineDays` | Konfigurationsschlüssel einer Prozessfrist in `processDeadlineConfig` (3.1), Werte in 4.0 |
+| Übergangslauf | `deadlineTransitionRun` | Durchgang, der die zeitgesteuerten Systemübergänge vollzieht (4.0, Regel 10) |
 | Stufenabstand | `…EscalationStepDays` | Tage, nach denen eine Eskalation aus einer Prozessfrist auf die nächste Stufe rückt (2.4, Regel 6; Werte in 4.0) |
 | Arbeitstag | `workingDay` | Montag bis Freitag ohne Feiertag des maßgeblichen Bundeslands (4.0) |
 | Bundesland | `federalState` | Land, dessen Feiertage für einen Standort gelten (3.1) |
@@ -2750,6 +2751,27 @@ den einzelnen Abschnitten nicht wiederholt.
     System. Der Audit-Eintrag führt dann ein Systemkennzeichen statt eines
     Benutzers (3.12).
 
+    Es gibt **vier**, und sie stehen in diesem Kapitel, nicht in Kapitel 5:
+
+    | Übergang | Auslöser | Folge |
+    |---|---|---|
+    | Einladung `invited`/`viewed` → `expired` (4.2.1) | `offerDeadline` der Ausschreibung verstrichen oder Ausschreibung geschlossen, kein Angebot | Benachrichtigung an `MD`; der Eskalationsanlass „Ausschreibung ohne Angebot" läuft daneben weiter (2.4) |
+    | Angebot `submitted`/`reviewed` → `expired` (4.2.2) | `offerValidUntil` verstrichen, keine Entscheidung | Benachrichtigung an `LD` und `MD`; seine offenen Vorschläge werden abgelehnt |
+    | Profilvorschlag → `rejected` (4.2.3) | **abgeleitet**: das Angebot ist `expired` | Fristbegründung ohne Fremdbezug; Benachrichtigung an `LD` über `MD` |
+    | Bedarfsanfrage → `expired` (4.1) | Bedarfsbeginn verstrichen, ohne Besetzung | Benachrichtigung an `KB` und `MD`; offene Vorschläge schließt `MD` mit Begründung (4.2.3) |
+
+    **Entzogen wird, nie gewährt** (Regel 4): jeder dieser Übergänge nimmt eine
+    Möglichkeit, keiner genehmigt, besetzt oder verlängert etwas.
+
+    **Wann sie laufen:** im **Übergangslauf** (`deadlineTransitionRun`), einem
+    eigenen Durchgang vor dem nächtlichen Prüflauf (5.5.1 c), ausgelöst von
+    demselben Planer. Getrennt, weil der Prüflauf nach 5.5.1 c **keinen**
+    Statuswechsel erzeugt und das so bleibt: der Übergangslauf vollzieht die
+    Übergänge, der Prüflauf findet danach die Lage vor, die sie hinterlassen
+    haben. Jeder Übergang läuft in seiner **eigenen** Transaktion — ein
+    Vorgang, der seine Vorbedingungen nicht erfüllt, hält die übrigen nicht
+    auf.
+
 **Namenskonvention.** Statusbezeichner sind modellübergreifend einheitlich:
 derselbe Bezeichner bedeutet dasselbe. Wo ein Zustand fachlich etwas anderes
 ist, trägt er einen anderen Namen — deshalb heißt die besetzte Bedarfsanfrage
@@ -3103,6 +3125,7 @@ stateDiagram-v2
 | `releasedToCustomer`, `interviewScheduled` | `accepted` | `KB` entscheidet ([24]), wirksam gegenüber dem Lieferanten durch `MD` ([17]) | `decision`, `decidedAt`, `decidedBy` gesetzt; P1 ohne Sperre; P6 als Warnung, aber **Sperre** bei fehlender Erklärung zur Vorbeschäftigung; P11 als Warnung (5.3, 5.5.5) | Offenlegungsstufe wechselt auf `identified`, jeder Zugriff auf Klardaten wird protokolliert (3.12, 6.4); Angebot auf `accepted` (4.2.2); Einsatz kann angelegt werden (4.3) |
 | `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` | `rejected` | `KB` entscheidet ([24]) bzw. `MD` ([17]) bei Vorgängen, die den Kunden nicht erreicht haben | `decisionReason` Pflicht, ohne Fremdbezug | Benachrichtigung an `LD` über `MD`; Klardaten bleiben verdeckt; Löschfrist für abgelehnte Kandidaten läuft (6.5) |
 | `draft`, `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` | `withdrawn` | `LD` ([20]) | Vorschlag noch nicht `accepted` | Benachrichtigung an `MD` und `KB`; Bedarfsanfrage bleibt in `inSelection`, solange ein anderer Vorschlag offen ist |
+| `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` | `rejected` | System (abgeleitet, 4.0 Regel 10) | Angebot auf `expired`, weil die **Bindefrist** verstrichen ist (4.2.2); `decisionReason` nennt die Frist, ohne Fremdbezug | Benachrichtigung an `LD` über `MD`; Klardaten bleiben verdeckt; Löschfrist für abgelehnte Kandidaten läuft (6.5) |
 
 **Abschluss offener Vorschläge.** Erreicht die Bedarfsanfrage `filled`,
 `cancelled` oder `expired` (4.1), setzt `MD` die noch offenen Vorschläge auf
@@ -3125,8 +3148,12 @@ wird eskaliert (2.4) und am Ende mit Begründung abgelehnt.
 - **Kein** `releasedToCustomer` ohne Pseudonymisierung. Der Übergang **ist**
   die Umsetzung der Datenminimierung (6.4); eine Vorlage mit Klardaten ist kein
   Sonderfall, sondern unzulässig.
-- **Kein** zeitgesteuerter Übergang nach `rejected`. Eine ausbleibende
-  Rückmeldung des Kunden wird eskaliert (2.4), nicht entschieden.
+- **Kein** zeitgesteuerter Übergang nach `rejected` **auf der eigenen Uhr**.
+  Eine ausbleibende Rückmeldung des Kunden wird eskaliert (2.4), nicht
+  entschieden. Die Ablehnung mit der **Bindefrist des Angebots** ist etwas
+  anderes: dort läuft nicht die Frist des Vorschlags ab, sondern die des
+  Angebots, und 4.2.2 nennt die Folge ausdrücklich — ein **abgeleiteter**
+  Übergang (4.0, Regel 10).
 - **Kein** Übergang, der einem Lieferanten einen Doppelvorschlag desselben
   Kandidaten offenbart (2.3, Regel 4).
 
@@ -5031,6 +5058,12 @@ des Laufs. Er prüft die Vorgänge, bei denen **Zeit allein** die Lage ändert, 
 erzeugt die Vorlaufwarnungen aus 5.0. Er erzeugt **keinen Statuswechsel** (4.0,
 Regeln 4 und 10) und **keine Sperre** — eine Sperre braucht einen Übergang, den
 sie verhindert.
+
+Die zeitgesteuerten **Systemübergänge** stehen deshalb nicht hier, sondern in
+4.0 Regel 10: sie laufen im **Übergangslauf**, einem eigenen Durchgang
+**vor** diesem Lauf. Der Prüflauf findet danach die Lage vor, die sie
+hinterlassen haben — eine Einladung, die eben abgelaufen ist, meldet er weiter,
+weil die Eskalation ihre Stufen noch steigen muss.
 
 | Nr. | Gegenstand | Prüfung | Prüfumfang | Ergebnis |
 |---|---|---|---|---|

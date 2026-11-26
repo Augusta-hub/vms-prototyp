@@ -18,6 +18,7 @@
 import type { Rejection, TransitionOutcome } from '../status/machine'
 import {
   handelnder,
+  systemlauf,
   versuchOhneZuweisung,
   type AuditDraft,
   type AuditResult,
@@ -56,6 +57,37 @@ export function uebergangsEintrag(args: {
     reason: args.reason ?? null,
     ruleRef: args.ruleRef ?? null,
     crossTenant: outcome.decision?.allowed === true ? outcome.decision.crossTenant : false,
+  }
+}
+
+/**
+ * Derselbe Eintrag für einen **Systemübergang** (4.0, Regel 10).
+ *
+ * „Der Audit-Eintrag führt dann ein Systemkennzeichen statt eines Benutzers
+ * (3.12)." Deshalb eine eigene Funktion und kein optionaler Parameter an
+ * `uebergangsEintrag`: ein Übergang hat entweder einen Handelnden oder keinen,
+ * und ein `userId: null` wäre die Einladung, beides zu verwechseln.
+ */
+export function systemUebergangsEintrag(args: {
+  readonly outcome: Extract<TransitionOutcome<string>, { applied: true }>
+  readonly bezug: Protokollbezug
+  readonly occurredAt: Date
+  readonly reason?: string | null
+}): AuditDraft {
+  const { outcome, bezug } = args
+  return {
+    occurredAt: args.occurredAt,
+    actor: systemlauf(),
+    tenantId: bezug.tenantId,
+    objectType: bezug.objectType,
+    objectRef: bezug.objectRef,
+    operation: 'transition',
+    result: 'success',
+    statusFrom: outcome.from,
+    statusTo: outcome.to,
+    reason: args.reason ?? null,
+    ruleRef: null,
+    crossTenant: false,
   }
 }
 

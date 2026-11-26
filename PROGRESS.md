@@ -5,6 +5,85 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Übergangslauf: die zeitgesteuerten Systemübergänge (4.0 Regel 10)
+
+### Korrektur zur vorigen Einheit
+
+Die Notiz „die Bindefrist bleibt ohne Umsetzung" war **falsch**. Ein
+Fristenlauf existierte längst — `runSystemDeadlineRun` in
+`lib/services/demand.ts` — und vollzog Einladung, Angebot und Bedarfsanfrage
+auf `expired`. Ich hatte die SPEC-Tabelle gelesen und den Code nicht. Gefehlt
+haben drei andere Dinge, und die sind jetzt da.
+
+### Gemacht
+
+- **Die Kaskade aus 4.2.2 fehlte**: lief die Bindefrist ab, blieben die offenen
+  Profilvorschläge des Angebots stehen. Jetzt werden sie **abgeleitet**
+  abgelehnt — neuer Übergang `expireWithOffer` im Statusmodell (4.2.3), mit
+  Fristbegründung ohne Fremdbezug, ohne Benutzer, und mit Nachricht an `LD`
+  über `MD`.
+- **Der Lauf hing nur an einem Knopf.** Jetzt führt ihn der nächtliche Lauf
+  **vor** seinen Befunden aus und nennt ihn in seiner Meldung; der Knopf auf
+  der Bedarfsseite bleibt, damit er vorführbar ist.
+- **Das Systemkennzeichen stand an der falschen Stelle.** Die vier Einträge
+  gaben `uebergangsEintrag` eine Benutzerkennung mit, die der Eintrag nicht
+  verwendet („Die Kennung wird mitgegeben, aber nicht verwendet"). Neu:
+  `systemUebergangsEintrag` in `lib/audit/transitions.ts` — ein Übergang hat
+  einen Handelnden oder keinen.
+- **SPEC 4.0 Regel 10** führt jetzt die **vier** Systemübergänge in einer
+  Tabelle und sagt, wann sie laufen: im **Übergangslauf**
+  (`deadlineTransitionRun`), vor dem Prüflauf. 4.2.3 hat die Übergangszeile und
+  einen geschärften Ausschluss; 5.5.1 c verweist darauf; Glossar 1.5 trägt den
+  Begriff.
+
+### Entscheidungen
+
+1. **Ein eigener Durchgang, nicht im Prüflauf.** 5.5.1 c sagt, der Prüflauf
+   erzeugt keinen Statuswechsel — das bleibt wahr. Der Übergangslauf läuft
+   davor, und der Prüflauf findet die Lage vor, die er hinterlassen hat.
+2. **Die eben abgelaufene Einladung wird weiter gemeldet.** Der Übergang ist
+   ein Ereignis, die Eskalation eine Folge von Stufen (2.4, Regel 6) — hörte
+   die Meldung mit dem Ablauf auf, käme sie nie über Stufe 1.
+3. **Reihenfolge trägt**: erst die Angebote, dann ihre Vorschläge. Die
+   abgeleitete Ablehnung hat das abgelaufene Angebot zur Vorbedingung.
+4. **Der Entwurf bleibt stehen.** Ein Vorschlag in `draft` ist beim
+   Lieferanten und hat den Betreiber nie erreicht; 4.2.3 gibt ihm `withdrawn`,
+   nicht `rejected`.
+5. **„Kein zeitgesteuerter Übergang nach `rejected`" gilt weiter** — für die
+   **eigene** Uhr des Vorschlags. Die Bindefrist ist die Uhr des *Angebots*,
+   und 4.2.2 nennt die Folge ausdrücklich. Der Modelltest, der früher „jeder
+   Übergang nennt eine Rolle" forderte, prüft jetzt genau das: `expireWithOffer`
+   ist der **einzige** ohne Rolle.
+6. **Begründungen im Protokoll.** Jeder der vier Systemeinträge nennt jetzt den
+   Anlass („Angebotsfrist verstrichen", „Bindefrist abgelaufen",
+   „Bedarfsbeginn verstrichen") — vorher stand dort nichts.
+
+### Geprüft
+
+- `npm test` **1225 grün** (+4), `npm run test:services` **347 grün** (+9, neue
+  Datei `tests/services/uebergangslauf.test.ts`), `npm run test:aueg` 267
+  Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit` und `npm run build`
+  sauber.
+- **5 Mutationen, alle gefangen**: „Kaskade nimmt auch den Entwurf", „Kaskade
+  ohne abgelaufenes Angebot", „Kaskade ohne Fristbegründung", „Kaskade setzt
+  einen Benutzer", „Übergangslauf läuft nach den Befunden".
+- Eine der fünf überlebte zuerst: der Testaufbau ließ `createdById` am
+  Profilvorschlag leer, damit war „setzt einen Benutzer" vom Ergebnis nicht zu
+  unterscheiden. Der Aufbau setzt die Kennung jetzt — danach gefangen.
+
+### Offen
+
+- Die **Bedarfsanfrage auf `expired`** schließt ihre offenen Vorschläge nicht
+  mit: 4.2.3 („Abschluss offener Vorschläge") weist das ausdrücklich `MD` zu,
+  nicht dem System — „ein Übergang mit Auslöser, kein Zeitablauf". Das bleibt
+  eine Handlung und ist keine Lücke.
+- Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Hoster und
+  Mailbetreiber (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne Rechenweg
+  (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix „P11: P11: …"
+  im Audit-Eintrag.
+
+---
+
 ## 2026-11-26 — Die achte Prozessfrist: Einladung ohne Kenntnisnahme (4.0, 4.2)
 
 ### Gemacht
@@ -48,12 +127,10 @@ und eine Wirkung („Erinnerung an `LD`, dann `LA`"), aber keinen Befund.
 
 ### Offen
 
-- Die **Bindefrist eines Angebots** (`offerValidUntil`, 4.0) bleibt ohne
-  Umsetzung: ihre Wirkung ist ein **Statuswechsel** (Angebot auf `expired`,
-  offene Profilvorschläge abgelehnt), und den darf der nächtliche Lauf nicht
-  vollziehen (5.5.1 c). Dasselbe gilt für `invited` → `expired` an der
-  Einladung (4.2). Beides braucht einen **Systemübergang** (4.0, Regel 10) und
-  gehört damit in eine eigene Einheit.
+- ~~Die **Bindefrist eines Angebots** bleibt ohne Umsetzung.~~ **Falsch** —
+  siehe die Einheit „Übergangslauf" vom selben Tag: die Übergänge gab es
+  längst (`runSystemDeadlineRun`), nur die Kaskade zu den Profilvorschlägen
+  fehlte und der Lauf hing an einem Knopf.
 - Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Hoster und
   Mailbetreiber (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne Rechenweg
   (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix „P11: P11: …"

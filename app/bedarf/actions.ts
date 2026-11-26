@@ -13,7 +13,7 @@ import type { ActionResult } from '../../lib/services/common'
 import {
   createDemandRequest,
   publishTender,
-  runSystemDeadlineRun,
+  runUebergangslauf,
   transitionDemandRequest,
   transitionOffer,
 } from '../../lib/services/demand'
@@ -151,6 +151,6 @@ export async function runSystemDeadlinesAction(): Promise<void> {
       specReference: 'SPEC 4.0, Regel 10',
     })
   }
-  const log = await runSystemDeadlineRun()
+  const log = await runUebergangslauf()
   back({ ok: true, message: `Systemlauf: ${log.join(' · ')}` })
 }

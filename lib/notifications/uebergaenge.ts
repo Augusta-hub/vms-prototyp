@@ -314,6 +314,13 @@ export const UEBERGANGSKATALOG: Katalog = {
       adressaten: [INFO('LD'), INFO('MD')],
       specReference: 'SPEC 4.2.3',
     },
+    expireWithOffer: {
+      // „Benachrichtigung an `LD` über `MD`" (4.2.3): beide erhalten sie, jede
+      // auf Stufe 1 in ihrer Organisation (3.14, „über MD").
+      ereignis: 'ist mit der Bindefrist des Angebots abgelehnt',
+      adressaten: [INFO('LD'), INFO('MD')],
+      specReference: 'SPEC 4.2.2, 4.2.3',
+    },
     withdraw: {
       ereignis: 'ist zurückgezogen',
       adressaten: [INFO('MD'), INFO('KB')],

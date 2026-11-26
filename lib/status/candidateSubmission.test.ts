@@ -360,9 +360,63 @@ describe('4.2.3 — Form des Modells', () => {
     expect(CANDIDATE_SUBMISSION_MODEL.states).not.toContain('expired')
   })
 
-  it('kein Systemübergang: jeder Übergang nennt eine auslösende Rolle', () => {
-    for (const transition of Object.values(CANDIDATE_SUBMISSION_MODEL.transitions)) {
-      expect(transition.roles.length).toBeGreaterThan(0)
+  it('nur ein Systemübergang — und das ist der abgeleitete aus 4.2.2', () => {
+    // Früher trug jeder Übergang eine Rolle. 4.2.2 nennt aber ausdrücklich die
+    // Folge der **Bindefrist des Angebots**: offene Vorschläge werden mit
+    // Fristbegründung abgelehnt. Das ist ein abgeleiteter Übergang (4.0,
+    // Regel 10) und keine Entscheidung — jeder andere nennt weiter eine Rolle.
+    const ohneRolle = Object.entries(CANDIDATE_SUBMISSION_MODEL.transitions)
+      .filter(([, transition]) => transition.roles.length === 0)
+      .map(([name]) => name)
+    expect(ohneRolle).toEqual(['expireWithOffer'])
+  })
+})
+
+describe('4.2.2 → 4.2.3 — Bindefrist des Angebots', () => {
+  const begruendung = {
+    decisionReason: 'Bindefrist des Angebots abgelaufen (SPEC 4.2.2).',
+  } satisfies Partial<CandidateSubmissionFacts>
+
+  it('lehnt die offenen Vorschläge eines abgelaufenen Angebots ab', () => {
+    for (const status of [
+      'submitted',
+      'reviewed',
+      'releasedToCustomer',
+      'interviewScheduled',
+    ] as const) {
+      const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'expireWithOffer', {
+        currentStatus: status,
+        resource: submissionRef(),
+        facts: facts({ offerStatus: 'expired', ...begruendung }),
+      })
+      expect(outcome).toMatchObject({ applied: true, to: 'rejected' })
     }
+  })
+
+  it('greift nicht, solange das Angebot nicht abgelaufen ist', () => {
+    const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'expireWithOffer', {
+      currentStatus: 'releasedToCustomer',
+      resource: submissionRef(),
+      facts: facts({ offerStatus: 'reviewed', ...begruendung }),
+    })
+    expect(outcome.applied).toBe(false)
+  })
+
+  it('verlangt die Fristbegründung (4.2.3, 2.3 Regel 3)', () => {
+    const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'expireWithOffer', {
+      currentStatus: 'releasedToCustomer',
+      resource: submissionRef(),
+      facts: facts({ offerStatus: 'expired', decisionReason: null }),
+    })
+    expect(outcome.applied).toBe(false)
+  })
+
+  it('führt **nicht** aus dem Entwurf — der hat den Betreiber nie erreicht', () => {
+    const outcome = attemptTransition(CANDIDATE_SUBMISSION_MODEL, 'expireWithOffer', {
+      currentStatus: 'draft',
+      resource: submissionRef(),
+      facts: facts({ offerStatus: 'expired', ...begruendung }),
+    })
+    expect(outcome.applied).toBe(false)
   })
 })

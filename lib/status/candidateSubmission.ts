@@ -17,9 +17,13 @@
  *  - `releasedToCustomer` **ohne** Pseudonymisierung: der Übergang *ist* die
  *    Umsetzung der Datenminimierung (6.4). Eine Vorlage mit Klardaten ist kein
  *    Sonderfall, sondern unzulässig — deshalb eine Vorbedingung, keine Option.
- *  - ein zeitgesteuerter Übergang nach `rejected`: eine ausbleibende
- *    Rückmeldung des Kunden wird eskaliert (2.4), nicht entschieden. Der
- *    Profilvorschlag hat **keinen** Zustand `expired`.
+ *  - ein zeitgesteuerter Übergang nach `rejected` **auf der eigenen Uhr**:
+ *    eine ausbleibende Rückmeldung des Kunden wird eskaliert (2.4), nicht
+ *    entschieden. Der Profilvorschlag hat **keinen** Zustand `expired`.
+ *    Davon zu unterscheiden ist `expireWithOffer`: dort läuft nicht die Frist
+ *    des Vorschlags ab, sondern die **Bindefrist des Angebots**, und 4.2.2
+ *    nennt die Ablehnung ausdrücklich als Folge — ein abgeleiteter Übergang
+ *    (4.0, Regel 10) und keine Entscheidung über den Kandidaten.
  *  - ein Übergang, der einem Lieferanten einen Doppelvorschlag desselben
  *    Kandidaten offenbart (2.3, Regel 4): der Konflikt wird nur beim Betreiber
  *    sichtbar und ist deshalb keine Vorbedingung dieses Modells.
@@ -261,6 +265,36 @@ const TRANSITIONS = {
     roles: ['operatorCoordinator', 'operatorAdmin'],
     specReference: 'SPEC 4.2.3, submitted|reviewed → rejected',
     preconditions: [reasonGiven],
+  },
+
+  /**
+   * | `submitted`, `reviewed`, `releasedToCustomer`, `interviewScheduled` |
+   * `rejected` | System | Bindefrist des Angebots verstrichen |
+   *
+   * Die Folge aus 4.2.2: läuft die **Bindefrist** des Angebots ab, werden
+   * seine offenen Vorschläge mit **Fristbegründung** abgelehnt. Kein Benutzer
+   * trägt diesen Übergang (`roles` leer, 4.0 Regel 10), und die Vorbedingung
+   * ist der Zustand des **Angebots** — ohne abgelaufenes Angebot ist der
+   * Übergang nicht ausdrückbar.
+   *
+   * `draft` fehlt mit Absicht: ein Entwurf ist beim Lieferanten und hat den
+   * Betreiber nie erreicht; 4.2.3 gibt ihm den Weg `withdrawn`, nicht
+   * `rejected`.
+   */
+  expireWithOffer: {
+    from: ['submitted', 'reviewed', 'releasedToCustomer', 'interviewScheduled'],
+    to: 'rejected',
+    label: 'ablehnen (Bindefrist des Angebots verstrichen)',
+    roles: [],
+    specReference: 'SPEC 4.2.2, → expired; 4.2.3, → rejected',
+    preconditions: [
+      {
+        description: 'Das Angebot ist abgelaufen — die Bindefrist ist verstrichen (4.2.2).',
+        specReference: 'SPEC 4.2.2, → expired',
+        isSatisfied: (facts) => facts.offerStatus === 'expired',
+      },
+      reasonGiven,
+    ],
   },
 
   /**

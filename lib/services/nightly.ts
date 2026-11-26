@@ -50,6 +50,7 @@ import { prozessfristTage, type Prozessfristschluessel } from '../process/friste
 import { prisma } from '../prisma'
 import { asFailure, failure, notificationRef, success, type ActionResult } from './common'
 import { KUERZEL_JE_ROLLE, ROLLE_JE_KUERZEL, schreibeBenachrichtigung } from './notifications'
+import { runUebergangslauf } from './demand'
 import { postausgangAbarbeiten } from './zustellung'
 
 export interface NightlyRunResult {
@@ -142,6 +143,11 @@ async function laufDurchfuehren(
 ): Promise<ActionResult> {
   const operatorTenant = { id: operatorTenantId }
   const tag = stand.stichtag
+  // **Vor** den Befunden: der Übergangslauf vollzieht die zeitgesteuerten
+  // Übergänge (4.0, Regel 10), der Prüflauf findet danach die Lage vor, die
+  // sie hinterlassen haben (5.5.1 c). Getrennt, weil dieser Lauf selbst
+  // **keinen** Statuswechsel erzeugt — und das soll so bleiben.
+  const uebergaenge = await runUebergangslauf(runDate)
   const lagen = await ladeLagen(operatorTenant.id)
   const befunde: Nachtbefund[] = [
     ...befundeN1(lagen.lieferanten, tag, operatorTenant.id),
@@ -204,6 +210,12 @@ async function laufDurchfuehren(
   // bleiben die Aufträge offen — gemeldet wird das trotzdem, damit „nichts
   // zugestellt" nicht wie „alles zugestellt" aussieht.
   const ausgang = await postausgangAbarbeiten({ jetzt: runDate })
+  const vollzogen = uebergaenge.filter((zeile) => !zeile.startsWith('Keine Frist'))
+  const uebergangsmeldung =
+    vollzogen.length === 0
+      ? ''
+      : ` Übergangslauf (4.0, Regel 10): ${vollzogen.length} Übergang/Übergänge — ` +
+        `${vollzogen.join('; ')}.`
   const zustellung =
     ausgang.grund === ''
       ? ` Zustellung: ${ausgang.zugestellt} zugestellt, ${ausgang.unterblieben} unterblieben, ` +
@@ -216,6 +228,7 @@ async function laufDurchfuehren(
       `${zaehle(befunde, 'warning')} Warnung, ${zaehle(befunde, 'escalation')} mit Eskalation. ` +
       `${geschrieben} Benachrichtigung(en) erzeugt (5.5.1, 3.14). Der Lauf erzeugt **keinen** ` +
       'Statuswechsel und keine Sperre.' +
+      uebergangsmeldung +
       zustellung,
   )
 }
