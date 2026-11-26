@@ -5,6 +5,53 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Acht weitere Fragen beantwortet, 3.15 Kennzahlen (Kapitel 7)
+
+### Gemacht
+
+Zweiter Durchgang: Fragen **9, 13, 14, 28, 30, 33, 40, 42** entschieden. Von
+ursprünglich 44 offenen sind **24** übrig, davon vier „juristisch zu prüfen".
+
+| Frage | Antwort |
+|---|---|
+| 9 Reporting | **beide Gruppen, AÜG zuerst** — neues Kapitel **3.15** |
+| 13 Doppelrolle Kunde/Lieferant | **ausgeschlossen**; dieselbe Firma erhält zwei Mandanten |
+| 14 Zuständigkeit auf Standorte | **ja**, gepflegt vom Betreiber — ist umgesetzt |
+| 28 Tatsächliches Entgelt | **nein**; keine Lohndaten einer natürlichen Person im System |
+| 30 Arbeitskampf | **vertagt**: Behelf als `document` bleibt, P7 bleibt unauswertbar, N4 fehlt |
+| 33 Anmeldekennung | **systemweit** eindeutig — ist umgesetzt |
+| 40 Datenminimierung | Feldliste wie umgesetzt; Qualifikationen bleiben sichtbar |
+| 42 Nachweis durch `KB` | **nein** — 5.4.3 streicht ihn, die Matrix behält recht |
+
+- **Neu: Kapitel 3.15 „Kennzahlen (Reporting)"** mit sieben Kennzahlen der
+  AÜG-Überwachung samt Grundlage, dazu die Gruppe Betriebssteuerung ohne
+  Definitionen — ausdrücklich, weil eine Kennzahl ohne Definition eine Zahl
+  ohne Aussage ist. Jede Kennzahl ist je Kunde, je Lieferant und in der
+  Quersicht zu lesen; die Mandantengrenze gilt auch im Reporting.
+- **Frage 42 ist die erste Antwort, die Code geändert hat:** `DOCUMENT_MODEL`
+  nennt `demandOwner` nicht mehr unter den auslösenden Rollen des Einstellens,
+  und 5.4.3 streicht ihn ebenfalls. Der Widerspruch zwischen 2.2 und 5.4.3 —
+  seit Monaten als Verweigerung mit Fundstelle gebaut — ist damit aufgelöst.
+
+### Entscheidungen
+
+1. **Die Verweigerung wandert vom Rollenrecht in das Statusmodell.** Vorher
+   kannte der Übergang `KB` und die Matrix verweigerte ihn (`notPermitted`,
+   SPEC 2.2); jetzt kennt ihn der Übergang nicht (`roleNotTriggering`,
+   SPEC 5.4.3). Zwei Tests nennen die neue Fundstelle, mit Begründung im
+   Kommentar.
+2. **Frage 30 steht als „vertagt"**, nicht beantwortet: die Folge ist, dass P7
+   unauswertbar bleibt und N4 im nächtlichen Lauf fehlt. Das steht jetzt in der
+   Antwort, damit es nicht als Versehen gelesen wird.
+
+### Geprüft
+
+- `npm test` **1227 grün**, `npm run test:services` **356 grün**,
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+
+---
+
 ## 2026-11-26 — Zwölf offene Fragen beantwortet (Kapitel 7)
 
 ### Gemacht

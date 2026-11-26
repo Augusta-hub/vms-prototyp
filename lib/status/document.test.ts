@@ -135,10 +135,12 @@ describe('Einstellen (— → submitted, SPEC 5.4.3)', () => {
     }
   })
 
-  it('verweigert dem Bedarfsträger das Einstellen — 2.2 gibt ihm kein `A` (offene Frage 42)', () => {
-    // 5.4.3 nennt `KB` unter den auslösenden Rollen, die Zeile in 2.2 trägt für
-    // ihn nur `L[35]`. Der Übergang nennt die Rolle deshalb, und die Matrix
-    // verweigert sie — mit Fundstelle, nicht stillschweigend.
+  it('verweigert dem Bedarfsträger das Einstellen — der Übergang nennt ihn nicht (Frage 42)', () => {
+    // 5.4.3 nannte `KB` unter den auslösenden Rollen, die Zeile in 2.2 gibt ihm
+    // aber nur `L[35]`. **Frage 42 ist entschieden:** die Matrix behält recht,
+    // 5.4.3 streicht ihn. Die Verweigerung kommt deshalb jetzt aus dem
+    // Statusmodell (`roleNotTriggering`) und nicht erst aus der Matrix — der
+    // Übergang kennt die Rolle nicht mehr.
     const outcome = attemptTransition(DOCUMENT_MODEL, 'submit', {
       currentStatus: null,
       subject: subject('demandOwner'),
@@ -153,8 +155,7 @@ describe('Einstellen (— → submitted, SPEC 5.4.3)', () => {
     })
     expect(outcome.applied).toBe(false)
     if (!outcome.applied) {
-      expect(outcome.rejection.kind).toBe('notPermitted')
-      expect(outcome.rejection.specReference).toBe('SPEC 2.2')
+      expect(outcome.rejection.kind).toBe('roleNotTriggering')
     }
   })
 })

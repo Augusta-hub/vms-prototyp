@@ -115,24 +115,23 @@ const fourEyes: DocumentPrecondition = {
 const TRANSITIONS = {
   /**
    * | — | `submitted` | `LA`/`LD` (Lieferanten- und Kandidatennachweise), `MA`
-   * (Vertragsunterlagen), `KB` ([35], einsatzbezogene Nachweise zum eigenen
-   * Kunden) | `documentCategory`, `subjectType`, `subjectRef`, `fileRef`,
-   * `fileName`, `mimeType` gesetzt (3.10) | `mandatory` und `blocking` werden
-   * aus dem Katalog in 5.4.4 **abgeleitet**, nicht gesetzt |
+   * (Vertragsunterlagen) | `documentCategory`, `subjectType`, `subjectRef`,
+   * `fileRef`, `fileName`, `mimeType` gesetzt (3.10) | `mandatory` und
+   * `blocking` werden aus dem Katalog in 5.4.4 **abgeleitet**, nicht gesetzt |
    *
-   * **`KB` steht hier, obwohl die Matrix ihm kein `A` gibt.** Die Zeile
-   * „Dokument / Nachweis (3.10)" in 2.2 trägt für `KB` nur `L[35]`, während
-   * 5.4.3 ihn unter den auslösenden Rollen des Einstellens nennt. Beides ist
-   * Spezifikation, und geraten wird hier nichts (*offene Frage 42*): der
-   * Übergang nennt die Rolle, wie 5.4.3 es tut, und die Prüffunktion verweigert
-   * sie anhand der Matrix. Der Widerspruch wird damit zu einer Verweigerung mit
-   * Fundstelle und nicht zu einer stillen Entscheidung.
+   * **`KB` stand hier und steht nicht mehr.** 5.4.3 nannte ihn unter den
+   * auslösenden Rollen, die Zeile „Dokument / Nachweis (3.10)" in 2.2 gibt ihm
+   * aber nur `L[35]` — kein `A`. Solange der Widerspruch offen war, nannte der
+   * Übergang die Rolle und die Prüffunktion verweigerte sie anhand der Matrix.
+   * **Frage 42 ist entschieden:** die Matrix behält recht, 5.4.3 streicht ihn.
+   * Die Unterweisung am Standort stellt der Betreiber nach Meldung des Kunden
+   * ein.
    */
   submit: {
     from: [],
     to: 'submitted',
     label: 'Nachweis einstellen',
-    roles: ['supplierAdmin', 'supplierCoordinator', 'operatorAdmin', 'demandOwner'],
+    roles: ['supplierAdmin', 'supplierCoordinator', 'operatorAdmin'],
     specReference: 'SPEC 5.4.3, — → submitted',
     preconditions: [
       {

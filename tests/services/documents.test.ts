@@ -101,7 +101,7 @@ describe('Einstellen (— → submitted, SPEC 5.4.3)', () => {
     expect(await prisma.document.count({ where: { fileName: 'fremd.pdf' } })).toBe(0)
   })
 
-  it('verweigert dem Bedarfsträger das Einstellen — 2.2 gibt ihm kein `A` (offene Frage 42)', async () => {
+  it('verweigert dem Bedarfsträger das Einstellen — 5.4.3 nennt ihn nicht mehr (Frage 42)', async () => {
     const einsatz = await legeEinsatzAn(welt, {
       nummer: 'E-1',
       status: 'planned',
@@ -121,7 +121,9 @@ describe('Einstellen (— → submitted, SPEC 5.4.3)', () => {
       confidentiality: 'assignmentParties',
     })
     expect(ergebnis.ok).toBe(false)
-    if (!ergebnis.ok) expect(ergebnis.specReference).toBe('SPEC 2.2')
+    // Frage 42 ist entschieden: 5.4.3 nennt `KB` nicht mehr unter den
+    // auslösenden Rollen, die Verweigerung kommt deshalb aus dem Statusmodell.
+    if (!ergebnis.ok) expect(ergebnis.specReference).toBe('SPEC 5.4.3')
   })
 
   it('verweigert die Erlaubnisurkunde an einem anderen Bezugsobjekt (3.10, Invariante)', async () => {
