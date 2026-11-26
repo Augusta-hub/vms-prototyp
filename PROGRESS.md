@@ -5,6 +5,38 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — „P11: P11" im Protokoll (5.5.2 Nr. 1)
+
+### Gemacht
+
+Der seit drei Einheiten notierte Schönheitsfehler ist weg. Die Begründung des
+Protokolleintrags zu einer Warnung setzte das Prüfungskürzel immer vorn — die
+Regeln in `lib/aueg/regeln/` formulieren ihre Meldung aber schon mit ihrem
+Kürzel, und so stand dort „P11: P11: …".
+
+- **`mitPruefung`** in `lib/services/notifications.ts` setzt es nur, wo es
+  fehlt. Der Eintrag nennt die Prüfung damit weiter — er soll ohne die
+  Nachricht lesbar sein —, aber einmal.
+
+### Entscheidungen
+
+1. **Verglichen wird mit dem Doppelpunkt** (`P11:`), nicht mit dem Kürzel
+   allein: sonst hielte `P1` die Meldung von `P11` für seine eigene.
+2. **Die Regel wird für sich geprüft.** Alle heutigen Regelmeldungen tragen ihr
+   Kürzel, der andere Zweig hätte also keinen Fall im Bestand — ein
+   Mutationstest überlebte deshalb zuerst. Drei Zusicherungen prüfen die
+   Funktion jetzt direkt, beide Zweige und den Grenzfall `P1`/`P11`.
+
+### Geprüft
+
+- `npm test` **1225 grün**, `npm run test:services` **350 grün** (+3),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **2 Mutationen, beide gefangen**: „Präfix nie gesetzt", „Vergleich ohne
+  Doppelpunkt".
+
+---
+
 ## 2026-11-26 — Übergangslauf: die zeitgesteuerten Systemübergänge (4.0 Regel 10)
 
 ### Korrektur zur vorigen Einheit
@@ -79,8 +111,7 @@ haben drei andere Dinge, und die sind jetzt da.
   eine Handlung und ist keine Lücke.
 - Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Hoster und
   Mailbetreiber (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne Rechenweg
-  (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix „P11: P11: …"
-  im Audit-Eintrag.
+  (*Frage 30*) und **Q02** ohne Adressatenliste.
 
 ---
 
@@ -133,8 +164,7 @@ und eine Wirkung („Erinnerung an `LD`, dann `LA`"), aber keinen Befund.
   fehlte und der Lauf hing an einem Knopf.
 - Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Hoster und
   Mailbetreiber (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne Rechenweg
-  (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix „P11: P11: …"
-  im Audit-Eintrag.
+  (*Frage 30*) und **Q02** ohne Adressatenliste.
 
 ---
 

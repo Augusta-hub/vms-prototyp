@@ -34,6 +34,7 @@ import {
 import { createDemandRequest, transitionDemandRequest } from '../../lib/services/demand'
 import { acceptDocument, rejectDocument, submitDocument } from '../../lib/services/documents'
 import { loadNotifications } from '../../lib/services/nightly'
+import { mitPruefung } from '../../lib/services/notifications'
 import { transitionSupplier } from '../../lib/services/supplierStatus'
 import {
   createAssignment,
@@ -201,6 +202,30 @@ describe('Bedarfsanfrage (4.1)', () => {
 /* ------------------------------------------------------------------ */
 /* 4.6 Lieferantenstatus                                               */
 /* ------------------------------------------------------------------ */
+
+describe('Begründung des Protokolleintrags (5.5.2 Nr. 1)', () => {
+  // Reine Zeichenkettenregel, deshalb ohne Vorgang geprüft: die Prüfung steht
+  // vorn, aber nur einmal. Die Regeln in `lib/aueg/regeln/` formulieren ihre
+  // Meldung meist schon mit ihrem Kürzel — eine ohne wäre sonst ohne Prüfung
+  // im Protokoll.
+  it('setzt das Kürzel, wo die Meldung es nicht trägt', () => {
+    expect(mitPruefung('P4', 'Das Vergleichsentgelt fehlt.')).toBe(
+      'P4: Das Vergleichsentgelt fehlt.',
+    )
+  })
+
+  it('setzt es nicht zweimal', () => {
+    expect(mitPruefung('P11', 'P11: Der Kandidat ist Bewerber.')).toBe(
+      'P11: Der Kandidat ist Bewerber.',
+    )
+  })
+
+  it('unterscheidet `P1` von `P11` — der Doppelpunkt gehört zum Vergleich', () => {
+    expect(mitPruefung('P1', 'P11: Der Kandidat ist Bewerber.')).toBe(
+      'P1: P11: Der Kandidat ist Bewerber.',
+    )
+  })
+})
 
 describe('Lieferantenstatus (4.6)', () => {
   it('schickt die Sperre an LA und eskaliert an MA', async () => {
@@ -1075,6 +1100,13 @@ describe('Warnungen am Profilvorschlag (4.7, Q07 bis Q13)', () => {
     expect(gemeldet.every((zeile) => zeile.statusFrom === 'submitted')).toBe(true)
     expect(gemeldet.every((zeile) => zeile.statusTo === 'reviewed')).toBe(true)
     expect(gemeldet.every((zeile) => zeile.kind === 'warning')).toBe(true)
+    // Der Protokolleintrag nennt die Prüfung **einmal**: die Regel formuliert
+    // ihre Meldung schon mit ihrem Kürzel (5.5.2 Nr. 2).
+    const eintrag = await prisma.auditEntry.findFirstOrThrow({
+      where: { objectType: 'notification', ruleRef: 'P11' },
+    })
+    expect(eintrag.reason?.startsWith('P11: ')).toBe(true)
+    expect(eintrag.reason).not.toContain('P11: P11')
     // Adressaten aus der Regelwerkkonfiguration zu P11 (5.3.4) — `MD` und `LD`.
     expect(new Set(gemeldet.map((zeile) => zeile.recipientRoleCode))).toEqual(
       new Set(['operatorCoordinator', 'supplierCoordinator']),

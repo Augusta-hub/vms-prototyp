@@ -183,6 +183,18 @@ export async function benachrichtigeUebergang(
   return geschrieben
 }
 
+/**
+ * Die Begründung des Protokolleintrags: die Prüfung vorn, aber **einmal**.
+ *
+ * Die Regeln in `lib/aueg/regeln/` formulieren ihre Meldung oft schon mit
+ * ihrem Kürzel („P11: Der Kandidat …"), und ein zweites davor ergab
+ * „P11: P11: …". Der Eintrag soll die Prüfung nennen, damit er ohne die
+ * Nachricht lesbar ist — doppelt nennen soll er sie nicht.
+ */
+export function mitPruefung(ruleRef: string, meldung: string): string {
+  return meldung.startsWith(`${ruleRef}:`) ? meldung : `${ruleRef}: ${meldung}`
+}
+
 /** Eine Warnung aus 4.7, die derselbe Übergang auslöst (3.14). */
 export interface Warnungsmeldung {
   readonly objectType: string
@@ -256,7 +268,7 @@ export async function benachrichtigeWarnung(
       objectRef: args.objectRef,
       operation: 'create',
       result: 'success',
-      reason: `${args.ruleRef}: ${args.meldung}`,
+      reason: mitPruefung(args.ruleRef, args.meldung),
       ruleRef: args.ruleRef,
       crossTenant: false,
     })
