@@ -2246,7 +2246,12 @@ stehen.
 2. **Lesende Zugriffe über Mandantengrenzen hinweg** — also die
    Querschnittssicht des Betreibers (2.3, „Betreiber").
 3. **Lesende Zugriffe auf Klardaten von Kandidaten** (6.4), unabhängig vom
-   Mandanten.
+   Mandanten. Maßgeblich ist, dass der Name **herausgegeben** wurde — nicht,
+   wer gelesen hat: auch der Lieferant, dem der Kandidat gehört, und der
+   Betreiber lösen den Eintrag aus. Protokolliert wird **je Kandidat**, dessen
+   Name eine Liste zeigt; ein Sammeleintrag könnte nicht sagen, welche Namen
+   offengelegt wurden. Verdeckt eine Fußnote den Namen ([23], 6.4), ist nichts
+   herausgegeben und nichts zu protokollieren.
 4. **Jede Handlung in Vertretung** (2.4, Regel 6) und **jede Eskalationsstufe**
    (2.4, Regel 4), mit Anlass, Adressat und Zeitpunkt.
 5. **Jede Übersteuerung einer AÜG-Sperre** mit Begründung (5.5).

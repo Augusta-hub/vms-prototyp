@@ -5,6 +5,55 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Klardaten-Zugriffe vollständig protokollieren (3.12, Nr. 3)
+
+### Gemacht
+
+3.12 Nummer 3 verlangt die Protokollierung lesender Zugriffe auf Klardaten von
+Kandidaten „**unabhängig vom Mandanten**". Der Code tat zwei Dinge anders, und
+ein Test hielt eines davon ausdrücklich fest:
+
+- Er protokollierte nur die **Kundenseite** („bei Betreiber und Lieferant waren
+  die Daten nie verdeckt"). Das ist eine plausible Begründung, steht aber gegen
+  den Wortlaut. **Spezifikation vor Code** — jetzt löst jeder Zugriff den
+  Eintrag aus, bei dem der Name tatsächlich herausgegeben wurde.
+- Er protokollierte nur den **Profilvorschlag**. Die **Kandidatenliste** und die
+  **Einsatzliste** zeigen den Namen ebenso und schrieben nichts. Beide tun es
+  jetzt.
+- **SPEC 3.12** sagt die Lesart jetzt genau: maßgeblich ist die Herausgabe,
+  protokolliert wird je Kandidat, und eine verdeckende Fußnote ([23]) heißt
+  kein Eintrag.
+
+### Entscheidungen
+
+1. **Je Kandidat, nicht je Aufruf.** Eine Liste mit zehn Namen legt zehn Namen
+   offen; ein Sammeleintrag könnte nicht sagen, welche.
+2. **Die Bedingung liest die Fußnote ab**, statt sie nachzubauen: verdeckt
+   [23] den Namen, ist nichts herausgegeben. So bleibt die Protokollpflicht an
+   dieselbe Entscheidung gebunden wie die Anzeige.
+3. **Der Preis ist gewollt.** Ein Zugriffsprotokoll für personenbezogene Daten
+   ist nur vollständig etwas wert; Lesezugriffe auf **nicht** personenbezogene
+   Daten im eigenen Mandanten bleiben unprotokolliert (3.12, letzter Absatz).
+
+### Geprüft
+
+- `npm test` **1227 grün**, `npm run test:services` **356 grün** (+3),
+  `npx tsc --noEmit` und `npm run build` sauber.
+- **4 Mutationen, alle gefangen**: „nur die Kundenseite protokolliert",
+  „verdeckte Felder ignoriert", „Kandidatenliste ohne Protokoll",
+  „Einsatzliste ohne Protokoll".
+- Eine fünfte Mutation war **untauglich** (ein `.valueOf()` hinter dem `push`
+  ändert nichts) — als Mutation nachgebessert und dann gefangen.
+
+### Offen
+
+- Ob das Protokoll in dieser Vollständigkeit im Betrieb tragbar ist, hängt am
+  Aufkommen: jede geöffnete Liste schreibt je gezeigten Namen einen Eintrag.
+  Das ist der Wortlaut von 3.12 Nr. 3; eine Begrenzung wäre eine Änderung
+  dieses Kapitels und keine der Umsetzung.
+
+---
+
 ## 2026-11-26 — Protokoll je Eskalationsstufe im Lauf (2.4, Regel 4)
 
 ### Gemacht

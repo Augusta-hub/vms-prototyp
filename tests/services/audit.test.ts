@@ -27,9 +27,14 @@ import { protokolliere } from '../../lib/audit/record'
 import { loadAuditEntries, pruefeLueckenlosigkeit } from '../../lib/services/audit'
 import { acceptDocument, submitDocument } from '../../lib/services/documents'
 import { createCustomer, createSupplier } from '../../lib/services/masterData'
-import { loadSubmissions, transitionSubmission } from '../../lib/services/staffing'
+import {
+  loadAssignments,
+  loadCandidates,
+  loadSubmissions,
+  transitionSubmission,
+} from '../../lib/services/staffing'
 import { transitionSupplier } from '../../lib/services/supplierStatus'
-import { baueWelt, leereDatenbank, tag, type Welt } from './fixture'
+import { baueWelt, legeEinsatzAn, leereDatenbank, tag, type Welt } from './fixture'
 
 const HEUTE = tag('2026-11-10')
 
@@ -601,13 +606,52 @@ describe('Klardaten des Kandidaten (3.12, Nummer 3; 6.4)', () => {
     expect((await alleEintraege()).filter((eintrag) => eintrag.operation === 'read')).toEqual([])
   })
 
-  it('der Betreiber löst keine Offenlegung aus — bei ihm waren die Daten nie verdeckt', async () => {
+  it('protokolliert auch den Zugriff des Betreibers — 3.12 Nr. 3 gilt unabhängig vom Mandanten', async () => {
+    // Früher stand hier das Gegenteil: beim Betreiber seien die Daten nie
+    // verdeckt, also gebe es keine Offenlegung. 3.12 Nummer 3 nennt aber
+    // „lesende Zugriffe auf Klardaten von Kandidaten (6.4), **unabhängig vom
+    // Mandanten**" — maßgeblich ist nicht, wer liest, sondern dass der Name
+    // herausgegeben wurde.
     await zugesagterVorschlag()
     await prisma.candidateSubmission.updateMany({
       where: { submissionNumber: 'PV-9001' },
       data: { disclosureLevel: 'identified', status: 'accepted' },
     })
     await loadSubmissions(disponent, HEUTE)
+    const lesezugriffe = (await alleEintraege()).filter((eintrag) => eintrag.operation === 'read')
+    expect(lesezugriffe.length).toBeGreaterThan(0)
+    expect(lesezugriffe.every((eintrag) => eintrag.objectType === 'candidate')).toBe(true)
+    expect(lesezugriffe[0]?.actorUserId).toBe(welt.disponent)
+  })
+
+  it('protokolliert den Namen in der **Kandidatenliste** (3.12, Nummer 3)', async () => {
+    await loadCandidates(disponent, HEUTE)
+    const lesezugriffe = (await alleEintraege()).filter((eintrag) => eintrag.operation === 'read')
+    expect(lesezugriffe.length).toBeGreaterThan(0)
+    expect(lesezugriffe.every((eintrag) => eintrag.objectType === 'candidate')).toBe(true)
+    expect(lesezugriffe[0]?.reason).toContain('Kandidatenliste')
+  })
+
+  it('protokolliert den Namen in der **Einsatzliste** (3.12, Nummer 3)', async () => {
+    await legeEinsatzAn(welt, {
+      nummer: 'E-9100',
+      status: 'active',
+      plannedStartDate: tag('2026-10-01'),
+      plannedEndDate: tag('2027-03-31'),
+      actualStartDate: tag('2026-10-01'),
+    })
+    await loadAssignments(disponent, HEUTE)
+    const lesezugriffe = (await alleEintraege()).filter(
+      (eintrag) => eintrag.operation === 'read' && eintrag.reason?.includes('Einsatzliste') === true,
+    )
+    expect(lesezugriffe.length).toBeGreaterThan(0)
+    expect(lesezugriffe[0]?.objectType).toBe('candidate')
+  })
+
+  it('protokolliert nichts, wo der Name verdeckt bleibt ([23], 6.4)', async () => {
+    // Der Bedarfsträger sieht die Kandidatenliste nicht und die Namen nicht;
+    // ohne Herausgabe gibt es keinen Eintrag.
+    await loadCandidates(bedarfstraeger, HEUTE)
     expect((await alleEintraege()).filter((eintrag) => eintrag.operation === 'read')).toEqual([])
   })
 })

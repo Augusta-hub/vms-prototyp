@@ -987,20 +987,41 @@ function describeCandidate(candidate: LoadedCandidate): CandidateFields {
   }
 }
 
-/** Die Kandidaten, die diese Identität sehen darf (2.2, Zeile 3.6). */
+/**
+ * Die Kandidaten, die diese Identität sehen darf (2.2, Zeile 3.6).
+ *
+ * Jeder Name, der dabei herausgegeben wird, wird protokolliert (3.12,
+ * Nummer 3) — die Liste zeigt Vor- und Nachnamen, und das ist ein lesender
+ * Zugriff auf Klardaten. Geschrieben wird **nach** der Projektion und in einer
+ * eigenen Transaktion: die Liste soll nicht an einem Protokolleintrag hängen.
+ */
 export async function loadCandidates(
   identity: LoadedIdentity,
+  evaluationDate: Date = new Date(),
 ): Promise<readonly CandidateListEntry[]> {
   const candidates = await prisma.candidate.findMany({
     include: CANDIDATE_INCLUDE,
     orderBy: [{ supplierId: 'asc' }, { candidateNumber: 'asc' }],
   })
 
-  return candidates.flatMap((candidate) => {
+  const offenlegungen: AuditDraft[] = []
+  const eintraege = candidates.flatMap((candidate) => {
     const ref = candidateRef(candidate)
     const decision = checkPermission(identity.subject, 'read', ref)
     const fields = project(describeCandidate(candidate), decision)
     if (fields === null) return []
+    if (klardatenHerausgegeben(decision)) {
+      offenlegungen.push(
+        klardatenEintrag({
+          identity,
+          candidateId: candidate.id,
+          tenantId: candidate.tenantId,
+          decision,
+          anlass: `in der Kandidatenliste gelesen (${candidate.candidateNumber})`,
+          occurredAt: evaluationDate,
+        }),
+      )
+    }
     return [
       {
         id: candidate.id,
@@ -1019,6 +1040,11 @@ export async function loadCandidates(
       },
     ]
   })
+
+  for (const entwurf of offenlegungen) {
+    await protokolliereGetrennt(entwurf)
+  }
+  return eintraege
 }
 
 export interface NewCandidateInput {
@@ -1353,16 +1379,15 @@ export async function loadSubmissions(
     // protokolliert. Gemeldet wird er, nicht abgewartet — die Liste soll
     // nicht an einem Protokolleintrag hängen, und der Eintrag läuft in seiner
     // eigenen Transaktion.
-    if (klardatenOffengelegt(identity, submission, decision)) {
+    if (klardatenHerausgegeben(decision)) {
       offenlegungen.push(
-        leseEintrag({
+        klardatenEintrag({
+          identity,
+          candidateId: submission.candidateId,
+          tenantId: submission.tenantId,
           decision,
-          bezug: protokollbezug('candidate', submission.candidateId, submission.tenantId),
-          userId: identity.user.id,
+          anlass: `über den Profilvorschlag ${submission.submissionNumber} gelesen`,
           occurredAt: evaluationDate,
-          reason:
-            `Klardaten des Kandidaten über den Profilvorschlag ${submission.submissionNumber} ` +
-            'offengelegt (6.4, 4.2.3): die Offenlegungsstufe steht auf `identified`.',
         }),
       )
     }
@@ -1410,27 +1435,45 @@ export async function loadSubmissions(
 }
 
 /**
- * Legt dieser Lesezugriff die Klardaten des Kandidaten offen (3.12, Nummer 3)?
+ * Liefert dieser Lesezugriff die Klardaten eines Kandidaten (3.12, Nummer 3)?
  *
- * Drei Bedingungen zusammen: die Offenlegungsstufe steht auf `identified`
- * (6.4, 4.2.3), der Lesende gehört zur **Kundenseite** — für Betreiber und
- * Lieferanten sind die Daten nie verdeckt, bei ihnen gibt es keine Offenlegung,
- * die mit der Zusage entstünde —, und die Entscheidung verdeckt die Klardaten
- * tatsächlich nicht.
+ * 3.12 Nummer 3 nennt „lesende Zugriffe auf Klardaten von Kandidaten (6.4),
+ * **unabhängig vom Mandanten**". Maßgeblich ist deshalb **nicht**, wer liest,
+ * sondern ob der Name tatsächlich herausgegeben wurde: die Entscheidung
+ * erlaubt den Zugriff, und Fußnote [23] verdeckt den Namen nicht. Das liest
+ * das Ergebnis der Fußnote ab, statt sie nachzubauen.
  *
- * Die dritte Bedingung ist die eigentliche: sie liest das Ergebnis der
- * Fußnote [23] statt sie nachzubauen. Verdeckt die Fußnote die Felder, ist
- * nichts offengelegt worden.
+ * Für den Lieferanten und den Betreiber sind die Daten nie verdeckt — ihr
+ * Zugriff wird deshalb jedes Mal protokolliert, nicht nie. Das ist der Preis
+ * von Nummer 3 und ihr Zweck: ein Zugriffsprotokoll für personenbezogene Daten
+ * ist nur vollständig etwas wert. Lesezugriffe auf **nicht** personenbezogene
+ * Daten im eigenen Mandanten bleiben unprotokolliert (3.12, letzter Absatz).
  */
-function klardatenOffengelegt(
-  identity: LoadedIdentity,
-  submission: LoadedSubmission,
-  decision: Decision,
-): boolean {
+function klardatenHerausgegeben(decision: Decision): boolean {
   if (!decision.allowed) return false
-  if (identity.tenant.tenantType !== 'customer') return false
-  if (submission.disclosureLevel !== 'identified') return false
   return !decision.concealedFields.includes('familyName')
+}
+
+/**
+ * Der Protokolleintrag zu einem solchen Zugriff — einer je Kandidat, dessen
+ * Name herausgegeben wurde. Eine Liste mit zehn Kandidaten legt zehn Namen
+ * offen; ein Sammeleintrag könnte nicht sagen, welche.
+ */
+function klardatenEintrag(args: {
+  readonly identity: LoadedIdentity
+  readonly candidateId: string
+  readonly tenantId: string
+  readonly decision: Decision
+  readonly anlass: string
+  readonly occurredAt: Date
+}): AuditDraft {
+  return leseEintrag({
+    decision: args.decision,
+    bezug: protokollbezug('candidate', args.candidateId, args.tenantId),
+    userId: args.identity.user.id,
+    occurredAt: args.occurredAt,
+    reason: `Klardaten des Kandidaten ${args.anlass} (3.12, Nummer 3; 6.4).`,
+  })
 }
 
 export interface NewSubmissionInput {
@@ -2302,12 +2345,27 @@ export async function loadAssignments(
     ),
   )
 
-  return assignments.flatMap((assignment) => {
+  const offenlegungen: AuditDraft[] = []
+  const eintraege = assignments.flatMap((assignment) => {
     const status = assignment.status as AssignmentState
     const ref = assignmentResource(assignment)
     const decision = checkPermission(identity.subject, 'read', ref)
     const fields = project(describeAssignment(assignment), decision)
     if (fields === null) return []
+    // Die Einsatzliste nennt den Kandidaten mit Namen — auch das ist ein
+    // lesender Zugriff auf Klardaten (3.12, Nummer 3).
+    if (klardatenHerausgegeben(decision)) {
+      offenlegungen.push(
+        klardatenEintrag({
+          identity,
+          candidateId: assignment.candidateId,
+          tenantId: assignment.tenantId,
+          decision,
+          anlass: `in der Einsatzliste gelesen (Einsatz ${assignment.assignmentNumber})`,
+          occurredAt: evaluationDate,
+        }),
+      )
+    }
 
     const facts = assignmentFacts(
       assignment,
@@ -2363,6 +2421,11 @@ export async function loadAssignments(
       },
     ]
   })
+
+  for (const entwurf of offenlegungen) {
+    await protokolliereGetrennt(entwurf)
+  }
+  return eintraege
 }
 
 function describeExtension(
