@@ -49,7 +49,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Einkauf / Controlling | `procurementController` | Rolle auf Kundenseite: kaufmännischer Rahmen und Auswertung |
 | Lieferantendisponent | `supplierCoordinator` | Rolle beim Lieferanten: Angebote, Kandidaten, Zeiten |
 | Lieferantenadministrator | `supplierAdmin` | Rolle beim Lieferanten: Stammdaten, Nachweise, Benutzer |
-| Leiharbeitnehmer | `temporaryWorker` | überlassene Person; eigener Zugang ist offene Frage 4 |
+| Leiharbeitnehmer | `temporaryWorker` | überlassene Person; **ohne** eigenen Zugang (Frage 4) |
 | Rolle | `role` | Funktion mit festgelegten Rechten, keine Person |
 | Rollenzuweisung | `roleAssignment` | Verbindung aus Benutzer, Rolle und Mandant |
 | Berechtigung | `permission` | Recht einer Rolle auf eine Operation an einem Objekt |
@@ -85,7 +85,7 @@ trägt er einen anderen Namen (4.0, Namenskonvention).
 | Fachliche Kennung | `…Number` | lesbare, mandantenweit eindeutige Nummer eines Objekts (z. B. `customerNumber`) |
 | Gültigkeitsbeginn / -ende | `validFrom` / `validTo` | fachlicher Gültigkeitszeitraum; `validTo` leer = unbefristet |
 | Deaktivierung | `deactivatedAt` | fachliches „Löschen" (Kapitel 2.2, 6.6) |
-| Fremdsystemkennung | `externalReference` | Kennung desselben Sachverhalts in einem Fremdsystem (offene Frage 7) |
+| Fremdsystemkennung | `externalReference` | Kennung desselben Sachverhalts in einem Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 | Kunde / Entleiher | `customer` | Organisation, die Leiharbeitnehmer entleiht (Kapitel 3.1) |
 | Standort | `site` | konkreter Einsatzort eines Kunden (Kapitel 3.1) |
 | Kostenstelle | `costCenter` | kaufmännische Zuordnung beim Kunden (Kapitel 3.1) |
@@ -280,23 +280,18 @@ Angaben:
 Fehlt eine der drei, besteht kein Zugriff. Rollen erben nicht voneinander: eine
 „höhere" Rolle hat nicht automatisch die Rechte einer „niedrigeren".
 
-> **Abhängigkeit von offenen Fragen.** Dieses Kapitel ist so formuliert, dass
-> es beide Antworten auf **offene Frage 4** (eigener Zugang für
-> Leiharbeitnehmer) und **offene Frage 8** (eine Instanz pro MSP oder getrennte
-> Instanzen) verträgt:
+> **Zwei Fragen, die dieses Kapitel trugen, sind entschieden.**
 >
-> - Zu Frage 4: Die Rolle `Leiharbeitnehmer` ist durchgängig als *optionaler*
->   Zugang beschrieben. Alle Vorgänge, die sie betrifft, haben eine zweite
->   Zuständigkeit (Lieferant: Disponent, siehe Fußnote [27] in 2.2). Wird die
->   Frage mit „kein eigener Zugang" beantwortet, entfällt die Spalte `AN` der
->   Berechtigungsmatrix vollständig, ohne dass eine andere Regel nachzuziehen
->   ist. Betroffene Stellen sind mit *(offene Frage 4)* gekennzeichnet.
-> - Zu Frage 8: Kapitel 2.3 formuliert **fachliche** Sichtbarkeitsregeln. Sie
->   gelten unabhängig davon, ob alle Kunden eines MSP in einer Instanz oder in
->   getrennten Instanzen betrieben werden. Bei getrennten Instanzen sind
->   einzelne Regeln bereits durch die Betriebsform erfüllt — sie entfallen
->   dadurch nicht als Anforderung. Betroffene Stellen sind mit
->   *(offene Frage 8)* gekennzeichnet.
+> - **Frage 4: kein eigener Zugang** für Leiharbeitnehmer. Erfasst wird im
+>   Namen der überlassenen Person ([27]); die Spalte `AN` der
+>   Berechtigungsmatrix trägt deshalb nur `L[4]` und bleibt für den Fall
+>   stehen, dass die Frage je neu beantwortet wird. Keine andere Regel ist
+>   nachzuziehen — das Kapitel war von Anfang an so gebaut.
+> - **Frage 8: eine Instanz** für alle Kunden, getrennt über die
+>   Mandantengrenze. Die Sichtbarkeitsregeln in 2.3 sind **fachlich**
+>   formuliert und bleiben es: sie gelten auch dann, wenn ein einzelner Kunde
+>   später in eine eigene Instanz gezogen wird. Die Betriebsform erfüllt dann
+>   einzelne Regeln von selbst — als Anforderung entfallen sie nicht.
 
 ### 2.1 Rollenübersicht
 
@@ -418,7 +413,7 @@ ist, und stellt Personal.
 - Kandidaten und Profilvorschläge einstellen und pflegen (Kapitel 3.6)
 - Eigene Einsätze verfolgen, Beendigung durch den Lieferanten anzeigen
 - Stundenzettel erfassen oder im Namen des Leiharbeitnehmers einreichen,
-  solange dieser keinen eigenen Zugang hat *(offene Frage 4)*
+  da dieser keinen eigenen Zugang hat (Frage 4)
 - Eigene Gutschriften prüfen, bestätigen oder beanstanden (3.9, 4.5)
 - Nachweise zu Kandidaten und Einsätzen hochladen
 
@@ -446,7 +441,7 @@ Bearbeitung von Anfragen, Angeboten und Kandidaten. Gegenüber dem
 MSP-Administrator: Hoheit nur über die eigene Organisation; Freischaltung und
 Entsperrung des Lieferanten bleiben beim Betreiber.
 
-#### Leiharbeitnehmer (`temporaryWorker`) — *optionaler Zugang, offene Frage 4*
+#### Leiharbeitnehmer (`temporaryWorker`) — *ohne eigenen Zugang (Frage 4)*
 
 **Zweck.** Sieht die eigenen Einsatzdaten und erfasst — sofern ein Zugang
 eingeräumt wird — die eigenen Zeiten.
@@ -477,7 +472,7 @@ der Lieferantendisponent alle hier genannten Vorgänge in seinem Namen; die
 | KE | Kunde: Einkauf / Controlling |
 | LD | Lieferant: Disponent |
 | LA | Lieferant: Administrator |
-| AN | Leiharbeitnehmer *(offene Frage 4)* |
+| AN | Leiharbeitnehmer — **ohne** eigenen Zugang (Frage 4) |
 
 **Operationen:** `A` anlegen · `L` lesen · `Ä` ändern · `S` Status wechseln ·
 `X` löschen · `–` kein Zugriff. `[n]` verweist auf die Fußnoten unter der
@@ -540,9 +535,9 @@ Tabelle.
 | [1] | Nur Felder ohne kaufmännische Wirkung (Ansprechpartner, Anschrift, Beschreibung); Konditionen gehören zu 3.3. |
 | [2] | Nur die eigene Organisation bzw. der eigene Kunde (Mandantengrenze, Kapitel 2.3). |
 | [3] | Nur Kunden und Standorte, für die eine eigene Beauftragung besteht, und nur im Umfang, den Kapitel 2.3 zulässt. |
-| [4] | Nur bei eigenem Zugang für Leiharbeitnehmer *(offene Frage 4)* und nur die eigenen Daten bzw. der eigene Einsatz. Ohne eigenen Zugang entfällt die Spalte `AN` vollständig. |
+| [4] | Nur bei eigenem Zugang für Leiharbeitnehmer und nur die eigenen Daten bzw. der eigene Einsatz. **Frage 4 ist entschieden: es gibt keinen** — die Spalte `AN` ist damit ohne Wirkung und bleibt nur stehen, falls die Frage je neu beantwortet wird. |
 | [5] | Sperren ja, Entsperren nein; Entsperrung und Reaktivierung nur durch MA (Vier-Augen-Prinzip, Kapitel 2.4). |
-| [6] | Nur Lieferanten mit Beauftragung für den eigenen Kunden; ob dem Kunden die Lieferantenidentität überhaupt angezeigt wird, ist **offene Frage 11**. |
+| [6] | Nur Lieferanten mit Beauftragung für den eigenen Kunden. **Frage 11 ist entschieden: die Lieferantenidentität wird dem Kunden angezeigt** — die Umsetzung verdeckt sie heute noch ([3], [14]) und zieht nach. |
 | [7] | Nur die eigene Lieferantenorganisation. |
 | [8] | Nur die Kostenwirkung des zu genehmigenden Vorgangs, nicht die Preisliste insgesamt. |
 | [9] | Nur die eigenen Konditionen, nie die eines anderen Lieferanten (Kapitel 2.3). |
@@ -551,7 +546,7 @@ Tabelle.
 | [12] | Einreichen zur Freigabe und Stornieren; die Freigabe selbst erfolgt durch KG. |
 | [13] | Freigeben oder ablehnen. |
 | [14] | Nur Anfragen mit eigener Einladung, ohne Kostenstelle, ohne interne Vermerke und ohne Angebote anderer Lieferanten (Kapitel 2.3). |
-| [15] | Nur Stand und Fortschritt zur eigenen Anfrage; Lieferantenidentität nach **offener Frage 11**. |
+| [15] | Nur Stand und Fortschritt zur eigenen Anfrage; die Lieferantenidentität wird angezeigt (Frage 11 entschieden, Umsetzung folgt). |
 | [16] | Nur die eigene Einladung. |
 | [17] | Annehmen, ablehnen oder zur Auswahl an den Kunden weiterleiten. |
 | [18] | Fachliche Inhalte des Angebots; Preisbestandteile nur, soweit Kapitel 2.3 und 6.4 es zulassen. |
@@ -563,7 +558,7 @@ Tabelle.
 | [24] | Fachliche Auswahlentscheidung (Interview, Zusage, Ablehnung); die Statusführung gegenüber dem Lieferanten übernimmt MD. |
 | [25] | Antrag auf Verlängerung oder vorzeitige Beendigung; wirksam wird der Übergang durch MD (Kapitel 4.3). |
 | [26] | Genehmigung von Verlängerung und vorzeitiger Beendigung, soweit Kapitel 4.3 sie der Kundenseite zuweist. |
-| [27] | Erfassung im Namen des Leiharbeitnehmers, solange dieser keinen eigenen Zugang hat *(offene Frage 4)*. |
+| [27] | Erfassung im Namen des Leiharbeitnehmers; er hat keinen eigenen Zugang (Frage 4). |
 | [28] | Korrektur nur mit Begründung und Protokolleintrag (Kapitel 3.12); genehmigte Zeiten nur über eine Korrekturfassung (Kapitel 4.4). |
 | [29] | Genehmigen oder ablehnen, und nur die Stufe, die `timesheetApprovalConfig` (3.1) dieser Rolle zuweist. Anzahl und Reihenfolge der Stufen sind Konfiguration je Kunde (4.4); wer den Zettel erfasst oder eingereicht hat, entscheidet keine Stufe (2.4, Regel 5). |
 | [30] | Freigabe nicht durch dieselbe Person, die den Beleg erstellt hat (Vier-Augen-Prinzip, Kapitel 2.4). |
@@ -574,14 +569,14 @@ Tabelle.
 | [35] | Nur einsatzbezogene Nachweise zum eigenen Kunden (z. B. Unterweisung, Qualifikation), keine Vertragsunterlagen des Lieferanten. |
 | [36] | Nur Gültigkeitsstatus der AÜG-Erlaubnis der beauftragten Lieferanten, ohne Urkundeninhalte. |
 | [37] | Nur solange der Nachweis nicht anerkannt ist. |
-| [38] | Nur lesend, zur Zuordnung von Vorgängen; die Rollenvergabe bleibt bei MA bzw. LA. Die kundenseitige Benutzerverwaltung liegt derzeit beim Betreiber — **offene Frage 12**. |
+| [38] | Nur lesend, zur Zuordnung von Vorgängen; die Rollenvergabe bleibt bei MA bzw. LA. Die kundenseitige Benutzerverwaltung liegt beim Betreiber (Frage 12). |
 | [39] | Nur Einträge zu Objekten der eigenen Organisation bzw. des betreuten Kunden. Audit-Einträge entstehen ausschließlich durch das System und sind für jede Rolle unveränderlich — deshalb trägt die Zeile kein `Ä` und kein `X`. |
 | [40] | Nur der eigene Rahmenvertrag mit dem Betreiber; der Rahmenvertrag eines anderen Mandanten ist nie sichtbar. Für KG entfällt die Zeile, weil [8] ausdrücklich nur die Kostenwirkung des Einzelvorgangs meint. |
 | [41] | Nur die Kundenpreisliste des eigenen Kunden (Betreiber ↔ Kunde). Die Einkaufskonditionen des Betreibers gegenüber Lieferanten sind für Kundenrollen nicht sichtbar. |
 | [42] | Nur die eigene Einkaufspreisliste (Betreiber ↔ eigener Lieferant); die Kundenpreisliste ist nie sichtbar. |
 | [43] | Zusammenführen und Trennen von Kandidatensätzen derselben Person. Das Objekt ist ausschließlich beim Betreiber geführt; Kunden und Lieferanten sehen es und seine Existenz nicht (Kapitel 2.3, Regel 4). Dass es geführt wird, ist entschieden; der Merkmalssatz ist in 3.6 abschließend festgelegt. |
 | [44] | Die Zeitposition trägt keinen eigenen Status; genehmigt wird der Stundenzettel (Kapitel 4.4). `X` meint das Entfernen einer Position vor der Einreichung; Korrekturen genehmigter Zeiten laufen über eine Korrekturfassung ([28]). |
-| [45] | Nur die eigene Vertretung für eine eigene Rollenzuweisung bei geplanter Abwesenheit (Kapitel 2.4, Regel 7). Unvorhergesehene Abwesenheit richtet der Administrator der eigenen Organisation ein (LA bzw. kundenseitig derzeit der Betreiber — **offene Frage 12**). Keine Rechteerweiterung, keine Ketten; `Ä` fehlt, weil eine laufende Vertretung beendet (`X`) und neu angelegt wird. Für AN entfällt die Zeile: die Rolle ist nicht vertretbar (Kapitel 2.4, Regel 8). |
+| [45] | Nur die eigene Vertretung für eine eigene Rollenzuweisung bei geplanter Abwesenheit (Kapitel 2.4, Regel 7). Unvorhergesehene Abwesenheit richtet der Administrator der eigenen Organisation ein (LA bzw. kundenseitig der Betreiber, Frage 12). Keine Rechteerweiterung, keine Ketten; `Ä` fehlt, weil eine laufende Vertretung beendet (`X`) und neu angelegt wird. Für AN entfällt die Zeile: die Rolle ist nicht vertretbar (Kapitel 2.4, Regel 8). |
 | [46] | Nur die Absage der **eigenen** Einladung (`declined` mit `declineReason`, Kapitel 4.2.1), analog [20]. Keine weitere Statusführung: Annahme, Fristverlängerung und der Fortschritt der Ausschreibung bleiben beim Betreiber. Entscheidung zu *offener Frage 23*. |
 | [47] | Nur Benachrichtigungen, die an eine Rollenzuweisung des Zugreifenden gerichtet sind (Rolle **und** Mandant, Kapitel 3.14). Eine Benachrichtigung trägt keine eigene Entscheidung; sie wird gelesen und sonst nichts — deshalb trägt die Zeile kein `A`, kein `Ä`, kein `S` und kein `X`, auch nicht für MA. Für MA entfällt die Fußnote: er sieht das Benachrichtigungsaufkommen des Betriebs, wie er das Protokoll sieht ([39]). |
 
@@ -674,7 +669,7 @@ keine Lücke. Er ist dabei an drei Bedingungen gebunden:
 
 #### Leiharbeitnehmer
 
-Unabhängig davon, ob ein eigener Zugang eingeräumt wird *(offene Frage 4)*,
+Auch ohne eigenen Zugang (Frage 4)
 gilt: ein Leiharbeitnehmer sieht nur die eigenen Daten — eigenen Einsatz,
 eigene Zeiten, eigene Nachweise, eigenes Profil. Nie sichtbar sind andere
 Leiharbeitnehmer, Konditionen, Preise, Abrechnungsbelege und Kundendaten über
@@ -687,7 +682,7 @@ betrifft dann die Auskunft an den Leiharbeitnehmer über andere Wege
 Die Regeln dieses Abschnitts sind fachliche Anforderungen an die
 Sichtbarkeit, nicht an die Betriebsform. Sie gelten gleichermaßen, wenn alle
 Kunden eines MSP in einer gemeinsamen Instanz betrieben werden und wenn jeder
-Kunde eine eigene Instanz erhält *(offene Frage 8)*. Im Fall getrennter
+Kunde eine eigene Instanz erhält (Frage 8: eine Instanz). Im Fall getrennter
 Instanzen sind die Regeln zwischen Kunden technisch bereits erfüllt; die Regeln
 zwischen Lieferanten, die Querschnittssicht des Betreibers und die
 AÜG-Zählung über Kunden hinweg (Kapitel 5.1) bleiben aber auch dann zu lösen —
@@ -727,7 +722,7 @@ eine andere Person. Sie löst Abwesenheit, nicht fehlende Zuständigkeit.
    Frage 12**). Beide Wege werden protokolliert.
 8. **Nicht vertretbar.** Die Übersteuerung einer AÜG-Sperre (Kapitel 5.5,
    **offene Frage 10**) und die Rolle des Leiharbeitnehmers (personenbezogene
-   Erfassung, unabhängig von **offener Frage 4**).
+   Erfassung; ein eigener Zugang bestand nie, Frage 4 ist entschieden).
 9. **Ende.** Mit Ablauf des Vertretungszeitraums enden die Rechte sofort.
    Begonnene, nicht abgeschlossene Vorgänge fallen an die vertretene Funktion
    zurück; der Vertreter verliert den Zugriff darauf.
@@ -777,7 +772,7 @@ ist, an eine weitere Stelle. Sie ändert ihn nicht.
 | Bedarfsanfrage liegt zur Freigabe und wird nicht entschieden | KG | Vertretung → KB → MD | 4.1 |
 | Ausschreibung ohne Angebot bis zum Ende der Angebotsfrist | LD | Vertretung → LA → MD | 4.2 |
 | Vorgelegtes Profil ohne Rückmeldung des Kunden | KB | Vertretung → KG → MD | 4.2 |
-| Stundenzettel nicht eingereicht | AN *(offene Frage 4)* bzw. LD | LD → LA → MD | 4.4 |
+| Stundenzettel nicht eingereicht | LD (der Leiharbeitnehmer hat keinen Zugang, Frage 4) | LD → LA → MD | 4.4 |
 | Stundenzettel nicht genehmigt vor Periodenschluss | die Rolle der **offenen** Stufe (3.1, 4.4) | Vertretung → KE → MD; bei einer Betreiberstufe Vertretung → MA | 4.4, 3.9 |
 | AÜG-Erlaubnis läuft ab oder Nachweis fehlt | LA | LD → MD → MA | 5.4 |
 | Warnschwelle Höchstüberlassungsdauer erreicht | MD | MA, zusätzlich Information an KB | 5.1 |
@@ -889,7 +884,7 @@ je Kostenstelle.
 | Prozessfristen | `processDeadlineConfig` | Satz von Fristwerten in Tagen | optional | Eskalationsfristen je Kunde (2.4, Regel 5); die Werte legt Kapitel 4 bzw. 5 fest, nicht dieses Kapitel |
 | Freigabestufen der Zeiten | `timesheetApprovalConfig` | **geordnete** Liste von Stufen, je Stufe ein Rollenkürzel (2.1) | optional | wer den Stundenzettel in welcher Reihenfolge freigibt (4.4). Fehlt die Angabe, gilt die Vorbelegung aus 4.4: Kundenseite, dann Betreiber. Die Liste ist **Konfiguration, kein Code** — ein Kunde mit einer Stufe und ein Kunde mit drei Stufen ändern am Statusmodell nichts |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | Ende der Beauftragung |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Der Kunde **ist** ein Mandant: zu jedem `customer`
 gehört genau ein `tenant` mit `tenantType = customer` (3.11). Pflegehoheit liegt
@@ -935,7 +930,7 @@ Kennzeichnungs- und Konkretisierungspflicht des Überlassungsvertrags verlangt
 | Unterweisung erforderlich | `safetyBriefingRequired` | ja/nein | Pflicht | steuert den Pflichtnachweis (3.10, 5.4) |
 | Ansprechpartner vor Ort | `contacts` | Liste | optional | personenbezogen |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Kundenmandant. Pflege durch Betreiber (`MA`) und
 durch Einkauf/Controlling des Kunden (`KE`, Fußnote [2] in 2.2).
@@ -964,7 +959,7 @@ interne Zuordnung des Kunden und für Lieferanten **nie** sichtbar
 | Verantwortlich | `responsibleUserRef` | Verweis auf `user` (3.11) | optional | *(offene Frage 14)* — wer die Zuständigkeit pflegt, ist offen |
 | Budgetrahmen | `budgetAmount` | Betrag + Währung | optional | Kennzahlenbedarf ist **offene Frage 9** |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Kundenmandant; Pflege durch `KE` und `MA`.
 
@@ -1003,7 +998,7 @@ Erlaubnis ist ein eigenes Objekt (unten), seine Konditionen stehen in 3.3.
 | Sperrgrund | `blockReason` | Text | Pflicht bei `blocked` | |
 | Gesperrt am / von | `blockedAt` / `blockedBy` | Zeitpunkt / Verweis | Pflicht bei `blocked` | Entsperrung nur durch `MA` (Fußnote [5] in 2.2) |
 | Gültigkeitszeitraum | `validFrom` / `validTo` | Zeitraum | `validFrom` Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Der Lieferant **ist** ein Mandant
 (`tenantType = supplier`). Stammdatenhoheit: Betreiber (`MA`) für Nummer,
@@ -1086,7 +1081,7 @@ Entscheidung und keine Erweiterung dieses Kapitels.
 | Zahlungsziel | `paymentTermsDays` | Ganzzahl, Tage | optional | kaufmännische Angabe, keine Zahlungsabwicklung (1.4) |
 | Vertragsunterlage | `documentRefs` | Liste von Verweisen (3.10) | optional | Nachweisart `agreementDocument` |
 | Vertragsstatus | `status` | `draft`, `active`, `expired`, `terminated` | Pflicht | siehe Hinweis unten |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Der Rahmenvertrag gehört dem **Betreiber**
 (`tenantType = operator`) und ist der Gegenpartei zugeordnet. Pflege nur durch
@@ -1153,12 +1148,14 @@ n Einsätze (als vereinbarter Satz, 3.7) · 1 Zuschlagsart : n Preispositionen.
 
 **Datenkategorie (→ 6.3).** Keine personenbezogenen Daten.
 
-> *(offene Frage 17, neu)* Ob je Einsatz ein von der Preisliste abweichender
-> Satz vereinbart werden darf und wer die Abweichung genehmigt, ist offen.
-> Dieses Kapitel trägt beide Antworten: der Einsatz (3.7) verweist mit
-> `agreedRateCardItemRef` auf eine Preisposition und führt zusätzlich die
-> optionalen Felder `agreedHourlyRate` und `rateDeviationReason`. Ist keine
-> Abweichung zulässig, entfallen die beiden optionalen Felder.
+> *(Frage 17, entschieden)* Je Einsatz ist ein von der Preisliste
+> abweichender Satz **zulässig**: mit Pflichtbegründung, genehmigt vom
+> Betreiberadministrator (`MA`) und protokolliert (3.12). Der Einsatz (3.7)
+> verweist mit `agreedRateCardItemRef` auf eine Preisposition und führt
+> daneben `agreedHourlyRate` und `rateDeviationReason`. Der Kunde genehmigt
+> die Abweichung nicht mit — die Kondition ist zwischen Betreiber und
+> Gegenpartei vereinbart. Die Genehmigung durch `MA` ist noch nicht
+> umgesetzt.
 
 #### Tarifzuordnung (`collectiveAgreementAssignment`)
 
@@ -1257,7 +1254,7 @@ mehrere Köpfe (`headcount > 1`) kann zu mehreren Einsätzen führen.
 | Stornogrund | `cancellationReason` | Text | Pflicht bei Storno | |
 | Rückweisungsgrund | `rejectionReason` | Text | Pflicht bei Rückweisung | Begründung der Rückweisung `submitted` → `draft` durch `KG` (4.1); für den Bedarfsträger sichtbar, damit er weiß, was zu ändern ist |
 | Status | `status` | siehe 4.1 | Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Kundenmandant. Eigentümer ist der Bedarfsträger
 (`KB`); er darf nur im Status „Entwurf" ändern ([11]) und zur Freigabe
@@ -1375,7 +1372,7 @@ nachreichbar sein.
 | Anzahl | `headcount` | Ganzzahl ≥ 1 | Pflicht | |
 | Verrechnungssatz | `hourlyRate` | Betrag je Stunde | Pflicht | Einkaufsseite |
 | Preisposition | `rateCardItemRef` | Verweis (3.3) | optional | gesetzt, wenn der Satz aus der Einkaufspreisliste kommt |
-| Abweichungsgrund | `rateDeviationReason` | Text | Pflicht bei Abweichung von der Preisliste | *(offene Frage 17)* |
+| Abweichungsgrund | `rateDeviationReason` | Text | Pflicht bei Abweichung von der Preisliste | genehmigt `MA` (Frage 17) |
 | Zuschläge | `premiumRates` | Liste (Zuschlagsart, Wert) | optional | Zuschlagsarten aus 3.8 |
 
 **Mandant und Eigentümer.** Lieferantenmandant. Der `LD` legt an, ändert bis
@@ -1392,7 +1389,7 @@ abgelehnt → zurückgezogen).
 **Datenkategorie (→ 6.3).** Keine Kandidatendaten im Angebot selbst; die
 Personendaten stehen ausschließlich in 3.6.
 
-> *(offene Frage 11)* Ob dem Kunden angezeigt wird, **welcher** Lieferant ein
+> *(Frage 11, entschieden)* Dem Kunden wird angezeigt, **welcher** Lieferant ein
 > Angebot abgegeben hat, oder ob der Betreiber als einziger sichtbarer
 > Vertragspartner auftritt, ist offen. Das Objekt trägt `supplierRef` in jedem
 > Fall — die Zuordnung ist für die Abrechnung und die AÜG-Prüfungen zwingend.
@@ -1460,7 +1457,7 @@ Status und seine eigene Offenlegungsstufe.
 | Bedarfsanfrage | `demandRequestRef` | Verweis (3.4) | Pflicht | *abgeleitet*, zur Prüfung der Sichtbarkeit mitgeführt |
 | Vorgelegt am | `submittedAt` | Zeitpunkt | Pflicht ab Status „eingereicht" | im Entwurf leer; die Matrix setzt mit `X[21]` einen Zustand `draft` voraus |
 | Verfügbar ab | `availableFrom` | Datum | Pflicht | |
-| Abweichender Satz | `offeredHourlyRate` | Betrag je Stunde | optional | wenn er von der Angebotsposition abweicht *(offene Frage 17)* |
+| Abweichender Satz | `offeredHourlyRate` | Betrag je Stunde | optional | wenn er von der Angebotsposition abweicht; zulässig mit Begründung (Frage 17) |
 | Offenlegungsstufe | `disclosureLevel` | `pseudonymized`, `identified` | Pflicht | Klardaten erst nach Zusage ([23], 6.4) |
 | Dem Kunden vorgelegt am | `releasedToCustomerAt` | Zeitpunkt | optional | Freigabe durch `MD` ([22]) |
 | Interview | `interviewScheduledAt` | Zeitpunkt | optional | |
@@ -1556,7 +1553,7 @@ Standort. Mehrere Köpfe einer Anfrage ergeben mehrere Einsätze.
 | Kunde | `customerRef` | Verweis (3.1) | Pflicht | Bezugspunkt der Höchstüberlassungsdauer (5.1) |
 | Standort | `siteRef` | Verweis (3.1) | Pflicht | Einsatzort (5.3) |
 | Kostenstelle | `costCenterRef` | Verweis (3.1) | Pflicht | für Lieferanten nicht sichtbar |
-| Lieferant | `supplierRef` | Verweis (3.2) | Pflicht | Anzeige gegenüber dem Kunden nach *(offener Frage 11)* |
+| Lieferant | `supplierRef` | Verweis (3.2) | Pflicht | wird dem Kunden angezeigt (Frage 11) |
 | Kandidat | `candidateRef` | Verweis (3.6) | Pflicht | |
 | Personenidentität | `workerIdentityRef` | Verweis (3.6) | Pflicht ab Status `planned` | nur Betreibersicht; Grundlage der Zählung nach 5.1 |
 | Bedarfsanfrage | `demandRequestRef` | Verweis (3.4) | optional | leer bei Einsatz ohne vorangegangene Anfrage |
@@ -1567,8 +1564,8 @@ Standort. Mehrere Köpfe einer Anfrage ergeben mehrere Einsätze.
 | Wochenstunden | `weeklyHours` | Dezimalzahl | Pflicht | |
 | Schichtmodell | `shiftModel` | Katalogwert | optional | |
 | Vereinbarte Preisposition | `agreedRateCardItemRef` | Verweis (3.3) | Pflicht | Einkaufsseite |
-| Abweichender Satz | `agreedHourlyRate` | Betrag je Stunde | optional | *(offene Frage 17)* |
-| Abweichungsgrund | `rateDeviationReason` | Text | Pflicht bei Abweichung | *(offene Frage 17)* |
+| Abweichender Satz | `agreedHourlyRate` | Betrag je Stunde | optional | zulässig mit Begründung, genehmigt von `MA` (Frage 17) |
+| Abweichungsgrund | `rateDeviationReason` | Text | Pflicht bei Abweichung | genehmigt `MA` (Frage 17) |
 | Kundenseitige Preisposition | `customerRateCardItemRef` | Verweis (3.3) | Pflicht | Verkaufsseite; für Lieferanten nie sichtbar ([42]) |
 | Vergleichsentgelt | `comparableWage` | Betrag je Stunde | Pflicht ab `equalPayDueDate` | erbt beim Anlegen aus dem Vergleichsentgelt des Standorts zur Tätigkeit (3.3); eine Abweichung ist mit Begründung möglich und wird protokolliert |
 | Equal-Pay-Fälligkeit | `equalPayDueDate` | Datum | *abgeleitet* | Ergebnis aus 5.2 |
@@ -1577,7 +1574,7 @@ Standort. Mehrere Köpfe einer Anfrage ergeben mehrere Einsätze.
 | Beendigungsgrund | `terminationReason` | Text | Pflicht bei vorzeitiger Beendigung | |
 | Beendigung beantragt von | `terminationRequestedBy` | Verweis auf `user` | Pflicht bei Antrag | `KB` ([25]), `LD` ([25]) oder `MD` |
 | Status | `status` | siehe 4.3 | Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Der Einsatz ist das Objekt an der Nahtstelle und
 gehört dem **Betreibermandanten**; er ist gleichzeitig dem Kunden und dem
@@ -1695,7 +1692,7 @@ Stundenzettel wird genehmigt, nicht die einzelne Zeitposition
 | Einsatz | `assignmentRef` | Verweis (3.7) | Pflicht | |
 | Abrechnungsperiode | `billingPeriodRef` | Verweis (3.9) | Pflicht | |
 | Zeitraum von / bis | `periodFrom` / `periodTo` | Datum | Pflicht | innerhalb der Abrechnungsperiode |
-| Erfasst von | `recordedBy` | Verweis auf `user` | Pflicht | Leiharbeitnehmer *(offene Frage 4)* oder `LD` in dessen Namen ([27]) |
+| Erfasst von | `recordedBy` | Verweis auf `user` | Pflicht | `LD` im Namen des Leiharbeitnehmers ([27]); dieser hat keinen eigenen Zugang (Frage 4) |
 | Eingereicht am / von | `submittedAt` / `submittedBy` | Zeitpunkt / Verweis | Pflicht ab Status „eingereicht" | |
 | Summe Stunden | `totalHours` | Dezimalzahl | *abgeleitet* | Summe der Zeitpositionen |
 | Summe je Zuschlagsart | `totalPremiumHours` | Liste (Zuschlagsart, Stunden) | *abgeleitet* | Grundlage der Belegpositionen (3.9) |
@@ -1704,7 +1701,7 @@ Stundenzettel wird genehmigt, nicht die einzelne Zeitposition
 | Ablehnungsgrund | `rejectionReason` | Text | Pflicht bei Ablehnung | |
 | Korrekturfassung zu | `correctionOf` | Verweis auf `timesheet` | optional | genehmigte Zeiten werden nur über eine Korrekturfassung geändert ([28], 4.4) |
 | Status | `status` | siehe 4.4 | Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; im Prototyp wird keine Schnittstelle gebaut (Frage 7) |
 
 **Mandant und Eigentümer.** Der Stundenzettel entsteht auf der Lieferanten-
 bzw. Arbeitnehmerseite und wird kundenseitig genehmigt; geführt wird er im
@@ -1808,7 +1805,7 @@ Ein `declared`-Zuschlag ist zulässig und keine Beanstandung — aber er ist ein
 **Angabe**, und die freigebende Stufe entscheidet über sie mit (4.4).
 
 **Mandant und Eigentümer.** Wie der Stundenzettel; erfasst durch
-Leiharbeitnehmer *(offene Frage 4)* oder `LD` ([27]).
+`LD` im Namen des Leiharbeitnehmers ([27]); dieser hat keinen eigenen Zugang (Frage 4).
 
 **Beziehungen.** n Zeitpositionen : 1 Stundenzettel · n Zeitpositionen :
 m Zuschlagsarten · n Zeitpositionen : 0..1 abweichende Kostenstelle.
@@ -1947,7 +1944,7 @@ erstellt die Gutschrift, der Lieferant bestätigt oder beanstandet sie.
 | Stornogrund | `cancellationReason` | Text | Pflicht bei Storno | 4.5.2 verlangt „Begründung Pflicht" |
 | Storno zu | `cancellationOf` | Verweis auf `billingDocument` | optional | Storno erzeugt einen neuen Beleg, der alte bleibt |
 | Status | `status` | siehe 4.5 | Pflicht | |
-| Fremdsystemkennung | `externalReference` | Text | optional | *(offene Frage 7)* — hier besonders relevant für die ERP-Übergabe |
+| Fremdsystemkennung | `externalReference` | Text | optional | Kennung im Fremdsystem; keine Schnittstelle im Prototyp (Frage 7) — für die ERP-Übergabe besonders relevant |
 
 **Belegposition**
 
@@ -1968,6 +1965,15 @@ erstellt die Gutschrift, der Lieferant bestätigt oder beanstandet sie.
 Seiten. `KE` prüft und beanstandet die Kundenseite ([31]), `LD` bestätigt oder
 beanstandet die Lieferantenseite ([32]). Die Statusführung bleibt in jedem Fall
 beim Betreiber — im Gutschriftverfahren legt der Lieferant keinen Beleg an.
+
+**Rundung der Beträge** (Frage 53). Jede **Belegposition** wird auf zwei
+Nachkommastellen kaufmännisch gerundet; `netAmount` ist die **Summe der
+gerundeten Positionen**, nicht die gerundete Summe. Maßgeblich ist die
+Nachprüfbarkeit: der Empfänger rechnet jede Zeile nach, und die Summe muss
+stimmen. Die **Konditionen** bleiben mit vier Nachkommastellen geführt (3.3) —
+gerundet wird erst der Betrag, nie der Preis. Für die **Stunden** gilt die
+Rundung aus Frage 48: Einheit und Richtung sind am Rahmenvertrag vereinbart,
+vorbelegt die Viertelstunde, kaufmännisch, je Kalendertag.
 
 **Beziehungen.** n Belege : 1 Abrechnungsperiode · 1 Beleg :
 n Belegpositionen · n Belegpositionen : 1 Stundenzettel · n Belegpositionen :
@@ -2091,7 +2097,7 @@ Lieferant · 1 Mandant : n Objekte aller mandantengebundenen Arten.
 
 **Statusmodell.** Keines.
 
-> *(offene Frage 8)* Ob alle Mandanten eines MSP in einer Instanz liegen oder
+> *(Frage 8, entschieden: eine Instanz)* Ob alle Mandanten eines MSP in einer Instanz liegen oder
 > je Kunde eine Instanz betrieben wird, ändert dieses Objekt nicht. Bei
 > getrennten Instanzen existiert in jeder Instanz ein Betreibermandant, und die
 > mandantenübergreifenden Auswertungen aus 5.1 sind über Instanzgrenzen
@@ -2112,9 +2118,10 @@ Lieferant · 1 Mandant : n Objekte aller mandantengebundenen Arten.
 
 **Mandant und Eigentümer.** Mandant des Benutzers. Pflege durch `MA`
 (Betreiber- und — derzeit — Kundenbenutzer) bzw. `LA` (eigene Organisation,
-[7]). Wer kundenseitige Benutzer verwaltet, ist **offene Frage 12**: wird eine
-kundenseitige Administratorrolle eingeführt, kommt eine Rolle in 2.1 und eine
-Spalte in 2.2 hinzu — dieses Objekt bleibt unverändert.
+[7]). Kundenseitige Benutzer verwaltet der **Betreiber** (Frage 12
+entschieden); eine kundenseitige Administratorrolle gibt es nicht. Die eigene
+Vertretung bei geplanter Abwesenheit richtet der Rolleninhaber selbst ein (2.4,
+Regel 7).
 
 **Beziehungen.** 1 Benutzer : n Rollenzuweisungen · 1 Benutzer :
 n Betreuungszuordnungen (nur MSP-Benutzer) · 1 Benutzer : n Vertretungen (als
@@ -2134,7 +2141,7 @@ Anmeldegeheimnisse, Zugriffsprotokolle (die stehen in 3.12).
 | Gilt für Mandantentyp | `appliesToTenantType` | `operator`, `customer`, `supplier` | Pflicht | verhindert Rollen über Organisationsgrenzen (Kapitel 2) |
 
 **Festlegung.** Die Rollen sind ein **fester Katalog**, keine Nutzerdaten. Die
-Rolle `temporaryWorker` existiert nur, wenn *(offene Frage 4)* mit „eigener
+Rolle `temporaryWorker` existierte nur, wenn Frage 4 mit „eigener
 Zugang" beantwortet wird; andernfalls entfällt der Katalogwert ersatzlos, wie
 die Spalte `AN` der Matrix.
 
@@ -2278,8 +2285,9 @@ Berechtigungsreview (6.8) und **nicht** zur Leistungs- oder
 Verhaltenskontrolle zu verwenden — eine Festlegung, die in 6.3 und ggf. in
 einer Betriebsvereinbarung zu verankern ist.
 
-> *(offene Frage 22, neu)* Wie lange Audit-Einträge aufbewahrt werden und wie
-> sich das zum Löschanspruch der betroffenen Person verhält, ist offen. Die
+> *(Frage 22, entschieden)* Audit-Einträge werden **zehn Jahre** aufbewahrt
+> und nach Ablauf **gesperrt statt gelöscht**; dem Löschanspruch steht
+> Art. 17 Abs. 3 Buchst. b DSGVO entgegen. Die
 > Spannung ist echt: der Eintrag ist der Nachweis, dass eine Löschung,
 > Korrektur oder Übersteuerung stattgefunden hat, und darf nicht mit dem
 > gelöschten Datensatz verschwinden. Die Entscheidung gehört nach 6.5 und 6.6;
@@ -2575,8 +2583,9 @@ Das **Postfach** ist keine Kopie, sondern eine Sicht auf die
 Benachrichtigungen selbst: wer sie nach [47] lesen darf, findet sie dort. Es
 entsteht deshalb kein Objekt je Postfacheintrag.
 
-Die **Übergabe an ein Fremdsystem** bleibt *offene Frage 7*. Sie wäre ein
-dritter Weg und kein Ersatz für diese zwei.
+Die **Übergabe an ein Fremdsystem** gibt es nicht (Frage 7: keine
+Schnittstelle im Prototyp). Sie wäre ein dritter Weg und kein Ersatz für diese
+zwei.
 
 **Wer die E-Mail erhält.** Die Personen, die die **adressierte
 Rollenzuweisung** tragen — eigen oder in Vertretung (2.4, Regel 2; dieselben,
@@ -3387,8 +3396,10 @@ Freigabeschritt (3.8)" in 2.2; der Freigabeschritt teilt die Zeile.
 > Stufen**: zuerst die **Kundenseite**, die bestätigt, dass die Zeiten erbracht
 > wurden — das weiß nur sie —, dann der **Betreiber**, der sie gegen Einsatz,
 > Preisposition und Periode prüft, bevor beide Belegseiten daraus entstehen
-> (4.5). Welche Kundenrolle die erste Stufe trägt, ist *Frage 47*; die Rundung
-> der Stunden ist *Frage 48*.
+> (4.5). Die erste Stufe trägt in der Vorbelegung **`KB`** (Frage 47): sie
+> bestätigt die Leistung, nicht das Budget. Die Stunden werden auf die am
+> Rahmenvertrag vereinbarte Einheit gerundet, vorbelegt die **Viertelstunde,
+> kaufmännisch, je Kalendertag** (Frage 48).
 >
 > Das Modell war von Anfang an so gebaut, dass die **Stufenzahl in den Daten
 > steht, nicht im Statusmodell** — daran ändert die Antwort nichts: die
@@ -3419,13 +3430,13 @@ der Zettel; die Zeitpositionen folgen seinem Zustand.
 
 | Von | Nach | Auslösende Rolle | Vorbedingungen | Nebenwirkungen |
 |---|---|---|---|---|
-| — | `recorded` | `AN` *(offene Frage 4)*, `LD` im Namen des Leiharbeitnehmers ([27]), `MD` ([27]) | Einsatz in `active`, `interrupted`, `completed` oder `terminatedEarly`; Abrechnungsperiode `open` (4.5); je Einsatz und Periode genau **ein** Zettel (3.13) | `recordedBy` wird gesetzt; `timesheetSubmissionDeadlineDays` beginnt mit dem Periodenende |
-| `recorded` | `submitted` | `AN` *(offene Frage 4)*, `LD` ([20]), `MD` | Mindestens eine Zeitposition; Summen abgeleitet; Zeitpositionen liegen innerhalb `periodFrom` / `periodTo` und außerhalb einer laufenden Unterbrechung (4.3); jede Position erfüllt die vier Invarianten aus 3.8 | Freigabeschritte werden aus `timesheetApprovalConfig` des Kunden erzeugt (3.1), mit **kopiertem** Rollenkürzel je Stufe; Benachrichtigung an die Rolle der ersten Stufe; AÜG-Prüfungen P1 und P4. Die Einreichung ist zugleich die **Erklärung**, dass der Zeitraum vollständig erfasst ist — ableitbar ist das nicht (3.8, Entscheidung zu *Frage 21*) |
+| — | `recorded` | `LD` im Namen des Leiharbeitnehmers ([27]), `MD` ([27]) — `AN` hat keinen Zugang (Frage 4) | Einsatz in `active`, `interrupted`, `completed` oder `terminatedEarly`; Abrechnungsperiode `open` (4.5); je Einsatz und Periode genau **ein** Zettel (3.13) | `recordedBy` wird gesetzt; `timesheetSubmissionDeadlineDays` beginnt mit dem Periodenende |
+| `recorded` | `submitted` | `LD` ([20]), `MD` — `AN` hat keinen Zugang (Frage 4) | Mindestens eine Zeitposition; Summen abgeleitet; Zeitpositionen liegen innerhalb `periodFrom` / `periodTo` und außerhalb einer laufenden Unterbrechung (4.3); jede Position erfüllt die vier Invarianten aus 3.8 | Freigabeschritte werden aus `timesheetApprovalConfig` des Kunden erzeugt (3.1), mit **kopiertem** Rollenkürzel je Stufe; Benachrichtigung an die Rolle der ersten Stufe; AÜG-Prüfungen P1 und P4. Die Einreichung ist zugleich die **Erklärung**, dass der Zeitraum vollständig erfasst ist — ableitbar ist das nicht (3.8, Entscheidung zu *Frage 21*) |
 | `submitted` | `inApproval` | System | Mindestens ein Freigabeschritt vorhanden | Erste Stufe wird geöffnet; `timesheetApprovalDeadlineDays` läuft gegen `closingDate` der Periode (4.5) |
 | `inApproval` | `inApproval` | Rolle der offenen Stufe ([29]) — kundenseitig `KB` oder `KG`, betreiberseitig `MD` oder `MA` | Entscheidung `approved` am Freigabeschritt; weitere Stufen offen; der Entscheidende hat den Zettel weder erfasst noch eingereicht (2.4, Regel 5) | Nächste Stufe wird geöffnet; Benachrichtigung an deren Rolle; **kein** Statuswechsel des Zettels |
 | `inApproval` | `approved` | Rolle der **letzten** Stufe ([29]) | Alle Stufen `approved`, darunter **mindestens eine Kundenstufe**; P4 ohne Sperre (Q36); P1 als **Warnung mit Pflicht-Eskalation** zulässig — Zeiten nach Fristende sperren die Genehmigung nicht, weil sie erbracht sind (5.5.5, Q35) | `approvedAt` / `approvedBy` gesetzt; Zeitpositionen sind gesperrt — Änderungen nur über eine Korrekturfassung ([28]); der Zettel wird für die Belegerstellung verfügbar (4.5); Benachrichtigung an `MD` und `LD` |
 | `inApproval` | `rejected` | Rolle einer offenen Stufe ([29]) | `rejectionReason` Pflicht | Noch offene Stufen entfallen; Benachrichtigung an die erfassende Seite mit Begründung; Protokolleintrag mit Begründung |
-| `rejected` | `recorded` | `AN` *(offene Frage 4)*, `LD`, `MD` | Abrechnungsperiode noch `open` (4.5) | Vorhandene Freigabeschritte werden verworfen und bei der nächsten Einreichung neu erzeugt; Korrekturen tragen Begründung und Protokolleintrag ([28]) |
+| `rejected` | `recorded` | `LD`, `MD` — `AN` hat keinen Zugang (Frage 4) | Abrechnungsperiode noch `open` (4.5) | Vorhandene Freigabeschritte werden verworfen und bei der nächsten Einreichung neu erzeugt; Korrekturen tragen Begründung und Protokolleintrag ([28]) |
 | `approved` | `corrected` | System, als Folge der Genehmigung einer Korrekturfassung | Neuer Zettel mit `correctionOf` auf diesen Zettel ist `approved` | Belegpositionen, die auf diesem Zettel beruhen, sind zu stornieren und neu zu erstellen (4.5); Benachrichtigung an `KE` bzw. `LD` |
 
 **Eine Sperre an der letzten Stufe nimmt die früheren nicht zurück.** Erreicht
@@ -4040,7 +4051,7 @@ als die Prozessfristen in 4.0). Eine Änderung ist eine Änderung dieses Kapitel
   Arbeitsverhältnis ab.
 - **Keine Prüfung gegen Behördendaten.** Die AÜG-Erlaubnis wird gegen den vom
   Lieferanten eingestellten, vom Betreiber anerkannten Nachweis geprüft, nicht
-  gegen ein Register (*offene Frage 7*).
+  gegen ein Register (Frage 7: keine Schnittstelle im Prototyp).
 - **Keine Statusmodelle.** Die Übergänge stehen in Kapitel 4. Die einzige
   Ausnahme ist der Nachweisfluss des Dokuments (5.4.3), den 4.0 ausdrücklich
   hierher verweist.
@@ -5025,7 +5036,7 @@ des Systems:
 
 **Aufbewahrung und Löschung** regelt Kapitel 6 (6.5, 6.6). Dieses Kapitel legt
 keine Aufbewahrungsfrist fest — die Spannung zwischen Nachweispflicht und
-Löschanspruch ist *offene Frage 22*.
+Löschanspruch ist in Frage 22 entschieden: zehn Jahre, danach Sperrung.
 
 #### 5.4.8 Bediente Prüfungen
 
@@ -5474,27 +5485,27 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | # | Frage | Betrifft | Status |
 |---|-------|----------|--------|
 | 1 | Tech-Stack (Sprache, Framework, Datenbank, ORM) | gesamtes Projekt | **entschieden:** Next.js (App Router) mit TypeScript, PostgreSQL über Prisma — siehe CLAUDE.md |
-| 2 | Konkreter Hoster und Betriebsmodell (Hetzner / IONOS / anderer DE-EU-Anbieter) | Kapitel 6.9 | offen |
+| 2 | Konkreter Hoster und Betriebsmodell (Hetzner / IONOS / anderer DE-EU-Anbieter) | Kapitel 6.9 | **vertagt:** kein Hoster gewählt; der Prototyp läuft auf dem Entwicklungsrechner. Zustellung (3.14) und Planer (5.5.1) bleiben damit unkonfiguriert — beide sind gebaut und warten auf die Umgebung. Zu treffen ist die Wahl, **bevor** das System Daten außerhalb des Entwicklungsrechners führt; daran hängen AVV, Serverstandort und Mailbetreiber (6.8, 6.9). |
 | 3 | Welcher Tarifvertrag ist zugrunde zu legen (iGZ/BAP, Branchenzuschläge)? | Kapitel 5.1, 5.2 | **entschieden:** Tarifwerk ist Konfiguration an der Tarifzuordnung (3.3), nicht verdrahtet; Kapitel 5 spezifiziert nur die Mechanik |
-| 4 | Bekommen Leiharbeitnehmer einen eigenen Zugang (z. B. Zeiterfassung)? | Kapitel 2 | offen |
+| 4 | Bekommen Leiharbeitnehmer einen eigenen Zugang (z. B. Zeiterfassung)? | Kapitel 2 | **entschieden:** **kein** eigener Zugang. Erfasst wird von `LD` oder vom Betreiber im Namen des Arbeitnehmers ([27]); die Fristenkette des Stundenzettels beginnt deshalb bei `LD` (2.4, 4.0). Keine Zugangsverwaltung für die überlassenen Personen, kein Login auf eine natürliche Person — und 2.4 Regel 8 bleibt, die die Rolle von der Vertretung ausnimmt. `AN` behält in 2.2 nur `L[4]`. |
 | 5 | Mehrstufige Genehmigung der Stundenzettel: wie viele Stufen, welche Rollen? | Kapitel 3.1, 4.4 | **entschieden:** **je Kunde konfigurierbar** (`timesheetApprovalConfig`, 3.1). Vorbelegung sind **zwei** Stufen — zuerst die **Kundenseite**, dann der **Betreiber**. Die Betreiberstufe tritt **hinzu**, sie ersetzt die Kundenentscheidung nicht (2.1, 2.4 Regel 3); welche Kundenrolle die erste Stufe trägt, ist *Frage 47* |
 | 6 | Gutschriftverfahren oder Rechnungseingang des Lieferanten? | Kapitel 3.9 | **entschieden:** Gutschriftverfahren; der Rechnungseingang bleibt als Variante dokumentiert, im Prototyp nicht umgesetzt |
-| 7 | Schnittstellen zu Fremdsystemen (ERP, Zeitwirtschaft, HR4YOU) im Prototyp? | Kapitel 1.4 | offen |
-| 8 | Werden mehrere Kunden eines MSP in einer Instanz oder getrennt betrieben? | Kapitel 1.3 | offen |
+| 7 | Schnittstellen zu Fremdsystemen (ERP, Zeitwirtschaft, HR4YOU) im Prototyp? | Kapitel 1.4 | **entschieden:** **keine** Schnittstelle im Prototyp. Die Objekte tragen `externalReference` (3.1 bis 3.10) und sind damit anschlussfähig; gebaut wird nichts, dessen Gegenseite niemand kennt. Die Übergabe einer Benachrichtigung an ein Fremdsystem (3.14) entfällt damit ebenfalls. |
+| 8 | Werden mehrere Kunden eines MSP in einer Instanz oder getrennt betrieben? | Kapitel 1.3 | **entschieden:** **eine** Instanz für alle Kunden, getrennt über die Mandantengrenze (2.3). Der Betreiber braucht die Quersicht über Kunden und Lieferanten — Höchstüberlassungsdauer, Erlaubnisse, nächtlicher Lauf; getrennte Instanzen würden sie zerschneiden und die Lieferantendaten vervielfachen. Ein einzelner Kunde kann später in eine eigene Instanz gezogen werden; das Datenmodell verhindert es nicht. |
 | 9 | Welche Kennzahlen muss das Reporting zwingend liefern? | Kapitel 3 | offen |
 | 10 | Wie werden Ausnahmen von AÜG-Sperren fachlich genehmigt? | Kapitel 5.5 | offen — **5.5.4 trägt jede Antwort:** die sechs Invarianten und die Übersteuerbarkeit je Prüfung stehen fest, offen sind nur Rolle, Verfahren, Befristung und ob es ein eigenes Objekt braucht. Provisorisch: nur `MA` |
-| 11 | Erfährt der Kunde, welcher Lieferant ein Angebot oder einen Kandidaten stellt, oder tritt der MSP als einziger sichtbarer Vertragspartner auf? | Kapitel 2.2, 2.3 | offen |
-| 12 | Wer verwaltet kundenseitige Benutzer und Vertretungen — der Betreiber oder eine zusätzliche kundenseitige Administratorrolle? | Kapitel 2.1, 2.2, 2.4 | offen |
+| 11 | Erfährt der Kunde, welcher Lieferant ein Angebot oder einen Kandidaten stellt, oder tritt der MSP als einziger sichtbarer Vertragspartner auf? | Kapitel 2.2, 2.3 | **entschieden:** der **Lieferant ist für den Kunden sichtbar** — am Angebot, am Kandidaten und am Einsatz. Der Überlassungsvertrag nennt den Verleiher ohnehin (§ 1 AÜG), und der Entleiher trägt die Auswahlverantwortung mit. **Die Umsetzung verdeckt ihn heute** (Fußnoten [3] und [14], 2.3); die Änderung betrifft diese Fußnoten, die Projektion der Listen und ihre Tests und ist eine eigene Arbeitseinheit. Unberührt bleibt, dass kein Lieferant etwas über **andere** Lieferanten erfährt (2.3, Regel 4). |
+| 12 | Wer verwaltet kundenseitige Benutzer und Vertretungen — der Betreiber oder eine zusätzliche kundenseitige Administratorrolle? | Kapitel 2.1, 2.2, 2.4 | **entschieden:** Benutzer und Rollenzuweisungen der Kundenseite legt der **Betreiber** (`MA`) an — keine zusätzliche Kundenadministratorrolle. Die **eigene Vertretung bei geplanter Abwesenheit** richtet der Rolleninhaber selbst ein, wie 2.4 Regel 7 es schon vorsieht ([45]); die unvorhergesehene Abwesenheit richtet der Betreiber ein. 2.1 und 2.2 bleiben damit unverändert. |
 | 13 | Wie wird eine Organisation behandelt, die gleichzeitig Kunde und Lieferant ist (Mandantenzuordnung, Sichtbarkeit)? | Kapitel 2.3 | offen |
 | 14 | Dürfen Kundenrollen (Bedarfsträger, Genehmiger) für mehrere Standorte und Kostenstellen eingeschränkt werden, und wer pflegt diese Zuständigkeit? | Kapitel 2.2, 3.1, 3.11 | offen |
 | 15 | Wie wird das Vergleichsentgelt für Equal Pay geführt, und in welcher Form liefert der Entleiher es? | Kapitel 3.3, 3.7, 5.2 | **entschieden:** je Tätigkeit am Standort als `comparableWageEntry` (3.3), mit Herkunftsangabe; der Einsatz erbt den Wert |
 | 16 | Granularität der Zeiterfassung: Zeitposition je Tag mit Stundensumme oder je Abschnitt mit Beginn, Ende und Pause? | Kapitel 3.8, 4.4 | **entschieden:** **beide**. Eine Position ist entweder Tagessumme oder Abschnitt (`entryForm`, 3.8), mehrere Abschnitte je Tag sind erlaubt. Die Form entscheidet, welche Zuschläge **ableitbar** sind: jeder Zuschlag trägt seine Herkunft `derived` oder `declared`, und die Zuschlagsart nennt ihre `derivationBasis`. Die Rundung ist *Frage 48* |
-| 17 | Darf je Einsatz ein von der Preisliste abweichender Satz vereinbart werden, und wer genehmigt die Abweichung? | Kapitel 3.3, 3.5, 3.7 | offen |
+| 17 | Darf je Einsatz ein von der Preisliste abweichender Satz vereinbart werden, und wer genehmigt die Abweichung? | Kapitel 3.3, 3.5, 3.7 | **entschieden:** **ja**, je Einsatz ist ein von der Preisliste abweichender Satz zulässig — mit **Pflichtbegründung**, genehmigt durch den Betreiberadministrator (`MA`) und protokolliert (3.12). Die Praxis verlangt die Abweichung (Mangelberufe, Sonderschichten); die Begründungspflicht hält sie nachvollziehbar. Der Kunde genehmigt sie nicht mit: die Kondition ist zwischen Betreiber und Gegenpartei vereinbart (3.3). Umsetzung offen — eigene Arbeitseinheit an 3.5 und 3.7. |
 | 18 | Führt der Betreiber eine Personenidentität über Lieferanten hinweg, und mit welchen Merkmalen? | Kapitel 3.6, 5.1, 5.3 | **entschieden:** ja; abschließender Merkmalssatz Name, Geburtsdatum, Geburtsort, manuelle Bestätigung, enge Zweckbindung (3.6). Rechtsgrundlage → Frage 25 |
 | 19 | Sind mehrere gleichzeitige Einsätze derselben Person beim selben Kunden zulässig, und wie zählen sie auf die Höchstüberlassungsdauer? | Kapitel 3.7, 5.1 | **entschieden:** zulässig; gezählt werden Kalendertage der Überlassung an denselben Entleiher, überlappende Tage genau einmal |
 | 20 | Welche Nachweisarten sind Pflicht, und blockiert ein fehlender Nachweis oder warnt er nur? | Kapitel 3.10, 5.4, 5.5 | **entschieden:** fester Katalog mit gestufter Wirkung — Sperre bei AÜG-Erlaubnis, Arbeitserlaubnis und Unterweisung am Standort, sonst Warnung oder Information (5.4) |
 | 21 | Wird im Stundenzettel eine Abwesenheitsart geführt (z. B. „krank") oder nur „keine Arbeitsleistung"? Krankheit ist ein Gesundheitsdatum nach Art. 9 DSGVO. | Kapitel 3.8, 6.3 | **entschieden:** **nur produktive Zeiten**. `absenceType` entfällt ersatzlos — damit entsteht über die Zeiterfassung kein Gesundheitsdatum nach Art. 9 DSGVO. Folge: ein Tag ohne Position ist nicht von „noch nicht erfasst" zu unterscheiden; die Vollständigkeit ist eine **Erklärung** der erfassenden Seite, keine Rechnung (3.8, 4.4) |
-| 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | offen |
+| 22 | Wie lange werden Audit-Einträge aufbewahrt, und wie verhält sich das zum Löschanspruch der betroffenen Person? | Kapitel 3.12, 6.5, 6.6 | **entschieden:** **zehn Jahre**, in Anlehnung an die handels- und steuerrechtliche Aufbewahrung. Das Protokoll ist Nachweis gegenüber Bundesagentur und Zoll (AÜG, SchwarzArbG); dem Löschanspruch steht Art. 17 Abs. 3 Buchst. b DSGVO entgegen. Nach Ablauf wird **gesperrt statt gelöscht** — die Lückenlosigkeit der Nummernfolge (3.12) bliebe sonst nicht beweisbar. |
 | 23 | Darf der Lieferantendisponent eine Einladung selbst absagen? | Kapitel 2.2, 3.5, 4.2 | **entschieden:** ja, eng begrenzt auf die eigene Einladung; Matrix 2.2 trägt dafür `S[46]` |
 | 24 | Darf eine Abrechnungsperiode geschlossen werden, solange einzelne Stundenzettel nicht entschieden sind — und wer entscheidet das? Heute verhindert ein hängender Zettel das Schließen der ganzen Periode. | Kapitel 3.9, 4.4, 4.5 | offen — mit der Änderung von Q35 (5.5.5) entfällt ein Anlass für hängende Zettel, der Grundkonflikt bleibt |
 | 25 | **Juristisch zu prüfen:** Rechtsgrundlage der Personenidentität (3.6) — Verantwortlichkeit im MSP-Modell, Rechtsgrundlage nach Art. 6 DSGVO, Informationspflicht gegenüber dem Leiharbeitnehmer, Löschfrist. Die fachliche Entscheidung zu Frage 18 steht; die rechtliche Absicherung fehlt und ist keine Aufgabe dieses Projekts allein. | Kapitel 3.6, 6.1, 6.3, 6.5 | offen |
@@ -5519,12 +5530,12 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 43 | **Wo stehen Aufhebungs- und Reaktivierungsgrund des Lieferanten?** 4.6 macht beide zur Vorbedingung („Sperrgrund behoben und **dokumentiert**“, „Begründung Pflicht“) und legt sie als Nebenwirkung in den **Protokolleintrag** — die Attributtabelle in 3.2 führt für beide kein Feld. Ohne Feld wäre die Vorbedingung nicht prüfbar: der Übergang **liest** die Begründung, bevor er sie schreibt, und das Protokoll entsteht erst mit dem vollzogenen Übergang. Die Umsetzung führt sie deshalb als `unblockReason` und `reactivationReason` am Lieferanten (über 3.2 hinaus, wie `terminationApprovedAt` bei 3.7, *Frage 39*) **und** als `reason` im Audit-Eintrag (3.12), der mit diesem Kapitel umgesetzt ist. Die Dokumentation liegt damit an beiden Stellen; zu entscheiden bleibt, ob 3.2 die Felder aufnimmt oder ob der Audit-Eintrag sie allein trägt — dann braucht die Vorbedingung eine andere Tatsache als die eigene Nebenwirkung. | Kapitel 3.2, 3.12, 4.6 | offen |
 
 | 44 | **Die Pflichtfelder des Audit-Eintrags setzen einen erfolgreichen Zugriff auf ein bestehendes Objekt voraus — wie sieht der Eintrag zu einem abgelehnten Versuch aus?** 3.12 verlangt „abgelehnte Zugriffe werden ebenfalls protokolliert“ und führt zugleich `actingAsRoleAssignmentRef`, `objectRef` und `tenantRef` als **Pflicht**. Drei Fälle brechen das: (a) die Verweigerung `noGrant` — es gibt keine Zuweisung, in deren Funktion gehandelt worden wäre, und gerade dieser Versuch ist der aufschlussreichste; (b) die Abweisung an der **Mandantengrenze**, die vor jedem Rollenrecht greift, sodass weder Zelle noch Zuweisung feststehen; (c) die abgelehnte **Anlage** — das Objekt existiert nicht, es hat also weder Kennung noch Mandanten. Die Umsetzung führt die Rollenzuweisung als Pflicht bei `result = success` und lässt sie sonst leer, setzt bei der abgelehnten Anlage die **fachliche** Kennung des beabsichtigten Vorgangs als `objectRef` und den Mandanten des **Handelnden** als `tenantRef` — womit der Versuch nach [39] in der Organisation sichtbar wird, aus der er kam. Zu entscheiden: diese Felder bei `denied` ausdrücklich optional stellen, oder 3.12 um Ersatzangaben ergänzen, wie sie der Benutzer beim Systemlauf schon hat. | Kapitel 2.3, 3.12 | offen |
-| 45 | **In welcher Granularität werden lesende Zugriffe protokolliert?** 3.12 verlangt den Eintrag für mandantenübergreifende Lesezugriffe (Nummer 2) und für jeden Lesezugriff auf Klardaten von Kandidaten (Nummer 3), führt `objectRef` aber als **Pflicht** — ein Eintrag benennt genau ein Objekt. Eine Liste, die der Betreiber über die Mandantengrenze liest, ergibt damit einen Eintrag je Zeile und je Seitenaufruf; bei der Querschnittssicht ist das der Regelfall, nicht die Ausnahme. Die Umsetzung protokolliert deshalb die Offenlegung von **Klardaten** nach der Zusage (4.2.3, 6.4) und den Zugriff auf **einzeln** geladene Objekte, nicht jede Zeile jeder Liste. Zu entscheiden: Eintrag je Objekt (vollständig, aber in Masse), Eintrag je Zugriff mit einer Objektmenge (dann braucht 3.12 ein zweites Feld), oder Beschränkung auf die Offenlegung personenbezogener Daten. Hängt an Frage 22 (Aufbewahrung) und an 6.8 (`clientContext`). | Kapitel 2.3, 3.12, 6.4, 6.8 | offen |
+| 45 | **In welcher Granularität werden lesende Zugriffe protokolliert?** 3.12 verlangt den Eintrag für mandantenübergreifende Lesezugriffe (Nummer 2) und für jeden Lesezugriff auf Klardaten von Kandidaten (Nummer 3), führt `objectRef` aber als **Pflicht** — ein Eintrag benennt genau ein Objekt. Eine Liste, die der Betreiber über die Mandantengrenze liest, ergibt damit einen Eintrag je Zeile und je Seitenaufruf; bei der Querschnittssicht ist das der Regelfall, nicht die Ausnahme. Die Umsetzung protokolliert deshalb die Offenlegung von **Klardaten** nach der Zusage (4.2.3, 6.4) und den Zugriff auf **einzeln** geladene Objekte, nicht jede Zeile jeder Liste. Zu entscheiden: Eintrag je Objekt (vollständig, aber in Masse), Eintrag je Zugriff mit einer Objektmenge (dann braucht 3.12 ein zweites Feld), oder Beschränkung auf die Offenlegung personenbezogener Daten. Hängt an Frage 22 (Aufbewahrung) und an 6.8 (`clientContext`). | Kapitel 2.3, 3.12, 6.4, 6.8 | **entschieden:** **je Objekt**, aber nur für **personenbezogene** Daten — die Klardaten von Kandidaten (3.12, Nummer 3). Ein Eintrag je Kandidat, dessen Name herausgegeben wurde, unabhängig vom Mandanten; ein Sammeleintrag könnte nicht sagen, welche Namen. Mandantenübergreifende Lesezugriffe auf **nicht** personenbezogene Daten (Lieferanten, Einsatzdaten) bleiben unprotokolliert — bei der Querschnittssicht wären sie der Regelfall und das Protokoll damit ohne Aussage. 3.12 braucht kein zweites Feld. |
 
 | 46 | **Sieht der Disponent (`MD`) das Protokoll zu den Lieferanten, die er steuert?** Fußnote [39] lässt ihm „Einträge zu Objekten der eigenen Organisation bzw. des betreuten Kunden“, und 3.12 sagt dazu ausdrücklich „`MD` zu Objekten der betreuten Kunden“ — ein Lieferantenmandant ist keines von beidem. Dabei weist 4.6 gerade **ihm** die Sperre eines Lieferanten zu ([5]): er vollzieht den Übergang und kann den Eintrag darauf nicht lesen, während `LA` ihn als Eintrag der eigenen Organisation sieht. Die Umsetzung folgt dem Wortlaut und verweigert; sichtbar bleibt das Protokoll zu Lieferanten damit nur `MA` (ohne Fußnote) und dem Lieferanten selbst. Zu entscheiden: [39] auf „betreute Kunden **und** Lieferanten“ erweitern (dann hängt sie an *Frage 34*, weil die Betreuungszuordnung Lieferanten nicht kennt), oder beim Wortlaut bleiben und die Durchsicht des Lieferantenprotokolls dem `MA` zuweisen. | Kapitel 2.2, 3.12, 4.6 | offen |
 
-| 47 | **Welche Kundenrolle trägt die kundenseitige Freigabestufe in der Vorbelegung — `KB` oder `KG`?** Die Entscheidung zu *Frage 5* macht die Stufenfolge zur Konfiguration je Kunde; welche Rolle in der **Vorbelegung** steht, ist damit noch nicht gesagt. 2.2 gibt beiden `S[29]`, beide sind also zulässig. Fachlich sprechen Gründe für beide: der **Bedarfsträger** (`KB`) hat die Person angefordert und führt sie fachlich — er weiß, ob die Stunden erbracht wurden; der **Genehmiger** (`KG`) ist nach 2.1 die Rolle, die Freigaben trägt, und sieht die Kostenwirkung ([8]). Die Umsetzung belegt vorerst `KB` vor, weil die erste Stufe die **Leistung** bestätigt und nicht das Budget — die kaufmännische Prüfung ist die zweite Stufe. Zu entscheiden ist die Vorbelegung; jeder Kunde kann sie ohnehin überschreiben. | Kapitel 2.1, 2.2, 3.1, 4.4 | offen |
-| 48 | **Wie werden Stunden gerundet, wenn sie aus einem Abschnitt gerechnet werden?** Mit der Entscheidung zu *Frage 16* kann `hours` aus Ende − Beginn − Pause folgen — und damit auf die Minute genau. Abgerechnet wird in der Arbeitnehmerüberlassung aber üblicherweise in Einheiten (Viertel-, Zehntel- oder halbe Stunde), und ob **auf**, **ab** oder **kaufmännisch** gerundet wird, ist eine Vertragsfrage mit unmittelbarer Geldwirkung. Zu entscheiden sind Einheit und Richtung sowie die Ebene, auf der die Rundung gilt: je Abschnitt, je Tag oder erst auf der Summe des Zettels — die drei ergeben verschiedene Beträge. Denkbar als Konfiguration am Rahmenvertrag (3.3), weil sie zwischen Betreiber und Gegenpartei vereinbart wird. Solange die Frage offen ist, rechnet die Umsetzung **ungerundet** und hält die Minutendifferenz damit sichtbar, statt sie stillschweigend zu glätten. | Kapitel 3.3, 3.8, 3.9 | offen |
+| 47 | **Welche Kundenrolle trägt die kundenseitige Freigabestufe in der Vorbelegung — `KB` oder `KG`?** Die Entscheidung zu *Frage 5* macht die Stufenfolge zur Konfiguration je Kunde; welche Rolle in der **Vorbelegung** steht, ist damit noch nicht gesagt. 2.2 gibt beiden `S[29]`, beide sind also zulässig. Fachlich sprechen Gründe für beide: der **Bedarfsträger** (`KB`) hat die Person angefordert und führt sie fachlich — er weiß, ob die Stunden erbracht wurden; der **Genehmiger** (`KG`) ist nach 2.1 die Rolle, die Freigaben trägt, und sieht die Kostenwirkung ([8]). Die Umsetzung belegt vorerst `KB` vor, weil die erste Stufe die **Leistung** bestätigt und nicht das Budget — die kaufmännische Prüfung ist die zweite Stufe. Zu entscheiden ist die Vorbelegung; jeder Kunde kann sie ohnehin überschreiben. | Kapitel 2.1, 2.2, 3.1, 4.4 | **entschieden:** **`KB`** in der Vorbelegung. Die erste Stufe bestätigt die **Leistung** — der Bedarfsträger hat die Person angefordert und weiß, ob die Stunden erbracht wurden; die kaufmännische Prüfung ist die zweite Stufe. Jeder Kunde kann die Stufenfolge überschreiben (3.1). |
+| 48 | **Wie werden Stunden gerundet, wenn sie aus einem Abschnitt gerechnet werden?** Mit der Entscheidung zu *Frage 16* kann `hours` aus Ende − Beginn − Pause folgen — und damit auf die Minute genau. Abgerechnet wird in der Arbeitnehmerüberlassung aber üblicherweise in Einheiten (Viertel-, Zehntel- oder halbe Stunde), und ob **auf**, **ab** oder **kaufmännisch** gerundet wird, ist eine Vertragsfrage mit unmittelbarer Geldwirkung. Zu entscheiden sind Einheit und Richtung sowie die Ebene, auf der die Rundung gilt: je Abschnitt, je Tag oder erst auf der Summe des Zettels — die drei ergeben verschiedene Beträge. Denkbar als Konfiguration am Rahmenvertrag (3.3), weil sie zwischen Betreiber und Gegenpartei vereinbart wird. Solange die Frage offen ist, rechnet die Umsetzung **ungerundet** und hält die Minutendifferenz damit sichtbar, statt sie stillschweigend zu glätten. | Kapitel 3.3, 3.8, 3.9 | **entschieden:** **je Rahmenvertrag konfigurierbar** (3.3) — Einheit, Richtung und Ebene sind zwischen Betreiber und Gegenpartei vereinbart, nicht Systemverhalten. **Vorbelegung:** Viertelstunde, kaufmännisch, gerundet **je Kalendertag** und erst dann summiert; das ist die in der Überlassung übliche Einheit, neutral zwischen den Parteien, und die Tagesebene ist die, die auf dem Zettel steht. Umsetzung offen — eigene Arbeitseinheit an 3.3 und 3.8. |
 
 | 49 | **Darf der Lieferantendisponent (`LD`) einen abgelehnten Stundenzettel nacharbeiten?** 4.4 nennt ihn in der Zeile `rejected` → `recorded` ausdrücklich unter den auslösenden Rollen (neben `AN` und `MD`), die Zeile „Stundenzettel, Freigabeschritt" in 2.2 gibt ihm aber nur `S[20]` — und [20] deckt ausschließlich „Einreichen und Zurückziehen des eigenen Vorgangs". Das Nacharbeiten nach einer Ablehnung ist keines von beiden. Beides ist Spezifikation, und eines von beidem ist zu ändern: entweder erweitert [20] sich auf das Nacharbeiten (oder die Zelle trägt eine zweite Fußnote), oder 4.4 streicht `LD` dort und die Nacharbeit läuft über den Betreiber. Die Umsetzung nennt die Rolle am Übergang wie 4.4 und lässt die Prüffunktion sie anhand von 2.2 verweigern — der Widerspruch wird damit zu einer Verweigerung mit Fundstelle und nicht zu einer stillen Entscheidung. Praktisch läuft die Nacharbeit deshalb heute über `MD`, dessen Zelle `S` ohne Fußnote trägt. Dieselbe Bauart wie *Frage 42*. | Kapitel 2.2, 4.4 | offen |
 
@@ -5532,7 +5543,7 @@ AÜG-Regel noch etwas verhindern kann und nach dem keine mehr etwas heilt.
 | 51 | **Woher kommt der Feiertagskalender?** 3.8 führt `Feiertag` als Anlass einer Zuschlagsart, und mit `derivationBasis = calendarDay` wäre er rechenbar — **Kapitel 3 führt aber keinen Kalender**. Feiertage sind bundeslandabhängig, und maßgeblich ist das Land des **Einsatzorts** (3.1, Standort), nicht das des Entleihers oder des Verleihers. Denkbar: ein Katalog je Bundesland als Konfiguration am Standort, ein Zukauf, oder die Erfassung als `declared` je Position. Bis zur Antwort bleibt ein Feiertagszuschlag **nicht ableitbar** und damit `declared` — er ist eine Angabe, die die freigebende Stufe mitentscheidet (4.4). | Kapitel 3.1, 3.8 | offen |
 
 | 52 | **Woher kommt der Steuersatz eines Abrechnungsbelegs?** 3.9 macht `taxAmount` zur Pflicht und zu einem *abgeleiteten* Wert — abgeleitet wird er aber aus einem Satz, den **kein Kapitel führt**. Denkbar: am Rahmenvertrag (3.3, wie die Währung an der Preisliste), am Kunden bzw. Lieferanten (3.1, 3.2), oder je Beleg mit Vorbelegung aus dem Land der Gegenpartei — Letzteres, sobald grenzüberschreitend abgerechnet wird, weil dann Steuerbefreiung und Umkehr der Steuerschuld hinzukommen. Bis zur Antwort führt der Beleg den Satz als **eigene Angabe** (`taxRate`): ein Steuersatz im Code wäre ein Festwert ohne Fundstelle, und 0 % wäre eine stillschweigende Behauptung über die Steuerpflicht. Berührt 1.4 (Zahlungsabwicklung ist nicht im Umfang, die Besteuerung des Belegs aber schon). | Kapitel 3.3, 3.9 | offen |
-| 53 | **Wie werden Geldbeträge gerundet — und auf welcher Ebene?** 3.0, Festlegung 1 verweist die Rundungs- und Nachkommaregeln ausdrücklich „zu Kapitel 3.9 … und sind dort je Belegart zu entscheiden"; 3.9 entscheidet sie nicht. Zu entscheiden sind Nachkommastellen und Rundungsrichtung sowie die Ebene: je Belegposition, je Beleg oder erst auf der Steuer — die drei ergeben Differenzen von Cent-Beträgen, die in der Summe über eine Periode nicht mehr klein sind, und sie entscheiden, ob `netAmount` die Summe der gerundeten Positionen oder die gerundete Summe ist. Bis zur Antwort rechnet die Umsetzung **ungerundet** mit vier Nachkommastellen (wie die Konditionen in 3.3) und hält die Differenz damit sichtbar. Dieselbe Bauart wie *Frage 48*, die dasselbe für die **Stunden** offen lässt; beide Antworten gehören zusammen, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.0, 3.9 | offen |
+| 53 | **Wie werden Geldbeträge gerundet — und auf welcher Ebene?** 3.0, Festlegung 1 verweist die Rundungs- und Nachkommaregeln ausdrücklich „zu Kapitel 3.9 … und sind dort je Belegart zu entscheiden"; 3.9 entscheidet sie nicht. Zu entscheiden sind Nachkommastellen und Rundungsrichtung sowie die Ebene: je Belegposition, je Beleg oder erst auf der Steuer — die drei ergeben Differenzen von Cent-Beträgen, die in der Summe über eine Periode nicht mehr klein sind, und sie entscheiden, ob `netAmount` die Summe der gerundeten Positionen oder die gerundete Summe ist. Bis zur Antwort rechnet die Umsetzung **ungerundet** mit vier Nachkommastellen (wie die Konditionen in 3.3) und hält die Differenz damit sichtbar. Dieselbe Bauart wie *Frage 48*, die dasselbe für die **Stunden** offen lässt; beide Antworten gehören zusammen, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.0, 3.9 | **entschieden:** **zwei Nachkommastellen je Belegposition**, kaufmännisch gerundet; `netAmount` ist die **Summe der gerundeten Positionen**, nicht die gerundete Summe. Maßgeblich ist die Nachprüfbarkeit: der Empfänger rechnet jede Zeile des Belegs nach, und die Summe muss stimmen. Konditionen bleiben mit vier Stellen geführt (3.3) — gerundet wird erst der Betrag. Umsetzung offen — eigene Arbeitseinheit an 3.9. |
 
 | 54 | **Worauf bezieht sich die Mindestabrechnung?** 3.3 führt an der Preisposition `minimumHours` („Mindestabrechnung"), und 3.9 sagt nicht, wie sie in den Beleg eingeht. „Mindestens vier Stunden" je **Überlassungstag**, je **Zettel** oder je **Abrechnungsperiode** ergeben sehr verschiedene Beträge — und bei einem Einsatz mit wenigen kurzen Tagen ist der Unterschied der größere Teil der Rechnung. Zu entscheiden sind die Bezugseinheit und die Frage, ob die Mindestmenge auch auf die **Zuschlagspositionen** wirkt oder nur auf die Grundleistung. Bis zur Antwort wird `minimumHours` bei der Belegableitung **nicht angewandt**: eine erfundene Bezugseinheit wäre eine stillschweigende Preisentscheidung. Hängt an *Frage 48* und *Frage 53*, weil Menge mal Preis den Betrag ergibt. | Kapitel 3.3, 3.9 | offen |
 

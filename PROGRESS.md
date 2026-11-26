@@ -5,6 +5,61 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Zwölf offene Fragen beantwortet (Kapitel 7)
+
+### Gemacht
+
+Durchgang durch die offenen Fragen, zwölf davon entschieden. Von 44 offenen
+sind **32** übrig, davon vier „juristisch zu prüfen" (25–27, 29).
+
+| Frage | Antwort |
+|---|---|
+| 2 Hoster | **vertagt** — Prototyp läuft lokal; Zustellung und Planer bleiben unkonfiguriert |
+| 4 Zugang für Leiharbeitnehmer | **keiner**; erfasst wird im Namen ([27]), die Zettelfrist beginnt bei `LD` |
+| 7 Fremdsysteme | **keine** Schnittstelle; `externalReference` bleibt vorbereitet |
+| 8 Instanzen | **eine** Instanz, getrennt über 2.3 |
+| 11 Lieferantenidentität | **sichtbar** für den Kunden — Umsetzung folgt |
+| 12 Kundenseitige Benutzer | **Betreiber**; eigene Vertretung bei geplanter Abwesenheit selbst (2.4 Regel 7) |
+| 17 Abweichender Satz | **zulässig** mit Begründung, genehmigt von `MA`, protokolliert |
+| 22 Audit-Aufbewahrung | **zehn Jahre**, danach Sperrung statt Löschung (Art. 17 Abs. 3 b DSGVO) |
+| 45 Granularität Leseprotokoll | **je Objekt, nur personenbezogen** — wie gebaut |
+| 47 Erste Freigabestufe | **`KB`** in der Vorbelegung |
+| 48 Stundenrundung | **je Rahmenvertrag**; Vorbelegung Viertelstunde, kaufmännisch, je Kalendertag |
+| 53 Geldrundung | **zwei Stellen je Belegposition**, `netAmount` = Summe der gerundeten Positionen |
+
+- Kapitel 7 trägt jede Antwort mit Begründung. Dazu sind **alle** Verweise im
+  Korpus nachgezogen: Glossar, Blockzitate in 2.0, 3.6, 3.8, 3.12, die
+  Fußnoten [4], [6], [15], [27], [38], [45], acht `externalReference`-Zeilen,
+  die Eskalationsanlässe in 2.4 und die Übergänge des Stundenzettels in 4.4.
+- **3.9** hat jetzt den Abschnitt „Rundung der Beträge" mit der entschiedenen
+  Regel; 3.0 Festlegung 1 verwies dafür schon hierher.
+
+### Entscheidungen jenseits der Antworten
+
+1. **Zu Frage 48 habe ich die Vorbelegung gesetzt**, weil die Antwort „je
+   Rahmenvertrag konfigurierbar" eine braucht: Viertelstunde, kaufmännisch, je
+   Kalendertag. Begründung in Kapitel 7 und in 4.4.
+2. **Frage 2 steht als „vertagt"**, nicht als beantwortet. Das ist ehrlicher:
+   die Wahl ist zu treffen, bevor das System Daten außerhalb des
+   Entwicklungsrechners führt.
+
+### Offen — Arbeit, die aus den Antworten folgt
+
+- **Frage 11** ist die größte: der Code verdeckt die Lieferantenidentität heute
+  ([3], [14]). Zu ändern sind die Fußnoten, die Projektion der Listen und ihre
+  Tests. Eigene Arbeitseinheit.
+- **Frage 17**: Genehmigung des abweichenden Satzes durch `MA` samt Protokoll.
+- **Frage 48 und 53**: die Rundung rechnet noch ungerundet — Konfiguration am
+  Rahmenvertrag (3.3) und Rundung in 3.8/3.9.
+- **Frage 22**: die Sperrfrist braucht Kapitel 6.5 und 6.6, die noch TODO sind.
+
+### Geprüft
+
+- `npm test` **1227 grün**, `npm run test:aueg` 267 Szenarien / **120 grün /
+  0 rot**. Keine Codeänderung in dieser Einheit — nur SPEC.
+
+---
+
 ## 2026-11-26 — Klardaten-Zugriffe vollständig protokollieren (3.12, Nr. 3)
 
 ### Gemacht
