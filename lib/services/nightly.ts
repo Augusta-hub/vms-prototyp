@@ -32,6 +32,7 @@ import {
   befundeAnfrageOhneFreigabe,
   befundeAusschreibungOhneAngebot,
   befundeBelegBeanstandet,
+  befundeEinladungOhneKenntnisnahme,
   befundeN1,
   befundeN2,
   befundeN3,
@@ -154,6 +155,9 @@ async function laufDurchfuehren(
     // Die vier Anlässe aus 2.4 mit Arbeitstagfristen (4.0).
     ...befundeAnfrageOhneFreigabe(lagen.anfragen, tag, operatorTenant.id),
     ...befundeAusschreibungOhneAngebot(lagen.einladungen, tag, operatorTenant.id),
+    // Achte Prozessfrist aus 4.0 — sie steht nicht in 2.4 und erreicht deshalb
+    // nur `LD` und `LA`.
+    ...befundeEinladungOhneKenntnisnahme(lagen.einladungen, tag, operatorTenant.id),
     ...befundeProfilOhneRueckmeldung(lagen.vorschlaege, tag, operatorTenant.id),
     ...befundeVerlaengerungOhneEntscheidung(lagen.verlaengerungen, tag, operatorTenant.id),
     // 5.5.1: die Lücke, die dieser Lauf schließt. Sie steht **im** Lauf, weil
@@ -573,6 +577,15 @@ async function ladeLagen(operatorTenantId: string) {
       offerDeadline: einladung.tender.offerDeadline,
       hatAngebot: einladung.offer !== null,
       ausschreibungOffen: einladung.tender.closedAt === null,
+      invitedAt: einladung.invitedAt,
+      kenntnisFristArbeitstage: prozessfristTage(
+        einladung.tender.demandRequest.customer.processDeadlineConfig,
+        'invitationViewDeadlineDays',
+      ),
+      kenntnisStufenabstandArbeitstage: prozessfristTage(
+        einladung.tender.demandRequest.customer.processDeadlineConfig,
+        'invitationViewEscalationStepDays',
+      ),
       land: einladung.tender.demandRequest.site.federalState,
       stufenabstandArbeitstage: prozessfristTage(
         einladung.tender.demandRequest.customer.processDeadlineConfig,

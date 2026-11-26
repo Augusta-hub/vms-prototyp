@@ -235,6 +235,63 @@ describe('Die vier Fristanlässe aus 2.4 mit Arbeitstagfristen (4.0)', () => {
     expect(nachrichten[0]?.message).toContain('AS-2026-0902')
   })
 
+  it('erinnert an eine nicht geöffnete Einladung — an `LD`, ohne den Betreiber', async () => {
+    const anfrage = await prisma.demandRequest.create({
+      data: {
+        tenantId: welt.kundenMandant,
+        requestNumber: 'BA-2026-0903',
+        customerId: welt.kunde,
+        siteId: welt.standort,
+        costCenterId: welt.kostenstelle,
+        title: 'Montage Linie 9',
+        activityDescription: 'Montage (synthetisch)',
+        startDate: tag('2026-12-01'),
+        weeklyHours: '35.00',
+        headcount: 1,
+        status: 'tendered',
+        requestedById: welt.bedarfstraeger,
+      },
+    })
+    const ausschreibung = await prisma.tender.create({
+      data: {
+        tenantId: welt.betreiberMandant,
+        tenderNumber: 'AS-2026-0903',
+        demandRequestId: anfrage.id,
+        tenderRound: 1,
+        distributionMode: 'simultaneous',
+        publishedAt: tag('2026-11-09'),
+        publishedById: welt.administrator,
+        // Die Angebotsfrist läuft noch — erinnert wird trotzdem.
+        offerDeadline: tag('2026-11-30'),
+      },
+    })
+    await prisma.tenderInvitation.create({
+      data: {
+        tenantId: welt.betreiberMandant,
+        tenderId: ausschreibung.id,
+        supplierId: welt.lieferant,
+        invitedAt: tag('2026-11-09'),
+        invitationStatus: 'invited',
+      },
+    })
+
+    ok(await runNightly(administrator, HEUTE))
+    const nachrichten = await prisma.notification.findMany({
+      where: { trigger: 'invitationNotViewed' },
+      orderBy: { escalationLevel: 'asc' },
+    })
+    expect(nachrichten.map((n) => n.recipientRoleCode)).toEqual([
+      'supplierCoordinator',
+      'supplierAdmin',
+    ])
+    expect(nachrichten.every((n) => n.recipientTenantId === welt.lieferantMandant)).toBe(true)
+    // Eine Erinnerung, keine Warnung (4.0) — und kein Weg zum Betreiber.
+    expect(nachrichten.every((n) => n.kind === 'information')).toBe(true)
+    expect(
+      nachrichten.some((n) => n.recipientRoleCode === 'operatorCoordinator'),
+    ).toBe(false)
+  })
+
   it('meldet eine beantragte Verlängerung ohne Entscheidung — an `KG`', async () => {
     await prisma.assignmentExtension.create({
       data: {

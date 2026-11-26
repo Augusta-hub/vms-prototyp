@@ -3017,6 +3017,7 @@ enum NotificationTrigger {
   tenderNoOffer
   submissionFeedbackOverdue
   extensionApprovalOverdue
+  invitationNotViewed
 }
 
 /// Benachrichtigung (`notification`, SPEC 3.14).

@@ -5041,13 +5041,20 @@ sie verhindert.
 | N5 | Nachweise mit `validTo`, deren Bezugsobjekt aktiv ist | P10 | Ablauf oder Vorlauf erreicht | nach Katalog 5.4.4 |
 | N6 | Einsätze in `interrupted` mit offener Unterbrechung | P2 | Unterbrechung überschreitet die Drei-Monats-Schwelle | Information: die Zählung wird mit der Wiederaufnahme zurückgesetzt (5.1.4) |
 
-**Die Fristanlässe aus 2.4.** Derselbe Lauf prüft die **Prozessfristen** aus
-4.0. Sie tragen keine Prüfung aus Kapitel 5 — sie sind Fristen des Verfahrens,
-nicht des AÜG — und deshalb keine `N`-Nummer; ihre Stufe kommt aus dem
-Stufenabstand (2.4, Regel 6) und nicht aus einer Restzeit.
+**Die Fristanlässe aus 4.0.** Derselbe Lauf prüft die **Prozessfristen**. Sie
+tragen keine Prüfung aus Kapitel 5 — sie sind Fristen des Verfahrens, nicht des
+AÜG — und deshalb keine `N`-Nummer; ihre Stufe kommt aus dem Stufenabstand
+(2.4, Regel 6) und nicht aus einer Restzeit.
+
+Sieben von ihnen sind **Eskalationsanlässe** aus 2.4 und erreichen zuletzt den
+Betreiber. Die **Erinnerung an eine Einladung** ist das nicht: 4.0 nennt sie
+„Erinnerung an `LD`, dann `LA`", und 2.4 führt für sie keinen Anlass — sie
+bleibt deshalb beim Lieferanten und ist eine **Information**. Läuft die
+Angebotsfrist ab, greift der eigene Anlass „Ausschreibung ohne Angebot".
 
 | Anlass | Gegenstand | Frist | Stufenfolge (ohne Vertretung) |
 |---|---|---|---|
+| Einladung nicht geöffnet | Einladungen in `invited` bei offener Ausschreibung | `invitationViewDeadlineDays` ab `invitedAt`, Arbeitstage | `LD` → `LA` (Information) |
 | Bedarfsanfrage nicht freigegeben | Anfragen in `submitted` | `demandApprovalDeadlineDays` ab `submittedAt`, Arbeitstage | `KG` → `KB` → `MD` |
 | Ausschreibung ohne Angebot | Einladungen offener Ausschreibungen ohne Angebot | Objektfeld `offerDeadline` | `LD` → `LA` → `MD` |
 | Profil ohne Rückmeldung | Vorschläge in `releasedToCustomer` | `submissionFeedbackDeadlineDays` ab `releasedToCustomerAt`, Arbeitstage | `KB` → `KG` → `MD` |

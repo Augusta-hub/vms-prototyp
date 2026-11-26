@@ -64,6 +64,7 @@ export type Anlass =
   | 'tenderNoOffer'
   | 'submissionFeedbackOverdue'
   | 'extensionApprovalOverdue'
+  | 'invitationNotViewed'
 
 /** Art des Befunds — sie folgt der Ergebnisart aus 5.5.2. */
 export type Befundart = 'information' | 'warning' | 'escalation'
@@ -669,6 +670,17 @@ function arbeitstageSeitFrist(
   return Math.max(0, arbeitstageZwischen(frist, tag(stichtag), land) - 1)
 }
 
+/**
+ * Stufenfolge der Einladungserinnerung — **zwei** Stellen.
+ *
+ * 4.0 schreibt „Erinnerung an `LD`, dann `LA`", und 2.4 führt für diesen Fall
+ * **keinen** Eskalationsanlass: es gibt deshalb keine dritte Stufe und keinen
+ * Weg zum Betreiber. Eine nicht geöffnete Einladung ist eine Sache des
+ * Lieferanten, solange die Angebotsfrist läuft — läuft sie ab, greift der
+ * eigene Anlass „Ausschreibung ohne Angebot" (2.4).
+ */
+const STUFEN_EINLADUNG_KENNTNISNAHME: readonly Rollenkuerzel[] = ['LD', 'LA']
+
 /** Stufenfolge aus 2.4 ohne die Vertretung (Regel 6). */
 const STUFEN_ANFRAGE_FREIGABE: readonly Rollenkuerzel[] = ['KG', 'KB', 'MD']
 const STUFEN_AUSSCHREIBUNG_OHNE_ANGEBOT: readonly Rollenkuerzel[] = ['LD', 'LA', 'MD']
@@ -752,6 +764,12 @@ export interface Einladungslage {
   readonly hatAngebot: boolean
   /** Ist die Ausschreibung noch offen? */
   readonly ausschreibungOffen: boolean
+  /** `invitedAt` (3.5) — Beginn der Erinnerungsfrist (4.0, 4.2). */
+  readonly invitedAt: Date
+  /** `invitationViewDeadlineDays` in Arbeitstagen (4.0). */
+  readonly kenntnisFristArbeitstage: number
+  /** `invitationViewEscalationStepDays` in Arbeitstagen (4.0). */
+  readonly kenntnisStufenabstandArbeitstage: number
   readonly land: Bundesland | null
   /** `offerDeadlineEscalationStepDays` in Arbeitstagen (4.0). */
   readonly stufenabstandArbeitstage: number
@@ -804,6 +822,65 @@ export function befundeAusschreibungOhneAngebot(
         `Zur Ausschreibung ${lage.tenderNumber} liegt von ${lage.supplierName} kein Angebot vor; ` +
         `die Angebotsfrist lief am ${frist} ab (SPEC 4.2, 2.4). Der Fristablauf gibt den Bedarf ` +
         '**nicht** frei und besetzt nichts (2.4, Regel 1).',
+    })
+  }
+  return befunde
+}
+
+/**
+ * **Einladung ohne Kenntnisnahme** (4.0: `invitationViewDeadlineDays`,
+ * Vorbelegung 1 Arbeitstag ab `invitedAt`; Wirkung „Erinnerung an `LD`, dann
+ * `LA`").
+ *
+ * Gemeldet wird nur die Einladung in `invited`: mit dem ersten lesenden
+ * Zugriff endet die Erinnerungsfrist (4.2), und abgesagt oder beantwortet ist
+ * sie dann ohnehin kein Fall mehr. Das Ergebnis ist eine **Information** und
+ * keine Warnung — 4.0 nennt es eine Erinnerung, und 2.4 führt dafür keinen
+ * Eskalationsanlass.
+ *
+ * Die Frist ist kurz (ein Arbeitstag), und das ist Absicht: sie soll bemerken,
+ * dass eine Ausschreibung bei einem Lieferanten liegen bleibt, **während** die
+ * Angebotsfrist noch läuft.
+ */
+export function befundeEinladungOhneKenntnisnahme(
+  einladungen: readonly Einladungslage[],
+  stichtag: Date,
+  operatorTenantId: string,
+): readonly Nachtbefund[] {
+  const befunde: Nachtbefund[] = []
+  for (const lage of einladungen) {
+    if (lage.invitationStatus !== 'invited') continue
+    if (!lage.ausschreibungOffen) continue
+    const frist = arbeitstageSpaeter(
+      tag(lage.invitedAt),
+      lage.kenntnisFristArbeitstage,
+      lage.land,
+    )
+    const seit = arbeitstageSeitFrist(frist, stichtag, lage.land)
+    if (seit === null) continue
+    befunde.push({
+      zeile: '4.0',
+      anlass: 'invitationNotViewed',
+      art: 'information',
+      pruefung: null,
+      objectType: 'tenderInvitation',
+      objectRef: lage.id,
+      tenantId: lage.tenantId,
+      adressaten: stufenkreis(
+        STUFEN_EINLADUNG_KENNTNISNAHME,
+        seit,
+        lage.kenntnisStufenabstandArbeitstage,
+      ),
+      mandantJeRolle: mandantJeRolle({
+        operator: operatorTenantId,
+        customer: lage.customerTenantId,
+        supplier: lage.supplierTenantId,
+      }),
+      meldung:
+        `Die Einladung zur Ausschreibung ${lage.tenderNumber} ist seit dem ` +
+        `${tag(lage.invitedAt)} zugestellt und noch nicht geöffnet; die Erinnerungsfrist lief ` +
+        `am ${frist} ab (SPEC 4.0, 4.2). Die Angebotsfrist endet am ` +
+        `${tag(lage.offerDeadline)}.`,
     })
   }
   return befunde

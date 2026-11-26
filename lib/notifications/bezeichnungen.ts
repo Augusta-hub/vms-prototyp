@@ -33,4 +33,5 @@ export const NOTIFICATION_TRIGGER_LABELS: Readonly<Record<string, string>> = {
   tenderNoOffer: 'Ausschreibung ohne Angebot (2.4, 4.2)',
   submissionFeedbackOverdue: 'Profil ohne Rückmeldung des Kunden (2.4, 4.2)',
   extensionApprovalOverdue: 'Verlängerung nicht entschieden (2.4, 4.3.2)',
+  invitationNotViewed: 'Einladung nicht geöffnet (4.0, 4.2)',
 }

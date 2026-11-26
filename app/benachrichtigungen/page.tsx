@@ -124,8 +124,8 @@ export default async function BenachrichtigungenPage({
             <span className="hint">
               Stichtag ist der Tag des Laufs. Er prüft die Vorgänge, bei denen{' '}
               <strong>Zeit allein</strong> die Lage ändert — N1, N2, N3, N5 und N6 — und die
-              sieben <strong>Fristanlässe aus 2.4</strong> (4.0), deren Stufe aus dem
-              Stufenabstand kommt. <strong>N4 fehlt</strong>: für die Arbeitskampfanzeige führt
+              acht <strong>Prozessfristen aus 4.0</strong>, deren Stufe aus dem Stufenabstand
+              kommt (2.4, Regel 6). <strong>N4 fehlt</strong>: für die Arbeitskampfanzeige führt
               Kapitel 3 kein Feld (offene Frage 30).
             </span>
           </p>

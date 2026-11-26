@@ -18,6 +18,7 @@ import { DAY, OPERATOR_TENANT, CUSTOMER_TENANT, SUPPLIER_TENANT } from '../testi
 import {
   befundLaufAusgefallen,
   befundeBelegBeanstandet,
+  befundeEinladungOhneKenntnisnahme,
   befundeN1,
   befundeN2,
   befundeN3,
@@ -490,6 +491,9 @@ describe('Vier Fristanlässe mit Arbeitstagfristen (2.4, 4.0)', () => {
       offerDeadline: DAY('2026-11-24'),
       hatAngebot: false,
       ausschreibungOffen: true,
+      invitedAt: DAY('2026-11-16'),
+      kenntnisFristArbeitstage: 1,
+      kenntnisStufenabstandArbeitstage: 1,
       land: null,
       stufenabstandArbeitstage: 1,
       ...overrides,
@@ -636,6 +640,47 @@ describe('Vier Fristanlässe mit Arbeitstagfristen (2.4, 4.0)', () => {
       expect(befund?.mandantJeRolle.LD).toBe(SUPPLIER_TENANT)
       expect(befund?.mandantJeRolle.LA).toBe(SUPPLIER_TENANT)
       expect(befund?.mandantJeRolle.MD).toBe(OPERATOR_TENANT)
+    })
+  })
+
+  describe('Einladung ohne Kenntnisnahme (4.0, 4.2)', () => {
+    // Zugestellt am Montag, 2026-11-16; ein Arbeitstag Frist endet am 17.
+    const kenntnis = (stichtag: Date, overrides: Partial<Einladungslage> = {}) =>
+      befundeEinladungOhneKenntnisnahme([einladung({ invitationStatus: 'invited', ...overrides })], stichtag, OPERATOR_TENANT)
+
+    it('erinnert nach Fristablauf an `LD`, dann an `LA` — und nicht weiter', () => {
+      expect(kenntnis(DAY('2026-11-17'))).toEqual([])
+      expect(kenntnis(DAY('2026-11-18'))[0]?.adressaten).toEqual(['LD'])
+      expect(kenntnis(DAY('2026-11-19'))[0]?.adressaten).toEqual(['LD', 'LA'])
+      // Keine dritte Stufe: 2.4 führt für diesen Fall keinen Anlass.
+      expect(kenntnis(DAY('2026-12-31'))[0]?.adressaten).toEqual(['LD', 'LA'])
+    })
+
+    it('ist eine Information und keine Warnung (4.0)', () => {
+      expect(kenntnis(DAY('2026-11-18'))[0]?.art).toBe('information')
+      expect(kenntnis(DAY('2026-11-18'))[0]?.anlass).toBe('invitationNotViewed')
+    })
+
+    it('meldet nichts, sobald die Einladung geöffnet ist — die Frist endet damit (4.2)', () => {
+      expect(kenntnis(DAY('2026-12-01'), { invitationStatus: 'viewed' })).toEqual([])
+      expect(kenntnis(DAY('2026-12-01'), { invitationStatus: 'declined' })).toEqual([])
+      expect(kenntnis(DAY('2026-12-01'), { invitationStatus: 'offerSubmitted' })).toEqual([])
+    })
+
+    it('meldet nichts zu einer geschlossenen Ausschreibung', () => {
+      expect(kenntnis(DAY('2026-12-01'), { ausschreibungOffen: false })).toEqual([])
+    })
+
+    it('nennt die Angebotsfrist, damit die Erinnerung einzuordnen ist', () => {
+      expect(kenntnis(DAY('2026-11-18'))[0]?.meldung).toContain('2026-11-24')
+    })
+
+    it('rechnet die Feiertage des Landes mit (4.0)', () => {
+      // Zugestellt am Dienstag, dem 17. November: in Sachsen ist der Mittwoch
+      // Buß- und Bettag, die Frist endet dort erst am Donnerstag.
+      const ab17 = { invitedAt: DAY('2026-11-17') }
+      expect(kenntnis(DAY('2026-11-19'), { ...ab17, land: 'SN' })).toEqual([])
+      expect(kenntnis(DAY('2026-11-19'), { ...ab17, land: 'TH' })).toHaveLength(1)
     })
   })
 

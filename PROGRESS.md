@@ -5,6 +5,62 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Die achte Prozessfrist: Einladung ohne Kenntnisnahme (4.0, 4.2)
+
+### Gemacht
+
+Beim Schreiben der Tabelle in 5.5.1 c fiel die Lücke auf: **4.0 nennt acht
+Prozessfristen, der Lauf prüfte sieben.** Die Kenntnisnahme einer Einladung
+hatte eine Frist (`invitationViewDeadlineDays`, 1 Arbeitstag ab `invitedAt`)
+und eine Wirkung („Erinnerung an `LD`, dann `LA`"), aber keinen Befund.
+
+- **`befundeEinladungOhneKenntnisnahme`** in `lib/nightly/befunde.ts`: meldet
+  Einladungen in `invited` bei offener Ausschreibung, Stufen `LD` → `LA`.
+- Neuer Anlass `invitationNotViewed` (Migration
+  `20261126090000_einladung_ohne_kenntnisnahme`).
+- **SPEC 5.5.1 c** führt jetzt alle acht Zeilen und sagt, warum diese eine
+  anders ist.
+
+### Entscheidungen
+
+1. **Zwei Stufen, nicht drei.** 4.0 schreibt „Erinnerung an `LD`, dann `LA`",
+   und 2.4 führt für diesen Fall **keinen** Eskalationsanlass. Eine nicht
+   geöffnete Einladung bleibt deshalb beim Lieferanten — läuft die
+   Angebotsfrist ab, greift der eigene Anlass „Ausschreibung ohne Angebot",
+   und der geht bis `MD`.
+2. **Eine Information, keine Warnung.** 4.0 nennt es eine Erinnerung; ohne
+   Eskalationsanlass in 2.4 wäre `warning` eine Verschärfung, die kein Kapitel
+   deckt.
+3. **Nur der Status `invited`.** Mit dem ersten lesenden Zugriff endet die
+   Erinnerungsfrist (4.2); abgesagt oder beantwortet ist sie ohnehin erledigt.
+4. **Die Meldung nennt die Angebotsfrist mit** — eine Erinnerung ohne den
+   Termin, auf den sie zielt, wäre nicht einzuordnen.
+
+### Geprüft
+
+- `npm test` **1221 grün** (+6), `npm run test:services` **338 grün** (+1),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **5 Mutationen, alle gefangen**: „Erinnerung erreicht auch `MD`",
+  „Erinnerung ist eine Warnung", „geöffnete Einladung wird erinnert",
+  „Erinnerung auch bei geschlossener Ausschreibung", „Erinnerungsfrist ab
+  Angebotsfrist statt Zustellung".
+
+### Offen
+
+- Die **Bindefrist eines Angebots** (`offerValidUntil`, 4.0) bleibt ohne
+  Umsetzung: ihre Wirkung ist ein **Statuswechsel** (Angebot auf `expired`,
+  offene Profilvorschläge abgelehnt), und den darf der nächtliche Lauf nicht
+  vollziehen (5.5.1 c). Dasselbe gilt für `invited` → `expired` an der
+  Einladung (4.2). Beides braucht einen **Systemübergang** (4.0, Regel 10) und
+  gehört damit in eine eigene Einheit.
+- Unverändert offen: gemeindegebundene Feiertage (*Frage 59*), Hoster und
+  Mailbetreiber (*Frage 2*), Fremdsystem (*Frage 7*), **P7** ohne Rechenweg
+  (*Frage 30*), **Q02** ohne Adressatenliste, der Doppelpräfix „P11: P11: …"
+  im Audit-Eintrag.
+
+---
+
 ## 2026-11-23 — Arbeitstage und die vier fehlenden Fristanlässe (4.0, 2.4)
 
 Zwei Commits, eine Arbeitseinheit: erst der Arbeitstagbegriff, dann die vier
