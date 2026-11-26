@@ -3031,14 +3031,20 @@ enum NotificationTrigger {
 /// steht in den Rollenzuweisungen (3.11). Fußnote [47] prüft Rolle **und**
 /// Mandant.
 model Notification {
-  id         String              @id @default(cuid())
+  id          String              @id @default(cuid())
   /// Mandant des **betroffenen Objekts** (3.12, 3.14).
-  tenantId   String
-  tenant     Tenant              @relation(fields: [tenantId], references: [id])
-  trigger    NotificationTrigger
-  kind       NotificationKind
-  objectType String
-  objectRef  String
+  tenantId    String
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  trigger     NotificationTrigger
+  kind        NotificationKind
+  objectType  String
+  objectRef   String
+  /// Lesbare Benennung des Vorgangs (3.14): „Bedarfsanfrage BA-2026-0007".
+  ///
+  /// `objectRef` bleibt die technische Kennung — derselbe Zuschnitt wie im
+  /// Audit-Eintrag (3.12) —, taugt aber nicht als Betreff einer E-Mail. Die
+  /// Benennung enthält nur, was jeder Beteiligte sehen darf (2.4, Regel 3).
+  objectLabel String?
 
   /// Statuswechsel bei `trigger = statusTransition` (3.14); derselbe Zuschnitt
   /// wie im Audit-Eintrag (3.12). `statusFrom` bleibt leer, wo Kapitel 4 „—"

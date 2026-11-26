@@ -23,6 +23,8 @@ export interface Briefdaten {
   readonly meldung: string
   readonly objectType: string
   readonly objectRef: string
+  /** Lesbare Benennung des Vorgangs (3.14); leer, wo keine vorliegt. */
+  readonly bezeichnung: string | null
   /** Adressierte Rolle als Kürzel oder Bezeichner (2.1, 2.2). */
   readonly rolle: string
   readonly stufe: number
@@ -58,7 +60,10 @@ function tag(wert: Date): string {
  * eine Information aussehen (2.4).
  */
 export function betreff(daten: Briefdaten): string {
-  return `[VMS] ${daten.art}: ${daten.anlass} — ${daten.objectRef}`
+  // Die **Benennung** steht im Betreff, nicht die technische Kennung: ein
+  // Betreff mit einem Schlüssel aus 24 Zeichen sagt dem Empfänger nichts
+  // (3.14, „Was in der E-Mail steht"). Fehlt sie, bleibt die Kennung.
+  return `[VMS] ${daten.art}: ${daten.anlass} — ${daten.bezeichnung ?? daten.objectRef}`
 }
 
 /**
@@ -71,7 +76,8 @@ export function betreff(daten: Briefdaten): string {
  */
 export function brieftext(daten: Briefdaten, basisadresse: string | null = null): string {
   const zeilen: string[] = [daten.meldung, '']
-  zeilen.push(`Vorgang:    ${daten.objectType} ${daten.objectRef}`)
+  zeilen.push(`Vorgang:    ${daten.bezeichnung ?? daten.objectType}`)
+  zeilen.push(`Verweis:    ${daten.objectType} ${daten.objectRef}`)
   zeilen.push(`Anlass:     ${daten.anlass}`)
   zeilen.push(`Art:        ${daten.art}`)
   zeilen.push(`Adressiert: ${daten.rolle}, Stufe ${daten.stufe}`)

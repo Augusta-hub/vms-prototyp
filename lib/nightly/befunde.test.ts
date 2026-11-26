@@ -275,6 +275,7 @@ describe('N5 — Nachweise (P10, SPEC 5.4.4)', () => {
     return {
       objectType: 'assignment',
       objectRef: 'einsatz-1',
+      bezeichnung: 'Einsatz E-2026-0001',
       tenantId: OPERATOR_TENANT,
       mandanten: {
         operator: OPERATOR_TENANT,

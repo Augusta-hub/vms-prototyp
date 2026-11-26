@@ -311,6 +311,7 @@ async function warnungenMelden(
     geschrieben += await benachrichtigeWarnung(tx, {
       objectType: 'timesheet',
       objectRef: row.id,
+      bezeichnung: `Stundenzettel ${row.timesheetNumber}`,
       tenantId: row.tenantId,
       statusFrom,
       statusTo,

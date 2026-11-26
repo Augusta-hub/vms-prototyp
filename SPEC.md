@@ -2445,6 +2445,7 @@ neben die Benachrichtigung und ändern sie nicht.
 |---|---|---|---|---|
 | Anlass | `trigger` | Katalogwert | Pflicht | ein Eskalationsanlass aus 2.4, eine Zeile des nächtlichen Laufs aus 5.5.1 oder ein **Übergang** aus Kapitel 4 (`statusTransition`) |
 | Objektart / Vorgang | `objectType` / `objectRef` | Text / Verweis | Pflicht | derselbe Zuschnitt wie im Audit-Eintrag (3.12) |
+| Benennung des Vorgangs | `objectLabel` | Text | optional | „Bedarfsanfrage BA-2026-0007" — lesbar, für Betreff und Postfachliste. `objectRef` bleibt die technische Kennung; sie taugt nicht als Betreff. Enthält nur, was jeder Beteiligte sehen darf (2.4, Regel 3) |
 | Statuswechsel | `statusFrom` / `statusTo` | Statuswerte (Kapitel 4) | optional | gesetzt bei `trigger = statusTransition`; derselbe Zuschnitt wie im Audit-Eintrag (3.12). `statusFrom` bleibt leer, wo Kapitel 4 „—" führt, also bei der Anlage |
 | Mandant | `tenantId` | Verweis (3.11) | Pflicht | Mandant des **betroffenen Objekts**, wie in 3.12 |
 | Adressat: Rolle | `recipientRoleCode` | Rollenkürzel (2.1) | Pflicht | 2.4 adressiert die **zuständige Rolle**, nicht eine Person |
@@ -2582,9 +2583,10 @@ eine E-Mail-Adresse. Ein zweites Adressfeld gibt es nicht: eine abweichende
 Zustelladresse wäre eine zweite Wahrheit über die Person, ohne dass ein Kapitel
 sie verlangt.
 
-**Was in der E-Mail steht.** Betreff: Art und Anlass. Text: die Meldung
-(`message`), der Vorgang, die Stufe, die Prüfung, der Zeitpunkt und der Lauftag,
-soweit gesetzt — also genau die Felder, die die Anzeige auch zeigt. Nichts
+**Was in der E-Mail steht.** Betreff: Art, Anlass und die **Benennung** des
+Vorgangs — nicht seine technische Kennung, die dem Empfänger nichts sagt. Text:
+die Meldung (`message`), der Vorgang mit Benennung **und** Verweis, die Stufe,
+die Prüfung, der Zeitpunkt und der Lauftag, soweit gesetzt — also genau die Felder, die die Anzeige auch zeigt. Nichts
 darüber hinaus: `message` ist nach 2.4 Regel 3 bereits auf das beschränkt, was
 der Empfänger sehen darf, und die E-Mail fügt keine Namen, keine Begründung und
 keine Anhänge hinzu.

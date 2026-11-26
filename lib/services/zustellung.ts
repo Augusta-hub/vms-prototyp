@@ -132,6 +132,7 @@ function briefdaten(nachricht: {
   readonly message: string
   readonly objectType: string
   readonly objectRef: string
+  readonly objectLabel: string | null
   readonly recipientRoleCode: string
   readonly escalationLevel: number
   readonly ruleRef: string | null
@@ -147,6 +148,7 @@ function briefdaten(nachricht: {
     meldung: nachricht.message,
     objectType: nachricht.objectType,
     objectRef: nachricht.objectRef,
+    bezeichnung: nachricht.objectLabel,
     rolle: nachricht.recipientRoleCode,
     stufe: nachricht.escalationLevel,
     pruefung: nachricht.ruleRef,

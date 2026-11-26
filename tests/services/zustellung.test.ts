@@ -239,6 +239,23 @@ describe('Postausgang (3.14)', () => {
     expect(zeilen.every((zeile) => zeile.sentAt?.getTime() === jetzt.getTime())).toBe(true)
   })
 
+  it('nennt den Vorgang im Betreff lesbar und nicht als Kennung (3.14)', async () => {
+    await sperreLieferant()
+    const weg = mitschrift()
+    await postausgangAbarbeiten({ versand: weg.versand })
+
+    const anLa = weg.briefe.find((brief) => brief.empfaenger === 'la@test.invalid')
+    expect(anLa?.betreff).toContain('Lieferant')
+    // Die technische Kennung steht im Text als Verweis, nicht im Betreff.
+    expect(anLa?.betreff).not.toContain(welt.lieferant)
+    expect(anLa?.text).toContain(welt.lieferant)
+
+    const nachricht = await prisma.notification.findFirstOrThrow({
+      where: { recipientRoleCode: 'supplierAdmin' },
+    })
+    expect(nachricht.objectLabel).toContain('Lieferant')
+  })
+
   it('sendet beim zweiten Abarbeiten nichts doppelt', async () => {
     await sperreLieferant()
     const weg = mitschrift()

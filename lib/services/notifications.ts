@@ -150,6 +150,7 @@ export async function benachrichtigeUebergang(
       kind: adressat.art,
       objectType: args.objectType,
       objectRef: args.objectRef,
+      objectLabel: args.bezeichnung,
       statusFrom: args.statusFrom,
       statusTo: args.statusTo,
       recipientRoleCode: roleCode,
@@ -202,6 +203,8 @@ export interface Warnungsmeldung {
   readonly tenantId: string
   readonly statusFrom: string | null
   readonly statusTo: string
+  /** „Einsatz E-2026-0003" — lesbare Benennung des Vorgangs (3.14). */
+  readonly bezeichnung: string
   /** `P1` … `P11` (4.7, 5.5.2 Nr. 1). */
   readonly ruleRef: string
   /** Die Warnung in Worten, wie die Prüfung sie formuliert (5.5.2 Nr. 2). */
@@ -242,6 +245,7 @@ export async function benachrichtigeWarnung(
         kind: 'warning' satisfies Meldungsart,
         objectType: args.objectType,
         objectRef: args.objectRef,
+        objectLabel: args.bezeichnung,
         statusFrom: args.statusFrom,
         statusTo: args.statusTo,
         recipientRoleCode: roleCode,

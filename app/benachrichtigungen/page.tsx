@@ -368,9 +368,17 @@ function Nachricht({
         <Wert value={nachricht.ruleRef} />
       </td>
       <td>
-        <code>{nachricht.objectType}</code>
+        {nachricht.objectLabel === null ? (
+          <code>{nachricht.objectType}</code>
+        ) : (
+          nachricht.objectLabel
+        )}
         <br />
-        <span className="hint">{nachricht.objectRef}</span>
+        {/* Die technische Kennung bleibt daneben: sie ist der genaue Verweis
+            und derselbe Zuschnitt wie im Protokoll (3.12, 3.14). */}
+        <span className="hint">
+          <code>{nachricht.objectType}</code> {nachricht.objectRef}
+        </span>
       </td>
       <td>
         <Wert value={nachricht.runDate} />

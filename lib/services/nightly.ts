@@ -307,6 +307,7 @@ async function schreibeBenachrichtigungen(
       kind: befund.art,
       objectType: befund.objectType,
       objectRef: befund.objectRef,
+      objectLabel: befund.bezeichnung,
       recipientRoleCode: roleCode,
       recipientTenantId,
       escalationLevel: index + 1,
@@ -513,6 +514,7 @@ async function ladeLagen(operatorTenantId: string) {
     nachweislagen: einsaetze.map((einsatz) => ({
       objectType: 'assignment',
       objectRef: einsatz.id,
+      bezeichnung: `Einsatz ${einsatz.assignmentNumber}`,
       tenantId: einsatz.tenantId,
       mandanten: {
         operator: operatorTenantId,
@@ -708,6 +710,8 @@ export interface NotificationView {
   readonly kindLabel: string
   readonly objectType: string
   readonly objectRef: string
+  /** Lesbare Benennung des Vorgangs (3.14); leer bei älteren Nachrichten. */
+  readonly objectLabel: string | null
   /** Statuswechsel bei `trigger = statusTransition` (3.14). */
   readonly statusFrom: string | null
   readonly statusTo: string | null
@@ -758,6 +762,7 @@ export async function loadNotifications(
       kindLabel: NOTIFICATION_KIND_LABELS[row.kind],
       objectType: row.objectType,
       objectRef: row.objectRef,
+      objectLabel: row.objectLabel,
       statusFrom: row.statusFrom,
       statusTo: row.statusTo,
       recipientRoleCode: row.recipientRoleCode,

@@ -1161,6 +1161,7 @@ export async function createBillingDocument(
         await benachrichtigeWarnung(tx, {
           objectType: 'billingDocument',
           objectRef: beleg.id,
+          bezeichnung: `Abrechnungsbeleg ${beleg.documentNumber}`,
           tenantId: beleg.tenantId,
           statusFrom: outcome.from,
           statusTo: outcome.to,

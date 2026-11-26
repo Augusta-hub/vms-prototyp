@@ -5,6 +5,61 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Der Vorgang wird lesbar benannt (3.14)
+
+### Gemacht
+
+Der Betreff einer zugestellten Benachrichtigung lautete „… — cmwta0v8q00anca…".
+Die technische Kennung ist der richtige **Verweis** (derselbe Zuschnitt wie im
+Protokoll, 3.12), aber als Betreff sagt sie dem Empfänger nichts.
+
+- **`objectLabel`** an der Benachrichtigung (3.14, Migration
+  `20261126120000_lesbare_benennung`): „Bedarfsanfrage BA-2026-0007".
+- Alle drei Quellen füllen sie: die Übergänge aus ihrer `bezeichnung`, die
+  Warnungen aus 4.7 (neues Pflichtfeld an `Warnungsmeldung`, damit keine
+  Quelle sie vergisst) und die **vierzehn** Befunde des nächtlichen Laufs
+  (neues Pflichtfeld am `Nachtbefund`).
+- **Betreff und Text** des Briefes nehmen die Benennung; der Text führt den
+  Verweis in einer eigenen Zeile. Die Postfachliste zeigt beides: Benennung
+  oben, Objektart und Kennung als Hinweis darunter.
+
+### Entscheidungen
+
+1. **Pflichtfeld in den Quellen, optional am Objekt.** `Nachtbefund` und
+   `Warnungsmeldung` verlangen die Benennung — so kann keine neue Quelle sie
+   vergessen. Am gespeicherten Objekt ist sie optional, weil Nachrichten aus
+   der Zeit davor keine haben.
+2. **Die Kennung bleibt.** Sie verschwindet nicht aus dem Brief, sie zieht nur
+   in die Zeile „Verweis": ohne sie wäre eine Nachricht nicht mehr eindeutig
+   einem Vorgang zuzuordnen.
+3. **Nur, was jeder Beteiligte sehen darf** (2.4, Regel 3). Die Benennungen
+   sind Nummern und Firmennamen — kein Kandidatenname, auch nicht beim
+   Profilvorschlag.
+
+### Gefunden
+
+- **Eine Migration war als angewandt verbucht, obwohl sie leer war.** Beim
+  Anlegen entstand zuerst ein leeres `migration.sql` (der Diff lief, bevor das
+  Schema geändert war), und ein `db:deploy` hat es verbucht. Die Datei im Repo
+  trägt jetzt die richtige Anweisung — eine frische Datenbank bekommt die
+  Spalte daraus —, meiner Entwicklungsdatenbank fehlte sie. Nachgezogen mit
+  genau dieser einen Anweisung; ein `migrate reset` wäre das größere Mittel
+  gewesen.
+
+### Geprüft
+
+- `npm test` **1227 grün** (+2), `npm run test:services` **351 grün** (+1),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **3 Mutationen, alle gefangen**: „Betreff nimmt die Kennung", „Verweis fehlt
+  im Text", „Benennung wird nicht gespeichert".
+- **Am laufenden Prototyp**: der Lauf zum 2026-11-26 schrieb 14
+  Benachrichtigungen mit Benennungen wie „Lieferant Elbe Zeitarbeit GmbH" und
+  „Einsatz E-2026-0003"; der Brief trägt jetzt den Betreff „… — Profilvorschlag
+  PV-2026-0004" und darunter „Verweis: candidateSubmission cmwxgqu…".
+
+---
+
 ## 2026-11-26 — „P11: P11" im Protokoll (5.5.2 Nr. 1)
 
 ### Gemacht

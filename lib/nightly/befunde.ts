@@ -83,6 +83,8 @@ export interface Nachtbefund {
   readonly pruefung: string | null
   readonly objectType: string
   readonly objectRef: string
+  /** Lesbare Benennung des Vorgangs (3.14) — für Betreff und Postfachliste. */
+  readonly bezeichnung: string
   /** Mandant des betroffenen Objekts (3.12, 3.14). */
   readonly tenantId: string
   /** Adressaten als Rollenkürzel (5.5.2 Nr. 6), kumulativ nach Stufe. */
@@ -168,6 +170,7 @@ export function befundeN1(
       pruefung: 'P9',
       objectType: 'supplier',
       objectRef: lieferant.id,
+      bezeichnung: `Lieferant ${lieferant.legalName}`,
       tenantId: lieferant.tenantId,
       adressaten: stand.adressaten,
       mandantJeRolle: mandantJeRolle({
@@ -250,6 +253,7 @@ export function befundeN2(
       pruefung: 'P1',
       objectType: 'assignment',
       objectRef: einsatz.id,
+      bezeichnung: `Einsatz ${einsatz.assignmentNumber}`,
       tenantId: einsatz.tenantId,
       adressaten,
       mandantJeRolle: mandantJeRolle({
@@ -311,6 +315,7 @@ export function befundeN3(
       pruefung: 'P4',
       objectType: 'assignment',
       objectRef: einsatz.id,
+      bezeichnung: `Einsatz ${einsatz.assignmentNumber}`,
       tenantId: einsatz.tenantId,
       adressaten,
       mandantJeRolle: mandantJeRolle({
@@ -339,6 +344,8 @@ export interface Nachweislage {
   /** Das Bezugsobjekt, zu dem die Nachweise gehören (3.10). */
   readonly objectType: string
   readonly objectRef: string
+  /** Lesbare Benennung des Bezugsobjekts (3.14): „Lieferant Elbe Zeitarbeit GmbH". */
+  readonly bezeichnung: string
   readonly tenantId: string
   readonly mandanten: Mandantenlage
   readonly nachweise: readonly Nachweiszeile[]
@@ -373,6 +380,7 @@ export function befundeN5(
       pruefung: 'P10',
       objectType: lage.objectType,
       objectRef: lage.objectRef,
+      bezeichnung: lage.bezeichnung,
       tenantId: lage.tenantId,
       adressaten: stand.adressaten,
       mandantJeRolle: mandantJeRolle(lage.mandanten),
@@ -424,6 +432,7 @@ export function befundeN6(
       pruefung: 'P2',
       objectType: 'assignment',
       objectRef: lage.assignmentId,
+      bezeichnung: `Einsatz ${lage.assignmentNumber}`,
       tenantId: lage.tenantId,
       // 5.1.4 nennt für diese Feststellung keine eigenen Adressaten; sie
       // betrifft die Zählung und damit die Rolle, die sie führt (5.1.6).
@@ -499,6 +508,7 @@ export function befundeZettelNichtEingereicht(
       pruefung: null,
       objectType: 'timesheet',
       objectRef: lage.id,
+      bezeichnung: `Stundenzettel ${lage.timesheetNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(
         STUFEN_ZETTEL_EINREICHUNG,
@@ -565,6 +575,7 @@ export function befundeZettelNichtGenehmigt(
       pruefung: null,
       objectType: 'timesheet',
       objectRef: lage.id,
+      bezeichnung: `Stundenzettel ${lage.timesheetNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(
         stufenZettelGenehmigung(zustaendig),
@@ -628,6 +639,7 @@ export function befundeBelegBeanstandet(
       pruefung: null,
       objectType: 'billingDocument',
       objectRef: lage.id,
+      bezeichnung: `Abrechnungsbeleg ${lage.documentNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(STUFEN_BELEG_BEANSTANDET, tageOffen, lage.disputeEscalationStepDays),
       mandantJeRolle: mandantJeRolle({
@@ -733,6 +745,7 @@ export function befundeAnfrageOhneFreigabe(
       pruefung: null,
       objectType: 'demandRequest',
       objectRef: lage.id,
+      bezeichnung: `Bedarfsanfrage ${lage.requestNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(STUFEN_ANFRAGE_FREIGABE, seit, lage.stufenabstandArbeitstage),
       mandantJeRolle: mandantJeRolle({
@@ -807,6 +820,7 @@ export function befundeAusschreibungOhneAngebot(
       pruefung: null,
       objectType: 'tenderInvitation',
       objectRef: lage.id,
+      bezeichnung: `Einladung von ${lage.supplierName} zur Ausschreibung ${lage.tenderNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(
         STUFEN_AUSSCHREIBUNG_OHNE_ANGEBOT,
@@ -865,6 +879,7 @@ export function befundeEinladungOhneKenntnisnahme(
       pruefung: null,
       objectType: 'tenderInvitation',
       objectRef: lage.id,
+      bezeichnung: `Einladung von ${lage.supplierName} zur Ausschreibung ${lage.tenderNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(
         STUFEN_EINLADUNG_KENNTNISNAHME,
@@ -936,6 +951,7 @@ export function befundeProfilOhneRueckmeldung(
       pruefung: null,
       objectType: 'candidateSubmission',
       objectRef: lage.id,
+      bezeichnung: `Profilvorschlag ${lage.submissionNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(STUFEN_PROFIL_OHNE_RUECKMELDUNG, seit, lage.stufenabstandArbeitstage),
       mandantJeRolle: mandantJeRolle({
@@ -1009,6 +1025,7 @@ export function befundeVerlaengerungOhneEntscheidung(
       pruefung: null,
       objectType: 'assignmentExtension',
       objectRef: lage.id,
+      bezeichnung: `Verlängerung zum Einsatz ${lage.assignmentNumber}`,
       tenantId: lage.tenantId,
       adressaten: stufenkreis(STUFEN_VERLAENGERUNG, seit, lage.stufenabstandArbeitstage),
       mandantJeRolle: mandantJeRolle({
@@ -1067,6 +1084,7 @@ export function befundLaufAusgefallen(
       // Der Stichtag ist die Kennung: so entsteht je Lauf **eine** Meldung,
       // und ein wiederholter Lauf desselben Tages verdoppelt sie nicht (3.14).
       objectRef: tag(stand.stichtag),
+      bezeichnung: `Nächtlicher Lauf zum ${tag(stand.stichtag)}`,
       tenantId: operatorTenantId,
       adressaten:
         stufe === 'warnung'

@@ -25,6 +25,7 @@ const UEBERGANG: Briefdaten = {
   meldung: 'Einsatz EI-2026-0001 ist aktiv.',
   objectType: 'assignment',
   objectRef: 'EI-2026-0001',
+  bezeichnung: 'Einsatz E-2026-0001',
   rolle: 'operatorCoordinator',
   stufe: 1,
   pruefung: null,
@@ -40,6 +41,7 @@ const LAUF: Briefdaten = {
   meldung: 'Höchstüberlassungsdauer in 21 Tagen erreicht.',
   objectType: 'assignment',
   objectRef: 'EI-2026-0002',
+  bezeichnung: 'Einsatz E-2026-0002',
   rolle: 'operatorAdmin',
   stufe: 2,
   pruefung: 'P1',
@@ -50,10 +52,14 @@ const LAUF: Briefdaten = {
 }
 
 describe('Betreff (3.14)', () => {
-  it('nennt Art, Anlass und Vorgang — die Art zuerst', () => {
+  it('nennt Art, Anlass und Vorgang — die Art zuerst, der Vorgang lesbar', () => {
     expect(betreff(LAUF)).toBe(
-      '[VMS] Warnung mit Eskalation: N2 — Höchstüberlassungsdauer (5.1) — EI-2026-0002',
+      '[VMS] Warnung mit Eskalation: N2 — Höchstüberlassungsdauer (5.1) — Einsatz E-2026-0002',
     )
+  })
+
+  it('nimmt die technische Kennung nur, wo keine Benennung vorliegt (3.14)', () => {
+    expect(betreff({ ...LAUF, bezeichnung: null })).toContain('EI-2026-0002')
   })
 
   it('unterscheidet Information von Warnung schon im Betreff', () => {
@@ -65,6 +71,12 @@ describe('Betreff (3.14)', () => {
 describe('Text (3.14)', () => {
   it('beginnt mit der Meldung — sie ist der Inhalt, alles Weitere ihre Einordnung', () => {
     expect(brieftext(UEBERGANG).startsWith('Einsatz EI-2026-0001 ist aktiv.')).toBe(true)
+  })
+
+  it('nennt den Vorgang lesbar und den Verweis daneben (3.14)', () => {
+    const text = brieftext(LAUF)
+    expect(text).toContain('Vorgang:    Einsatz E-2026-0002')
+    expect(text).toContain('Verweis:    assignment EI-2026-0002')
   })
 
   it('führt Prüfung und Lauftag, wo sie gesetzt sind', () => {

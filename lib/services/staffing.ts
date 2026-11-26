@@ -888,6 +888,8 @@ async function warnungenMelden(
   bezug: {
     readonly objectType: string
     readonly objectRef: string
+    /** Lesbare Benennung des Vorgangs (3.14). */
+    readonly bezeichnung: string
     readonly tenantId: string
     readonly statusFrom: string | null
     readonly statusTo: string
@@ -901,6 +903,7 @@ async function warnungenMelden(
     geschrieben += await benachrichtigeWarnung(tx, {
       objectType: bezug.objectType,
       objectRef: bezug.objectRef,
+      bezeichnung: bezug.bezeichnung,
       tenantId: bezug.tenantId,
       statusFrom: bezug.statusFrom,
       statusTo: bezug.statusTo,
@@ -1726,6 +1729,7 @@ export async function transitionSubmission(
           {
             objectType: 'candidateSubmission',
             objectRef: submission.id,
+            bezeichnung: `Profilvorschlag ${submission.submissionNumber}`,
             tenantId: submission.tenantId,
             statusFrom: outcome.from,
             statusTo: outcome.to,
@@ -2757,6 +2761,7 @@ export async function createAssignment(
         {
           objectType: 'assignment',
           objectRef: einsatz.id,
+          bezeichnung: `Einsatz ${einsatz.assignmentNumber}`,
           tenantId: einsatz.tenantId,
           statusFrom: outcome.from,
           statusTo: outcome.to,
@@ -3333,6 +3338,7 @@ export async function transitionExtension(
           {
             objectType: 'assignmentExtension',
             objectRef: extension.id,
+            bezeichnung: `Verlängerung zum Einsatz ${assignment.assignmentNumber}`,
             tenantId: assignment.tenantId,
             statusFrom: outcome.from,
             statusTo: outcome.to,
