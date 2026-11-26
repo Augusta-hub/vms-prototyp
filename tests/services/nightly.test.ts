@@ -661,6 +661,69 @@ describe('Protokoll des Laufs (3.12, 5.5.2 Nr. 1)', () => {
     expect(eintraege.some((eintrag) => eintrag.ruleRef === 'P1')).toBe(true)
   })
 
+  it('erfasst **jede Eskalationsstufe** mit Anlass und Adressat (2.4, Regel 4)', async () => {
+    // Fristende überschritten: N2 ergibt eine Eskalation, und ihre Adressaten
+    // sind kumulativ `MD`, `MA`, `KB` (5.1.6).
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { maxDurationEndDate: tag('2026-11-01') },
+    })
+    ok(await runNightly(administrator, HEUTE))
+
+    // Auf P1 eingegrenzt: derselbe Lauf kann weitere Eskalationen finden
+    // (etwa N3 am selben Einsatz), und die gehören nicht zu dieser Zusicherung.
+    const stufen = await prisma.auditEntry.findMany({
+      where: {
+        objectType: 'notification',
+        ruleRef: 'P1',
+        reason: { startsWith: 'Eskalation Stufe' },
+      },
+      orderBy: { entryNumber: 'asc' },
+    })
+    // Vier Stufen: bei überschrittenem Fristende sind die Adressaten `MD`,
+    // `MA`, `KB` und `LD` (5.1.6, kumulativ).
+    expect(stufen.map((eintrag) => eintrag.reason?.slice(0, 22))).toEqual([
+      'Eskalation Stufe 1 an ',
+      'Eskalation Stufe 2 an ',
+      'Eskalation Stufe 3 an ',
+      'Eskalation Stufe 4 an ',
+    ])
+    expect(stufen[0]?.reason).toContain('an MD')
+    expect(stufen[3]?.reason).toContain('an LD')
+    // Jede Stufe nennt die Organisation des Adressaten …
+    expect(stufen[2]?.reason).toContain(welt.kundenMandant)
+    expect(stufen[3]?.reason).toContain(welt.lieferantMandant)
+    // … und jede trägt das Systemkennzeichen (4.0, Regel 10).
+    expect(stufen.every((eintrag) => eintrag.systemActor === 'systemlauf')).toBe(true)
+    // Der Eintrag zum Prüfergebnis bleibt daneben (5.5.2 Nr. 1).
+    expect(
+      await prisma.auditEntry.count({
+        where: { objectType: 'notification', reason: { startsWith: 'N2:' } },
+      }),
+    ).toBe(1)
+  })
+
+  it('erfasst keine Stufe, wo nur eine Information entsteht (2.4, Regel 4)', async () => {
+    // 60 Tage Restzeit: N2 ergibt eine Information, keine Eskalation.
+    await prisma.assignment.update({
+      where: { id: einsatz },
+      data: { maxDurationEndDate: tag('2027-01-11') },
+    })
+    ok(await runNightly(administrator, HEUTE))
+    expect(
+      await prisma.auditEntry.count({
+        where: {
+          objectType: 'notification',
+          ruleRef: 'P1',
+          reason: { startsWith: 'Eskalation Stufe' },
+        },
+      }),
+    ).toBe(0)
+    expect(
+      await prisma.notification.count({ where: { trigger: 'maxDurationThreshold' } }),
+    ).toBeGreaterThan(0)
+  })
+
   it('hält den Lauf fest, auch wenn er nichts findet (5.5.1)', async () => {
     // Ohne diese Zeile wäre „nichts gemeldet" nicht von „nicht gelaufen" zu
     // unterscheiden — bei einem Verfahren, das Fristen überwacht, ist das der

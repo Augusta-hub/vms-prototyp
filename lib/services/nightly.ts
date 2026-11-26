@@ -316,6 +316,28 @@ async function schreibeBenachrichtigungen(
       raisedAt,
       runDate: tag,
     })
+    // 2.4, Regel 4: „Jede Stufe wird als Audit-Eintrag erfasst (3.12), mit
+    // Anlass, Adressat und Zeitpunkt." Gemeint ist die **Eskalation**, nicht
+    // jede Information — dieselbe Lesart wie bei den Übergängen (3.14,
+    // `benachrichtigeUebergang`): dort trägt nur `escalation` einen eigenen
+    // Eintrag. Der Eintrag zum Prüfergebnis unten ersetzt ihn nicht; er nennt
+    // das Ergebnis, dieser den Empfänger.
+    if (befund.art === 'escalation') {
+      await protokolliere(tx, {
+        occurredAt: raisedAt,
+        actor: systemlauf(),
+        tenantId: befund.tenantId,
+        objectType: 'notification',
+        objectRef: befund.objectRef,
+        operation: 'create',
+        result: 'success',
+        reason:
+          `Eskalation Stufe ${index + 1} an ${kuerzel} (${recipientTenantId}): ` +
+          `${befund.zeile} — ${befund.bezeichnung}`,
+        ruleRef: befund.pruefung,
+        crossTenant: false,
+      })
+    }
     geschrieben += 1
   }
 

@@ -5,6 +5,46 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-26 — Protokoll je Eskalationsstufe im Lauf (2.4, Regel 4)
+
+### Gemacht
+
+2.4 Regel 4 verlangt: „Jede Stufe wird als Audit-Eintrag erfasst, mit
+**Anlass, Adressat und Zeitpunkt**." Bei den Übergängen war das umgesetzt (die
+Sperre des Lieferanten trägt ihre Stufe), im nächtlichen Lauf nicht: dort stand
+**ein** Eintrag je Befund, und der nannte den Adressaten nicht.
+
+- Der Lauf schreibt jetzt je **Stufe** einer Eskalation einen eigenen Eintrag
+  mit Rolle, Organisation, Anlass und Zeitpunkt. Der Eintrag zum Prüfergebnis
+  (5.5.2 Nr. 1) bleibt daneben — der eine nennt das Ergebnis, der andere den
+  Empfänger.
+- **SPEC 3.14** sagt das jetzt ausdrücklich, damit die Lesart nicht nur im Code
+  steht.
+
+### Entscheidungen
+
+1. **Nur `escalation` trägt Stufeneinträge.** Eine Information oder Warnung ist
+   keine Stufe einer Eskalation, und ihr Ergebnis steht schon im Eintrag nach
+   5.5.2 Nr. 1. Das ist dieselbe Lesart, die der Übergangsweg seit 3.14 führt —
+   sie ist jetzt an beiden Stellen dieselbe und in der SPEC nachzulesen.
+
+### Gefunden
+
+- **Meine Erwartung im Test war falsch, nicht der Code.** Ich hatte für ein
+  überschrittenes Fristende drei Stufen angenommen; es sind **vier** (`MD`,
+  `MA`, `KB`, `LD`, kumulativ nach 5.1.6). Der Test nennt sie jetzt alle und
+  prüft die Organisation je Stufe mit.
+
+### Geprüft
+
+- `npm test` **1227 grün**, `npm run test:services` **353 grün** (+2),
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **3 Mutationen, alle gefangen**: „keine Stufeneinträge", „Stufeneintrag auch
+  bei Information", „Adressat fehlt im Eintrag".
+
+---
+
 ## 2026-11-26 — Der Vorgang wird lesbar benannt (3.14)
 
 ### Gemacht

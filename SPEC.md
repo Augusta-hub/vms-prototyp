@@ -2529,6 +2529,15 @@ Stundenzettel (4.4) und `rejected` am Nachweis (5.4) tragen „mit Begründung".
 Sonst nicht — eine Begründung ohne diesen Auftrag wäre eine Offenlegung, die
 2.3 nicht deckt.
 
+**Protokoll je Stufe (2.4, Regel 4).** „Jede Stufe wird als Audit-Eintrag
+erfasst, mit Anlass, Adressat und Zeitpunkt." Gemeint ist die **Eskalation**:
+einen eigenen Eintrag je Stufe tragen die Nachrichten der Art `escalation` —
+aus einem Übergang die Sperre des Lieferanten (4.6), aus dem nächtlichen Lauf
+jede Zeile, deren Ergebnis eine Eskalation ist. Eine Information oder Warnung
+trägt ihn nicht: sie ist keine Stufe einer Eskalation, und ihr Ergebnis steht
+schon im Eintrag nach 5.5.2 Nr. 1. Beide Einträge stehen nebeneinander — der
+eine nennt das **Ergebnis**, der andere den **Empfänger**.
+
 **Warnungen aus 4.7.** Ein Übergang, dessen Prüfung nach 4.7 eine **Warnung**
 ergibt, „erzeugt eine Benachrichtigung an die zuständige Rolle und einen
 Eskalationsanlass (2.4)". Das ist ein **eigener** Anlass desselben Übergangs:
