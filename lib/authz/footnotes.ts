@@ -219,11 +219,15 @@ export const FOOTNOTES = {
       //    die Differenz zur Kundenpreisliste ist die Marge des Betreibers und
       //    für Kundenrollen nicht sichtbar ([41], 3.3) — ebenso wie am Angebot
       //    ([18]).
-      //  - die **Lieferantenidentität**: 3.7 stellt ihre Anzeige gegenüber dem
-      //    Kunden ausdrücklich unter *offene Frage 11*. Solange die offen ist,
-      //    bleibt sie verdeckt (wie bei [15] und [23]).
       //  - die **Personenidentität**: sie sieht ausschließlich der Betreiber
       //    ([43], 2.3 Regel 4).
+      //
+      // **Nicht** mehr verdeckt ist die **Lieferantenidentität**: Frage 11 ist
+      // entschieden, der Kunde sieht sie. Der Überlassungsvertrag nennt den
+      // Verleiher ohnehin (§ 1 AÜG), und der Entleiher trägt die
+      // Auswahlverantwortung mit. Unberührt bleibt, dass kein Lieferant etwas
+      // über **andere** Lieferanten erfährt (2.3, Regel 4) — das hängt an
+      // [14], [15] und [18], nicht hier.
       //
       // Andere Zeilen tragen diese Felder nicht; dort wirkt die Liste nicht.
       hidden: (ctx) =>
@@ -233,9 +237,6 @@ export const FOOTNOTES = {
               'agreedRateCardItemId',
               'agreedRateCardItem',
               'rateDeviationReason',
-              'supplier',
-              'supplierId',
-              'supplierTenantId',
               'workerIdentityId',
               'workerIdentity',
             ]
@@ -367,11 +368,14 @@ export const FOOTNOTES = {
   15: {
     number: 15,
     text:
-      'Nur Stand und Fortschritt zur eigenen Anfrage; Lieferantenidentität nach offener Frage 11.',
+      'Nur Stand und Fortschritt zur eigenen Anfrage; die Lieferantenidentität wird angezeigt ' +
+      '(Frage 11).',
     isSatisfied: (ctx) => ctx.resource.customerTenantId === ctx.subject.tenantId,
-    // Die Lieferantenidentität bleibt verdeckt, solange Frage 11 offen ist;
-    // ebenso die Teilnehmerzahl, die 2.3 keiner Seite zeigt.
-    fieldScope: { hidden: ['supplierId', 'supplier', 'supplierTenantId', 'invitations'] },
+    // Die **Lieferantenidentität** ist sichtbar (Frage 11 entschieden).
+    // Verdeckt bleibt die **Einladungsliste**: wie viele und welche Lieferanten
+    // eingeladen wurden, zeigt 2.3 keiner Seite — das ist nicht die Identität
+    // des liefernden Lieferanten, sondern der Wettbewerb um ihn.
+    fieldScope: { hidden: ['invitations'] },
   },
   16: {
     number: 16,
@@ -453,12 +457,10 @@ export const FOOTNOTES = {
       hidden: (ctx) => {
         const identified = ctx.resource.disclosureLevel === 'identified'
         const alwaysHidden = [
-          // Lieferantenidentität gegenüber dem Kunden: **offene Frage 11**,
-          // verdeckt wie am Fortschritt der Ausschreibung ([15]). Sie hängt
-          // nicht an der Zusage und bleibt deshalb auf beiden Stufen verdeckt.
-          'supplier',
-          'supplierId',
-          'supplierTenantId',
+          // Die **Lieferantenidentität** ist sichtbar (Frage 11 entschieden) —
+          // sie hing nie an der Zusage. Verdeckt bleibt die **Kandidatennummer**
+          // des Lieferanten: sie ist seine interne Kennung und sagt dem Kunden
+          // nichts, was er zur Auswahl braucht (6.4, Datenminimierung).
           'candidateNumber',
           // Die Personenidentität sehen Kunden **nie** — und erfahren auch
           // nicht, dass sie existiert ([43], 2.3 Regel 4). Sie hängt nicht an

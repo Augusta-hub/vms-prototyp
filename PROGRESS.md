@@ -5,6 +5,58 @@ was gemacht wurde, welche Entscheidungen gefallen sind, was offen bleibt.
 
 ---
 
+## 2026-11-27 — Frage 11 umgesetzt: der Kunde sieht den Lieferanten (2.3)
+
+### Gemacht
+
+Die erste Arbeit aus dem Fragendurchgang. Drei Fußnoten verdeckten die
+Lieferantenidentität gegenüber Kundenrollen; alle drei geben sie jetzt frei:
+
+- **[2]** am Einsatz (3.7): `supplier`, `supplierId`, `supplierTenantId` sind
+  nicht mehr verdeckt. Verdeckt bleiben die **Einkaufsseite**
+  (`agreedHourlyRate`, `agreedRateCardItem…`, `rateDeviationReason`) — das ist
+  die Marge des Betreibers ([41]) — und die **Personenidentität** ([43]).
+- **[15]** am Fortschritt der Ausschreibung: der Lieferant ist sichtbar,
+  verdeckt bleibt die **Einladungsliste**. Das ist nicht die Identität des
+  liefernden Lieferanten, sondern der Wettbewerb um ihn, und den zeigt 2.3
+  keiner Seite.
+- **[23]** am Profilvorschlag: der Lieferant ist sichtbar — er hing nie an der
+  Zusage. Verdeckt bleibt die **Kandidatennummer**: die interne Kennung des
+  Lieferanten sagt dem Kunden nichts zur Auswahl (6.4).
+
+### Entscheidungen
+
+1. **Sichtbar ist die Identität, nicht der Wettbewerb.** Frage 11 fragt, ob
+   der Kunde erfährt, *wer* liefert — nicht, wie viele angeboten haben. Die
+   Einladungsliste bleibt deshalb verdeckt, und 2.3 Regel 4 (kein Lieferant
+   erfährt etwas über andere) ist unberührt.
+2. **Die Marge bleibt verdeckt.** Dass der Kunde den Verleiher kennt, heißt
+   nicht, dass er dessen Einkaufspreis kennt — das wäre eine andere Frage und
+   steht in [41].
+
+### Gefunden
+
+- **Die drei Fußnoten begründeten die Verdeckung mit Frage 11**, jede mit
+  eigenem Kommentar. Beim Umbau fiel auf, dass [23] sie „auf beiden Stufen"
+  verdeckte, [2] dagegen nur an der Einsatzzeile — dieselbe Regel, zwei
+  Bauarten. Jetzt steht an einer Stelle, warum sie **nicht** mehr verdeckt
+  wird, und an den anderen, was weiter verdeckt bleibt.
+- **Der neue Test für [15] war zuerst falsch gebaut**: [15] hängt an der Zeile
+  „Ausschreibung, Einladung (3.5)", nicht an der Bedarfsanfrage, und ohne
+  `disclosedToTenantIds` kommt eine Kundenrolle über die Mandantengrenze nicht
+  an das Betreiberobjekt. Beides steht jetzt als Kommentar im Test.
+
+### Geprüft
+
+- `npm test` **1228 grün** (+1), `npm run test:services` **356 grün**,
+  `npm run test:aueg` 267 Szenarien / **120 grün / 0 rot**, `npx tsc --noEmit`
+  und `npm run build` sauber.
+- **4 Mutationen, alle gefangen**: „Einladungsliste wieder sichtbar",
+  „Kandidatennummer sichtbar", „Marge am Einsatz sichtbar" — die erste erst,
+  nachdem der Test für [15] dazugekommen war; vorher deckte sie niemand ab.
+
+---
+
 ## 2026-11-26 — Acht weitere Fragen beantwortet, 3.15 Kennzahlen (Kapitel 7)
 
 ### Gemacht

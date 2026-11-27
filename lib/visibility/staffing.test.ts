@@ -130,10 +130,13 @@ describe('6.4 — der Kunde sieht ein pseudonymisiertes Profil ([23])', () => {
     expect(shows(visible, 'workerIdentityId')).toBe(false)
   })
 
-  it('sieht die Lieferantenidentität nicht, solange Frage 11 offen ist', () => {
+  it('sieht die Lieferantenidentität — Frage 11 ist entschieden —, nicht aber die Kandidatennummer', () => {
     const visible = project(SUBMISSION, decision)
     if (visible === null) throw new Error('Der vorgelegte Vorschlag muss lesbar sein.')
-    expect(shows(visible, 'supplier')).toBe(false)
+    // Frage 11: der Kunde erfährt, welcher Lieferant den Vorschlag stellt.
+    expect(shows(visible, 'supplier')).toBe(true)
+    // Die Kandidatennummer bleibt verdeckt: sie ist die interne Kennung des
+    // Lieferanten und sagt dem Kunden nichts zur Auswahl (6.4).
     expect(shows(visible, 'candidateNumber')).toBe(false)
   })
 
@@ -175,6 +178,44 @@ describe('6.4 — nach der Zusage sieht der Kunde die Klardaten', () => {
     const visible = project(SUBMISSION, withoutLevel)
     if (visible === null) throw new Error('Der Vorschlag muss lesbar sein.')
     expect(shows(visible, 'familyName')).toBe(false)
+  })
+})
+
+describe('4.2 — der Fortschritt der eigenen Ausschreibung ([15])', () => {
+  /** Eine Bedarfsanfrage mit Ausschreibungsfortschritt, wie der Dienst sie beschreibt. */
+  const ANFRAGE = {
+    requestNumber: 'BA-2026-0007',
+    title: 'Montage Linie 4',
+    supplier: 'Rheinpersonal GmbH',
+    invitations: '3 eingeladen, 1 Angebot',
+    status: 'inSelection',
+  }
+
+  // [15] hängt an der Zeile „Ausschreibung, Einladung (3.5)" (2.2), nicht an
+  // der Bedarfsanfrage: der Kunde sieht den **Fortschritt** seiner Anfrage,
+  // und der ist die Ausschreibung.
+  function anfrageRef(): ResourceRef {
+    return {
+      type: 'tender',
+      tenantId: OPERATOR_TENANT,
+      tenantType: 'operator',
+      customerTenantId: CUSTOMER_TENANT,
+      // Die Ausschreibung gehört dem Betreiber; dem Kunden ist sie
+      // offengelegt, sonst käme er über die Mandantengrenze nicht hinweg (2.3).
+      disclosedToTenantIds: [CUSTOMER_TENANT],
+    }
+  }
+
+  it('zeigt dem Kunden den Lieferanten (Frage 11), aber nicht die Einladungsliste', () => {
+    const decision = checkPermission(subject('demandOwner'), 'read', anfrageRef())
+    const visible = project(ANFRAGE, decision)
+    if (visible === null) throw new Error('Die eigene Anfrage muss lesbar sein.')
+    // Frage 11: wer liefert, erfährt der Kunde.
+    expect(shows(visible, 'supplier')).toBe(true)
+    // Wie viele und welche Lieferanten eingeladen wurden, zeigt 2.3 keiner
+    // Seite — das ist nicht die Identität des Lieferanten, sondern der
+    // Wettbewerb um ihn.
+    expect(shows(visible, 'invitations')).toBe(false)
   })
 })
 
@@ -280,12 +321,15 @@ describe('3.7 — der Einsatz ist beiden Seiten zugänglich, jedem im eigenen Um
     expect(visible.agreedHourlyRate).toBe('21.4000 EUR')
   })
 
-  it('der Kunde sieht **nicht** die Einkaufsseite ([41], 3.3) und nicht den Lieferanten (Frage 11)', () => {
+  it('der Kunde sieht **nicht** die Einkaufsseite ([41], 3.3), aber den Lieferanten (Frage 11)', () => {
     const decision = checkPermission(subject('demandOwner'), 'read', assignmentRef())
     const visible = project(ASSIGNMENT, decision)
     if (visible === null) throw new Error('Der eigene Einsatz muss lesbar sein.')
+    // Die Marge des Betreibers bleibt verdeckt …
     expect(shows(visible, 'agreedHourlyRate')).toBe(false)
-    expect(shows(visible, 'supplier')).toBe(false)
+    // … der Verleiher nicht: der Überlassungsvertrag nennt ihn ohnehin
+    // (§ 1 AÜG, Frage 11).
+    expect(shows(visible, 'supplier')).toBe(true)
     // Die Kundenseite und die Kostenstelle sind seine eigenen Angaben.
     expect(visible.customerHourlyRate).toBe('27.4000 EUR')
     expect(visible.costCenterNumber).toBe('KST-9100')

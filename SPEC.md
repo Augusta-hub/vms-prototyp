@@ -537,7 +537,7 @@ Tabelle.
 | [3] | Nur Kunden und Standorte, für die eine eigene Beauftragung besteht, und nur im Umfang, den Kapitel 2.3 zulässt. |
 | [4] | Nur bei eigenem Zugang für Leiharbeitnehmer und nur die eigenen Daten bzw. der eigene Einsatz. **Frage 4 ist entschieden: es gibt keinen** — die Spalte `AN` ist damit ohne Wirkung und bleibt nur stehen, falls die Frage je neu beantwortet wird. |
 | [5] | Sperren ja, Entsperren nein; Entsperrung und Reaktivierung nur durch MA (Vier-Augen-Prinzip, Kapitel 2.4). |
-| [6] | Nur Lieferanten mit Beauftragung für den eigenen Kunden. **Frage 11 ist entschieden: die Lieferantenidentität wird dem Kunden angezeigt** — die Umsetzung verdeckt sie heute noch ([3], [14]) und zieht nach. |
+| [6] | Nur Lieferanten mit Beauftragung für den eigenen Kunden. Die Lieferantenidentität wird dem Kunden angezeigt (Frage 11). |
 | [7] | Nur die eigene Lieferantenorganisation. |
 | [8] | Nur die Kostenwirkung des zu genehmigenden Vorgangs, nicht die Preisliste insgesamt. |
 | [9] | Nur die eigenen Konditionen, nie die eines anderen Lieferanten (Kapitel 2.3). |
@@ -546,7 +546,7 @@ Tabelle.
 | [12] | Einreichen zur Freigabe und Stornieren; die Freigabe selbst erfolgt durch KG. |
 | [13] | Freigeben oder ablehnen. |
 | [14] | Nur Anfragen mit eigener Einladung, ohne Kostenstelle, ohne interne Vermerke und ohne Angebote anderer Lieferanten (Kapitel 2.3). |
-| [15] | Nur Stand und Fortschritt zur eigenen Anfrage; die Lieferantenidentität wird angezeigt (Frage 11 entschieden, Umsetzung folgt). |
+| [15] | Nur Stand und Fortschritt zur eigenen Anfrage; die Lieferantenidentität wird angezeigt (Frage 11). Verdeckt bleibt die **Einladungsliste** — wie viele und welche Lieferanten eingeladen wurden, zeigt 2.3 keiner Seite. |
 | [16] | Nur die eigene Einladung. |
 | [17] | Annehmen, ablehnen oder zur Auswahl an den Kunden weiterleiten. |
 | [18] | Fachliche Inhalte des Angebots; Preisbestandteile nur, soweit Kapitel 2.3 und 6.4 es zulassen. |
@@ -1389,7 +1389,7 @@ abgelehnt → zurückgezogen).
 **Datenkategorie (→ 6.3).** Keine Kandidatendaten im Angebot selbst; die
 Personendaten stehen ausschließlich in 3.6.
 
-> *(Frage 11, entschieden)* Dem Kunden wird angezeigt, **welcher** Lieferant ein
+> *(Frage 11, entschieden und umgesetzt)* Dem Kunden wird angezeigt, **welcher** Lieferant ein
 > Angebot abgegeben hat, oder ob der Betreiber als einziger sichtbarer
 > Vertragspartner auftritt, ist offen. Das Objekt trägt `supplierRef` in jedem
 > Fall — die Zuordnung ist für die Abrechnung und die AÜG-Prüfungen zwingend.
